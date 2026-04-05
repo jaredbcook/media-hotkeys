@@ -397,4 +397,27 @@ describe("keyboard event handling", () => {
 
     expect(video.playbackRate).toBeCloseTo(1.25);
   });
+
+  it.each([
+    ["meta", { metaKey: true }],
+    ["alt", { altKey: true }],
+    ["ctrl", { ctrlKey: true }],
+  ] as const)("ignores mapped keys when the %s modifier is held", async (_modifier, eventInit) => {
+    const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
+    const event = new KeyboardEvent("keydown", {
+      key: "k",
+      bubbles: true,
+      cancelable: true,
+      ...eventInit,
+    });
+    const preventDefaultSpy = vi.spyOn(event, "preventDefault");
+
+    document.dispatchEvent(event);
+    await Promise.resolve();
+
+    expect(playSpy).not.toHaveBeenCalled();
+    expect(preventDefaultSpy).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
 });

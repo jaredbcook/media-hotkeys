@@ -502,8 +502,13 @@ function getKeyString(e: KeyboardEvent): string {
   return e.key;
 }
 
+function hasReservedModifier(e: KeyboardEvent): boolean {
+  return e.metaKey || e.altKey || e.ctrlKey;
+}
+
 async function handleKeyDown(e: KeyboardEvent): Promise<void> {
   if (isEditableTarget(document.activeElement)) return;
+  if (hasReservedModifier(e)) return;
 
   const key = getKeyString(e);
   const action = keyToActionMap.get(key);
