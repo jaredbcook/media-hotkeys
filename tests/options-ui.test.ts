@@ -28,23 +28,17 @@ vi.mock("../src/storage.js", async () => {
 
 function renderOptionsDom(): void {
   document.body.innerHTML = `
-    <input id="volumeStep" />
-    <input id="speedMin" />
-    <input id="speedMax" />
-    <input id="speedStep" />
-    <input id="seekStepSmall" />
-    <input id="seekStepMedium" />
-    <input id="seekStepLarge" />
-    <select id="overlayVisibility"></select>
-    <select id="overlayPosition"></select>
-    <input id="overlayVisibleDuration" />
-    <input id="overlayFadeDuration" />
     <table><tbody id="actions-body"></tbody></table>
     <button id="save"></button>
     <button id="reset"></button>
     <span id="status"></span>
+    <div id="announcements"></div>
   `;
 }
+
+const PLAY_PAUSE_LABEL = "Play/Pause";
+const MUTE_LABEL = "Mute/Unmute";
+const FULLSCREEN_LABEL = "Fullscreen";
 
 function findRowByLabel(label: string): HTMLTableRowElement {
   const rows = Array.from(document.querySelectorAll("#actions-body tr"));
@@ -57,7 +51,7 @@ async function loadOptionsModule(settings = structuredClone(DEFAULT_SETTINGS)): 
   vi.resetModules();
   renderOptionsDom();
   getSettingsMock.mockResolvedValue(structuredClone(settings));
-  await import("../src/options.ts");
+  await import("../src/options");
   await Promise.resolve();
 }
 
@@ -68,29 +62,17 @@ beforeEach(() => {
 });
 
 describe("options screen global setting change handlers", () => {
-  it("updates overlayVisibility on select change and re-renders the table", async () => {
-    await loadOptionsModule(); // default: overlayVisibility = "All"
+  it("renders per-action overlay controls using the stored global settings", async () => {
+    const settings = structuredClone(DEFAULT_SETTINGS);
+    settings.overlayVisibility = "Custom";
+    settings.overlayPosition = "top-left";
 
-    const select = document.getElementById("overlayVisibility") as HTMLSelectElement;
-    select.value = "Custom";
-    select.dispatchEvent(new Event("change"));
+    await loadOptionsModule(settings);
 
-    // With "Custom", per-action checkboxes should become enabled
-    const row = findRowByLabel("Toggle Play/Pause");
+    const row = findRowByLabel(PLAY_PAUSE_LABEL);
     const checkbox = row.querySelector('input[type="checkbox"]') as HTMLInputElement;
-    expect(checkbox.disabled).toBe(false);
-  });
-
-  it("updates overlayPosition on select change and re-renders the table", async () => {
-    await loadOptionsModule(); // default: overlayPosition = "center"
-
-    const select = document.getElementById("overlayPosition") as HTMLSelectElement;
-    select.value = "top-left";
-    select.dispatchEvent(new Event("change"));
-
-    // togglePlayPause has no per-action position, so it inherits the global one
-    const row = findRowByLabel("Toggle Play/Pause");
     const posSelect = row.querySelector("select") as HTMLSelectElement;
+    expect(checkbox.disabled).toBe(false);
     expect(posSelect.value).toBe("top-left");
   });
 });
@@ -99,13 +81,14 @@ describe("options screen overlay controls", () => {
   it("shows unavailable overlay controls for actions without overlays", async () => {
     await loadOptionsModule();
 
-    const row = findRowByLabel("Toggle Fullscreen");
+    const row = findRowByLabel(FULLSCREEN_LABEL);
     const cells = row.querySelectorAll("td");
 
-    expect(cells[2]?.textContent).toBe("Unavailable");
-    expect(cells[3]?.textContent).toBe("Unavailable");
-    expect(cells[2]?.querySelector("input")).toBeNull();
-    expect(cells[3]?.querySelector("select")).toBeNull();
+    expect(cells).toHaveLength(3);
+    expect(cells[1]?.textContent).toBe("Overlay not supported");
+    expect(cells[2]?.textContent).toBe("Overlay not supported");
+    expect(cells[1]?.querySelector("input")).toBeNull();
+    expect(cells[2]?.querySelector("select")).toBeNull();
   });
 
   it("disables per-action overlay visibility when the global mode is not custom", async () => {
@@ -114,7 +97,7 @@ describe("options screen overlay controls", () => {
 
     await loadOptionsModule(settings);
 
-    const row = findRowByLabel("Toggle Play/Pause");
+    const row = findRowByLabel(PLAY_PAUSE_LABEL);
     const checkbox = row.querySelector('input[type="checkbox"]') as HTMLInputElement;
     const select = row.querySelector("select") as HTMLSelectElement;
 
@@ -129,7 +112,7 @@ describe("options screen overlay controls", () => {
 
     await loadOptionsModule(settings);
 
-    const row = findRowByLabel("Toggle Play/Pause");
+    const row = findRowByLabel(PLAY_PAUSE_LABEL);
     const checkbox = row.querySelector('input[type="checkbox"]') as HTMLInputElement;
     checkbox.checked = false;
     checkbox.dispatchEvent(new Event("change"));
@@ -144,7 +127,7 @@ describe("options screen overlay controls", () => {
 
     await loadOptionsModule(settings);
 
-    const row = findRowByLabel("Toggle Play/Pause");
+    const row = findRowByLabel(PLAY_PAUSE_LABEL);
     const checkbox = row.querySelector('input[type="checkbox"]') as HTMLInputElement;
     // checkbox should be unchecked (overlayVisible=false in custom mode)
     expect(checkbox.checked).toBe(false);
@@ -154,7 +137,7 @@ describe("options screen overlay controls", () => {
     checkbox.dispatchEvent(new Event("change"));
 
     // Re-render: now with no explicit setting, default is true
-    const updatedRow = findRowByLabel("Toggle Play/Pause");
+    const updatedRow = findRowByLabel(PLAY_PAUSE_LABEL);
     const updatedCheckbox = updatedRow.querySelector('input[type="checkbox"]') as HTMLInputElement;
     expect(updatedCheckbox.checked).toBe(true);
   });
@@ -165,13 +148,13 @@ describe("options screen overlay controls", () => {
 
     await loadOptionsModule(settings);
 
-    const row = findRowByLabel("Toggle Play/Pause");
+    const row = findRowByLabel(PLAY_PAUSE_LABEL);
     const select = row.querySelector("select") as HTMLSelectElement;
     select.value = "top-left";
     select.dispatchEvent(new Event("change"));
 
     // Re-render should show the newly set position
-    const updatedRow = findRowByLabel("Toggle Play/Pause");
+    const updatedRow = findRowByLabel(PLAY_PAUSE_LABEL);
     const updatedSelect = updatedRow.querySelector("select") as HTMLSelectElement;
     expect(updatedSelect.value).toBe("top-left");
   });
@@ -184,14 +167,14 @@ describe("options screen overlay controls", () => {
 
     await loadOptionsModule(settings);
 
-    const row = findRowByLabel("Toggle Play/Pause");
+    const row = findRowByLabel(PLAY_PAUSE_LABEL);
     const select = row.querySelector("select") as HTMLSelectElement;
     // Set it to the global position value to trigger deletion
     select.value = "top-right";
     select.dispatchEvent(new Event("change"));
 
     // After re-render, inherits global position
-    const updatedRow = findRowByLabel("Toggle Play/Pause");
+    const updatedRow = findRowByLabel(PLAY_PAUSE_LABEL);
     const updatedSelect = updatedRow.querySelector("select") as HTMLSelectElement;
     expect(updatedSelect.value).toBe("top-right");
   });
@@ -202,53 +185,66 @@ describe("options screen key binding controls", () => {
     await loadOptionsModule();
 
     // togglePlayPause has key "k" by default
-    const row = findRowByLabel("Toggle Play/Pause");
+    const row = findRowByLabel(PLAY_PAUSE_LABEL);
     const removeBtn = row.querySelector(".key-chip button") as HTMLButtonElement;
     expect(removeBtn).toBeTruthy();
 
     removeBtn.click();
 
-    const updatedRow = findRowByLabel("Toggle Play/Pause");
+    const updatedRow = findRowByLabel(PLAY_PAUSE_LABEL);
     expect(updatedRow.querySelectorAll(".key-chip").length).toBe(0);
   });
 
   it("starts key capture when the + button is clicked", async () => {
     await loadOptionsModule();
 
-    const row = findRowByLabel("Toggle Play/Pause");
-    const addBtn = row.querySelector(".add-key-btn") as HTMLButtonElement;
+    const row = findRowByLabel(PLAY_PAUSE_LABEL);
+    const addBtn = row.querySelector(".add-key-button") as HTMLButtonElement;
     addBtn.click();
 
     expect(addBtn.classList.contains("listening")).toBe(true);
     expect(addBtn.textContent).toContain("Press a key");
   });
 
+  it("cancels key capture when Escape is pressed", async () => {
+    await loadOptionsModule();
+
+    const row = findRowByLabel(PLAY_PAUSE_LABEL);
+    const addBtn = row.querySelector(".add-key-button") as HTMLButtonElement;
+    addBtn.click();
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+
+    expect(addBtn.classList.contains("listening")).toBe(false);
+    expect(addBtn.textContent).toContain("+");
+  });
+
   it("captures a pressed key and adds it to the action", async () => {
     await loadOptionsModule();
 
-    const row = findRowByLabel("Toggle Mute");
-    const addBtn = row.querySelector(".add-key-btn") as HTMLButtonElement;
+    const row = findRowByLabel(MUTE_LABEL);
+    const addBtn = row.querySelector(".add-key-button") as HTMLButtonElement;
     addBtn.click();
 
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "z", bubbles: true }));
 
-    const updatedRow = findRowByLabel("Toggle Mute");
+    const updatedRow = findRowByLabel(MUTE_LABEL);
     const chips = updatedRow.querySelectorAll(".key-chip");
-    const keys = Array.from(chips).map((c) => c.textContent?.replace("×", "").trim());
+    const keys = Array.from(chips).map((c) => c.firstChild?.textContent?.trim());
     expect(keys).toContain("z");
   });
 
   it("ignores modifier-only keypresses during capture", async () => {
     await loadOptionsModule();
 
-    const row = findRowByLabel("Toggle Mute");
+    const row = findRowByLabel(MUTE_LABEL);
     const chipsBefore = row.querySelectorAll(".key-chip").length;
-    const addBtn = row.querySelector(".add-key-btn") as HTMLButtonElement;
+    const addBtn = row.querySelector(".add-key-button") as HTMLButtonElement;
     addBtn.click();
 
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Shift", bubbles: true }));
 
-    const updatedRow = findRowByLabel("Toggle Mute");
+    const updatedRow = findRowByLabel(MUTE_LABEL);
     expect(updatedRow.querySelectorAll(".key-chip").length).toBe(chipsBefore);
     expect(addBtn.classList.contains("listening")).toBe(true);
   });
@@ -257,25 +253,49 @@ describe("options screen key binding controls", () => {
     await loadOptionsModule();
 
     // "k" is bound to togglePlayPause; bind it to toggleMute
-    const row = findRowByLabel("Toggle Mute");
-    const addBtn = row.querySelector(".add-key-btn") as HTMLButtonElement;
+    const row = findRowByLabel(MUTE_LABEL);
+    const addBtn = row.querySelector(".add-key-button") as HTMLButtonElement;
     addBtn.click();
 
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", bubbles: true }));
 
     // togglePlayPause should no longer have "k"
-    const playRow = findRowByLabel("Toggle Play/Pause");
+    const playRow = findRowByLabel(PLAY_PAUSE_LABEL);
     const playChips = Array.from(playRow.querySelectorAll(".key-chip")).map((c) =>
-      c.textContent?.replace("×", "").trim(),
+      c.firstChild?.textContent?.trim(),
     );
     expect(playChips).not.toContain("k");
 
     // toggleMute should now have "k"
-    const muteRow = findRowByLabel("Toggle Mute");
+    const muteRow = findRowByLabel(MUTE_LABEL);
     const muteChips = Array.from(muteRow.querySelectorAll(".key-chip")).map((c) =>
-      c.textContent?.replace("×", "").trim(),
+      c.firstChild?.textContent?.trim(),
     );
     expect(muteChips).toContain("k");
+  });
+
+  it("uses accessible names for key and overlay controls", async () => {
+    const settings = structuredClone(DEFAULT_SETTINGS);
+    settings.overlayVisibility = "Custom";
+    settings.actions.togglePlayPause.keys = ["ArrowUp"];
+
+    await loadOptionsModule(settings);
+
+    const row = findRowByLabel(PLAY_PAUSE_LABEL);
+    const chipLabel = row.querySelector(".key-chip-label") as HTMLSpanElement;
+    const visualArrow = chipLabel.querySelector('[aria-hidden="true"]');
+    const srArrow = chipLabel.querySelector(".screen-reader");
+    const removeBtn = row.querySelector(".remove-key-button") as HTMLButtonElement;
+    const addBtn = row.querySelector(".add-key-button") as HTMLButtonElement;
+    const checkbox = row.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    const select = row.querySelector("select") as HTMLSelectElement;
+
+    expect(visualArrow?.textContent).toBe("▲");
+    expect(srArrow?.textContent).toBe("Up Arrow");
+    expect(removeBtn.getAttribute("aria-label")).toBe("Remove Up Arrow from Play/Pause action");
+    expect(addBtn.getAttribute("aria-label")).toBe("Add shortcut key for Play/Pause action");
+    expect(checkbox.getAttribute("aria-label")).toBe("Show overlay for Play/Pause");
+    expect(select.getAttribute("aria-label")).toBe("Overlay position for Play/Pause");
   });
 });
 
@@ -291,11 +311,13 @@ describe("options screen save and reset", () => {
     expect(saveSettingsMock).toHaveBeenCalledOnce();
     const statusEl = document.getElementById("status")!;
     expect(statusEl.classList.contains("visible")).toBe(true);
+    expect(statusEl.textContent).toBe("Settings saved.");
   });
 
   it("clicking reset restores default settings and calls saveSettings", async () => {
     const settings = structuredClone(DEFAULT_SETTINGS);
     settings.volumeStep = 0.5;
+    settings.actions.togglePlayPause.keys = ["x"];
     saveSettingsMock.mockResolvedValue(undefined);
     await loadOptionsModule(settings);
 
@@ -303,8 +325,9 @@ describe("options screen save and reset", () => {
     await new Promise((r) => setTimeout(r, 0));
 
     expect(saveSettingsMock).toHaveBeenCalledOnce();
-    // Volume step input should be reset to default
-    const volumeInput = document.getElementById("volumeStep") as HTMLInputElement;
-    expect(volumeInput.value).toBe(String(DEFAULT_SETTINGS.volumeStep));
+    expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
+      volumeStep: 0.5,
+      actions: DEFAULT_SETTINGS.actions,
+    });
   });
 });

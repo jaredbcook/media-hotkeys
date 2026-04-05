@@ -2,61 +2,46 @@ import {
   actionSupportsOverlay,
   type MediaAction,
   type OverlayPosition,
-  type OverlayVisibility,
   type ExtensionSettings,
   DEFAULT_SETTINGS,
   getSettings,
   saveSettings,
 } from "./storage.js";
 
-const OVERLAY_POSITIONS: OverlayPosition[] = [
-  "top-left",
-  "top",
-  "top-right",
-  "center-left",
-  "center",
-  "center-right",
-  "bottom-left",
-  "bottom",
-  "bottom-right",
-];
-
-const OVERLAY_VISIBILITY_OPTIONS: OverlayVisibility[] = ["All", "None", "Custom"];
-
 const ACTION_LABELS: Record<MediaAction, string> = {
-  togglePlayPause: "Toggle Play/Pause",
-  toggleMute: "Toggle Mute",
-  toggleFullscreen: "Toggle Fullscreen",
-  togglePip: "Toggle Picture-in-Picture",
+  togglePlayPause: "Play/Pause",
+  toggleMute: "Mute/Unmute",
+  toggleFullscreen: "Fullscreen",
+  togglePip: "Picture-in-Picture",
   speedUp: "Speed Up",
   slowDown: "Slow Down",
   volumeUp: "Volume Up",
   volumeDown: "Volume Down",
-  seekForwardSmall: "Seek Forward (Small)",
-  seekBackwardSmall: "Seek Backward (Small)",
-  seekForwardMedium: "Seek Forward (Medium)",
-  seekBackwardMedium: "Seek Backward (Medium)",
-  seekForwardLarge: "Seek Forward (Large)",
-  seekBackwardLarge: "Seek Backward (Large)",
-  seekToPercent0: "Seek to 0%",
-  seekToPercent10: "Seek to 10%",
-  seekToPercent20: "Seek to 20%",
-  seekToPercent30: "Seek to 30%",
-  seekToPercent40: "Seek to 40%",
-  seekToPercent50: "Seek to 50%",
-  seekToPercent60: "Seek to 60%",
-  seekToPercent70: "Seek to 70%",
-  seekToPercent80: "Seek to 80%",
-  seekToPercent90: "Seek to 90%",
+  seekForwardSmall: "Skip Forward (Small)",
+  seekBackwardSmall: "Skip Backward (Small)",
+  seekForwardMedium: "Skip Forward (Medium)",
+  seekBackwardMedium: "Skip Backward (Medium)",
+  seekForwardLarge: "Skip Forward (Large)",
+  seekBackwardLarge: "Skip Backward (Large)",
+  seekToPercent0: "Jump to 0%",
+  seekToPercent10: "Jump to 10%",
+  seekToPercent20: "Jump to 20%",
+  seekToPercent30: "Jump to 30%",
+  seekToPercent40: "Jump to 40%",
+  seekToPercent50: "Jump to 50%",
+  seekToPercent60: "Jump to 60%",
+  seekToPercent70: "Jump to 70%",
+  seekToPercent80: "Jump to 80%",
+  seekToPercent90: "Jump to 90%",
 };
 
 const ACTION_ORDER: MediaAction[] = Object.keys(ACTION_LABELS) as MediaAction[];
 
 const KEY_DISPLAY: Record<string, string> = {
-  ArrowUp: "\u2191",
-  ArrowDown: "\u2193",
-  ArrowLeft: "\u2190",
-  ArrowRight: "\u2192",
+  ArrowUp: "\u25B2",
+  ArrowDown: "\u25BC",
+  ArrowLeft: "\u25C0",
+  ArrowRight: "\u25B6",
   " ": "Space",
 };
 
@@ -64,7 +49,30 @@ function displayKey(key: string): string {
   return KEY_DISPLAY[key] ?? key;
 }
 
+const KEY_ACCESSIBLE_LABELS: Record<string, string> = {
+  ArrowUp: "Up Arrow",
+  ArrowDown: "Down Arrow",
+  ArrowLeft: "Left Arrow",
+  ArrowRight: "Right Arrow",
+};
+
+function accessibleKeyLabel(key: string): string {
+  return KEY_ACCESSIBLE_LABELS[key] ?? displayKey(key);
+}
+
+function renderKeyChipLabel(key: string): string {
+  const visibleLabel = displayKey(key);
+  const srLabel = accessibleKeyLabel(key);
+
+  if (visibleLabel === srLabel) {
+    return visibleLabel;
+  }
+
+  return `<span aria-hidden="true">${visibleLabel}</span><span class="screen-reader">${srLabel}</span>`;
+}
+
 let currentSettings: ExtensionSettings;
+let activeKeyCaptureCleanup: (() => void) | undefined;
 
 function fillOverlayPositionSelect(
   select: HTMLSelectElement,
@@ -72,79 +80,23 @@ function fillOverlayPositionSelect(
 ): void {
   select.innerHTML = "";
 
-  for (const pos of OVERLAY_POSITIONS) {
+  for (const pos of [
+    "top-left",
+    "top",
+    "top-right",
+    "center-left",
+    "center",
+    "center-right",
+    "bottom-left",
+    "bottom",
+    "bottom-right",
+  ] as OverlayPosition[]) {
     const option = document.createElement("option");
     option.value = pos;
     option.textContent = pos.replace(/-/g, " ");
     option.selected = pos === selectedValue;
     select.appendChild(option);
   }
-}
-
-function populateGlobalSettings(): void {
-  const g = currentSettings;
-  (document.getElementById("volumeStep") as HTMLInputElement).value = String(g.volumeStep);
-  (document.getElementById("speedMin") as HTMLInputElement).value = String(g.speedMin);
-  (document.getElementById("speedMax") as HTMLInputElement).value = String(g.speedMax);
-  (document.getElementById("speedStep") as HTMLInputElement).value = String(g.speedStep);
-  (document.getElementById("seekStepSmall") as HTMLInputElement).value = String(g.seekStepSmall);
-  (document.getElementById("seekStepMedium") as HTMLInputElement).value = String(g.seekStepMedium);
-  (document.getElementById("seekStepLarge") as HTMLInputElement).value = String(g.seekStepLarge);
-  fillOverlayVisibilitySelect(
-    document.getElementById("overlayVisibility") as HTMLSelectElement,
-    g.overlayVisibility,
-  );
-  fillOverlayPositionSelect(
-    document.getElementById("overlayPosition") as HTMLSelectElement,
-    g.overlayPosition,
-  );
-  (document.getElementById("overlayVisibleDuration") as HTMLInputElement).value = String(
-    g.overlayVisibleDuration,
-  );
-  (document.getElementById("overlayFadeDuration") as HTMLInputElement).value = String(
-    g.overlayFadeDuration,
-  );
-}
-
-function fillOverlayVisibilitySelect(
-  select: HTMLSelectElement,
-  selectedValue: OverlayVisibility,
-): void {
-  select.innerHTML = "";
-
-  for (const value of OVERLAY_VISIBILITY_OPTIONS) {
-    const option = document.createElement("option");
-    option.value = value;
-    option.textContent = value;
-    option.selected = value === selectedValue;
-    select.appendChild(option);
-  }
-}
-
-function collectGlobalSettings(): Omit<ExtensionSettings, "actions"> {
-  return {
-    volumeStep: parseFloat((document.getElementById("volumeStep") as HTMLInputElement).value),
-    speedMin: parseFloat((document.getElementById("speedMin") as HTMLInputElement).value),
-    speedMax: parseFloat((document.getElementById("speedMax") as HTMLInputElement).value),
-    speedStep: parseFloat((document.getElementById("speedStep") as HTMLInputElement).value),
-    seekStepSmall: parseFloat((document.getElementById("seekStepSmall") as HTMLInputElement).value),
-    seekStepMedium: parseFloat(
-      (document.getElementById("seekStepMedium") as HTMLInputElement).value,
-    ),
-    seekStepLarge: parseFloat((document.getElementById("seekStepLarge") as HTMLInputElement).value),
-    overlayVisibility: (document.getElementById("overlayVisibility") as HTMLSelectElement)
-      .value as OverlayVisibility,
-    overlayPosition: (document.getElementById("overlayPosition") as HTMLSelectElement)
-      .value as OverlayPosition,
-    overlayVisibleDuration: parseInt(
-      (document.getElementById("overlayVisibleDuration") as HTMLInputElement).value,
-      10,
-    ),
-    overlayFadeDuration: parseInt(
-      (document.getElementById("overlayFadeDuration") as HTMLInputElement).value,
-      10,
-    ),
-  };
 }
 
 function findActionForKey(key: string, excludeAction?: MediaAction): MediaAction | undefined {
@@ -158,22 +110,47 @@ function findActionForKey(key: string, excludeAction?: MediaAction): MediaAction
 function removeKeyFromAction(action: MediaAction, key: string): void {
   const config = currentSettings.actions[action];
   config.keys = config.keys.filter((k) => k !== key);
+  announce(`${accessibleKeyLabel(key)} removed from ${ACTION_LABELS[action]}.`);
   renderActionsTable();
 }
 
-function startKeyCapture(action: MediaAction, button: HTMLButtonElement): void {
-  // Deactivate any other active listeners
-  document.querySelectorAll(".add-key-btn.listening").forEach((el) => {
-    el.classList.remove("listening");
-    el.textContent = "+";
-  });
+function setAddButtonIdleState(button: HTMLButtonElement, action: MediaAction): void {
+  button.classList.remove("listening");
+  button.innerHTML = `<span aria-hidden="true">+</span>`;
+  button.setAttribute("aria-label", `Add shortcut key for ${ACTION_LABELS[action]} action`);
+}
 
+function announce(message: string): void {
+  const announcements = document.getElementById("announcements");
+  if (!announcements) return;
+
+  announcements.textContent = "";
+  window.setTimeout(() => {
+    announcements.textContent = message;
+  }, 0);
+}
+
+function clearActiveKeyCapture(): void {
+  activeKeyCaptureCleanup?.();
+  activeKeyCaptureCleanup = undefined;
+}
+
+function startKeyCapture(action: MediaAction, button: HTMLButtonElement): void {
+  clearActiveKeyCapture();
   button.classList.add("listening");
-  button.textContent = "Press a key\u2026";
+  button.textContent = "Press a key";
+  button.setAttribute("aria-label", `Press a key to assign it to ${ACTION_LABELS[action]}`);
+  announce(`Listening for a shortcut key for ${ACTION_LABELS[action]}. Press Escape to cancel.`);
 
   const handler = (e: KeyboardEvent) => {
     e.preventDefault();
     e.stopPropagation();
+
+    if (e.key === "Escape") {
+      clearActiveKeyCapture();
+      announce(`Key assignment canceled for ${ACTION_LABELS[action]}.`);
+      return;
+    }
 
     // Ignore modifier-only keys
     if (["Shift", "Control", "Alt", "Meta"].includes(e.key)) return;
@@ -191,11 +168,20 @@ function startKeyCapture(action: MediaAction, button: HTMLButtonElement): void {
       currentSettings.actions[action].keys.push(key);
     }
 
-    document.removeEventListener("keydown", handler, true);
+    clearActiveKeyCapture();
+    const keyLabel = accessibleKeyLabel(key);
+    const conflictMessage = conflict
+      ? ` ${keyLabel} was removed from ${ACTION_LABELS[conflict]}.`
+      : "";
+    announce(`${keyLabel} assigned to ${ACTION_LABELS[action]}.${conflictMessage}`);
     renderActionsTable();
   };
 
   document.addEventListener("keydown", handler, true);
+  activeKeyCaptureCleanup = () => {
+    document.removeEventListener("keydown", handler, true);
+    setAddButtonIdleState(button, action);
+  };
 }
 
 function renderActionsTable(): void {
@@ -208,10 +194,14 @@ function renderActionsTable(): void {
   for (const action of ACTION_ORDER) {
     const config = currentSettings.actions[action];
     const tr = document.createElement("tr");
+    const actionLabel = ACTION_LABELS[action];
+    const actionId = `action-${action}`;
 
     // Action label
-    const tdLabel = document.createElement("td");
-    tdLabel.textContent = ACTION_LABELS[action];
+    const tdLabel = document.createElement("th");
+    tdLabel.id = actionId;
+    tdLabel.textContent = actionLabel;
+    tdLabel.scope = "row";
     tr.appendChild(tdLabel);
 
     // Key chips
@@ -222,11 +212,16 @@ function renderActionsTable(): void {
     for (const key of config.keys) {
       const chip = document.createElement("span");
       chip.className = "key-chip";
-      chip.textContent = displayKey(key);
+      chip.innerHTML = `<span class="key-chip-label">${renderKeyChipLabel(key)}</span>`;
 
       const removeBtn = document.createElement("button");
-      removeBtn.textContent = "\u00d7";
-      removeBtn.title = "Remove key";
+      removeBtn.type = "button";
+      removeBtn.className = "remove-key-button";
+      removeBtn.innerHTML = `<span aria-hidden="true">\u00d7</span>`;
+      removeBtn.setAttribute(
+        "aria-label",
+        `Remove ${accessibleKeyLabel(key)} from ${actionLabel} action`,
+      );
       removeBtn.addEventListener("click", () => removeKeyFromAction(action, key));
 
       chip.appendChild(removeBtn);
@@ -234,9 +229,9 @@ function renderActionsTable(): void {
     }
 
     const addBtn = document.createElement("button");
-    addBtn.className = "add-key-btn";
-    addBtn.textContent = "+";
-    addBtn.title = "Bind a new key";
+    addBtn.className = "add-key-button";
+    addBtn.type = "button";
+    setAddButtonIdleState(addBtn, action);
     addBtn.addEventListener("click", () => startKeyCapture(action, addBtn));
     chipsContainer.appendChild(addBtn);
 
@@ -248,7 +243,12 @@ function renderActionsTable(): void {
 
     if (actionSupportsOverlay(action)) {
       const checkbox = document.createElement("input");
+      const checkboxId = `${action}-overlay-visible`;
+      const positionId = `${action}-overlay-position`;
       checkbox.type = "checkbox";
+      checkbox.id = checkboxId;
+      checkbox.setAttribute("aria-labelledby", actionId);
+      checkbox.setAttribute("aria-label", `Show overlay for ${actionLabel}`);
       checkbox.checked = perActionVisibilityEnabled
         ? (config.overlayVisible ?? true)
         : overlayVisibility === "All";
@@ -263,7 +263,10 @@ function renderActionsTable(): void {
       tdOverlay.appendChild(checkbox);
 
       const select = document.createElement("select");
+      select.id = positionId;
       select.className = "overlay-position-select";
+      select.setAttribute("aria-labelledby", actionId);
+      select.setAttribute("aria-label", `Overlay position for ${actionLabel}`);
       select.disabled = !perActionVisibilityEnabled;
       fillOverlayPositionSelect(select, config.overlayPosition ?? globalOverlayPosition);
       select.addEventListener("change", () => {
@@ -276,8 +279,8 @@ function renderActionsTable(): void {
       });
       tdPosition.appendChild(select);
     } else {
-      tdOverlay.textContent = "Unavailable";
-      tdPosition.textContent = "Unavailable";
+      tdOverlay.innerHTML = `<span class="screen-reader">Overlay not supported</span>`;
+      tdPosition.innerHTML = `<span class="screen-reader">Overlay not supported</span>`;
       tdOverlay.className = "overlay-unavailable";
       tdPosition.className = "overlay-unavailable";
     }
@@ -291,19 +294,18 @@ function renderActionsTable(): void {
 
 function showStatus(): void {
   const status = document.getElementById("status")!;
+  status.textContent = "Settings saved.";
   status.classList.add("visible");
   setTimeout(() => status.classList.remove("visible"), 2000);
 }
 
 async function handleSave(): Promise<void> {
-  Object.assign(currentSettings, collectGlobalSettings());
   await saveSettings(currentSettings);
   showStatus();
 }
 
 async function handleReset(): Promise<void> {
-  currentSettings = structuredClone(DEFAULT_SETTINGS);
-  populateGlobalSettings();
+  currentSettings.actions = structuredClone(DEFAULT_SETTINGS.actions);
   renderActionsTable();
   await saveSettings(currentSettings);
   showStatus();
@@ -311,22 +313,7 @@ async function handleReset(): Promise<void> {
 
 async function init(): Promise<void> {
   currentSettings = await getSettings();
-  populateGlobalSettings();
   renderActionsTable();
-
-  document.getElementById("overlayVisibility")?.addEventListener("change", () => {
-    currentSettings.overlayVisibility = (
-      document.getElementById("overlayVisibility") as HTMLSelectElement
-    ).value as OverlayVisibility;
-    renderActionsTable();
-  });
-
-  document.getElementById("overlayPosition")?.addEventListener("change", () => {
-    currentSettings.overlayPosition = (
-      document.getElementById("overlayPosition") as HTMLSelectElement
-    ).value as OverlayPosition;
-    renderActionsTable();
-  });
 
   document.getElementById("save")?.addEventListener("click", handleSave);
   document.getElementById("reset")?.addEventListener("click", handleReset);

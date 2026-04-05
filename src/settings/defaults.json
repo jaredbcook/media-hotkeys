@@ -18,7 +18,7 @@
     "togglePip": { "keys": ["i"] },
     "speedUp": { "keys": [">"] },
     "slowDown": { "keys": ["<"] },
-    "volumeUp": { "keys": ["ArrowUp", "=", "+"] },
+    "volumeUp": { "keys": ["ArrowUp", "+", "="] },
     "volumeDown": { "keys": ["ArrowDown", "-"] },
     "seekForwardSmall": { "keys": ["ArrowRight"], "overlayPosition": "center-right" },
     "seekBackwardSmall": { "keys": ["ArrowLeft"], "overlayPosition": "center-left" },

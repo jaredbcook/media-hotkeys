@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Media Hotkeys — Quick Settings</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body class="popup-page">
+    <h1>Media Hotkeys — Quick Settings</h1>
+    <div class="settings-grid">
+      <div class="settings-field">
+        <label for="volumeStep">Volume Step (%)</label>
+        <input type="number" id="volumeStep" min="0.01" max="1" step="0.01" />
+      </div>
+      <div class="settings-field">
+        <label for="speedStep">Speed Step</label>
+        <input type="number" id="speedStep" min="0.05" max="2" step="0.05" />
+      </div>
+      <div class="settings-field">
+        <label for="speedMin">Speed Min</label>
+        <input type="number" id="speedMin" min="0.1" max="10" step="0.05" />
+      </div>
+      <div class="settings-field">
+        <label for="speedMax">Speed Max</label>
+        <input type="number" id="speedMax" min="0.1" max="16" step="0.25" />
+      </div>
+      <div class="settings-field">
+        <label for="seekStepSmall">Seek Small (s)</label>
+        <input type="number" id="seekStepSmall" min="1" max="60" step="1" />
+      </div>
+      <div class="settings-field">
+        <label for="seekStepMedium">Seek Medium (s)</label>
+        <input type="number" id="seekStepMedium" min="1" max="120" step="1" />
+      </div>
+      <div class="settings-field">
+        <label for="seekStepLarge">Seek Large (s)</label>
+        <input type="number" id="seekStepLarge" min="1" max="300" step="1" />
+      </div>
+      <div class="settings-field">
+        <label for="overlayVisibility">Overlay Visibility</label>
+        <select id="overlayVisibility"></select>
+      </div>
+      <div class="settings-field">
+        <label for="overlayPosition">Overlay Position</label>
+        <select id="overlayPosition"></select>
+      </div>
+      <div class="settings-field">
+        <label for="overlayVisibleDuration">Overlay Duration (ms)</label>
+        <input type="number" id="overlayVisibleDuration" min="0" max="1000" step="50" />
+      </div>
+      <div class="settings-field">
+        <label for="overlayFadeDuration">Fade Duration (ms)</label>
+        <input type="number" id="overlayFadeDuration" min="0" max="2000" step="50" />
+      </div>
+    </div>
+    <div class="button-group">
+      <button id="save" class="primary">Save</button>
+      <button id="reset">Restore Defaults</button>
+      <span id="status">Saved!</span>
+      <button id="more-settings" class="align-right">More Settings</button>
+    </div>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

@@ -39,12 +39,20 @@ async function buildBrowser(browser, packageJson, sourceManifest) {
       name: "MediaShortcutsContent",
     }),
     bundleEntry({
+      entry: path.join(projectRoot, "src", "popup.ts"),
+      outDir,
+      fileName: "popup.js",
+      name: "MediaShortcutsPopup",
+    }),
+    bundleEntry({
       entry: path.join(projectRoot, "src", "options.ts"),
       outDir,
       fileName: "options.js",
       name: "MediaShortcutsOptions",
     }),
+    cp(path.join(projectRoot, "src", "popup.html"), path.join(outDir, "popup.html")),
     cp(path.join(projectRoot, "src", "options.html"), path.join(outDir, "options.html")),
+    cp(path.join(projectRoot, "src", "ui.css"), path.join(outDir, "ui.css")),
     cp(path.join(projectRoot, "src", "settings"), path.join(outDir, "settings"), {
       recursive: true,
     }),

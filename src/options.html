@@ -3,300 +3,36 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Media Shortcuts — Settings</title>
-    <style>
-      *,
-      *::before,
-      *::after {
-        box-sizing: border-box;
-      }
-
-      body {
-        font-family: system-ui, sans-serif;
-        font-size: 14px;
-        background: #f5f5f5;
-        color: #222;
-        margin: 0;
-        padding: 24px;
-        max-width: 900px;
-        margin: 0 auto;
-      }
-
-      h1 {
-        font-size: 20px;
-        margin: 0 0 24px;
-      }
-      h2 {
-        font-size: 15px;
-        margin: 0 0 12px;
-      }
-
-      .section {
-        background: #fff;
-        border-radius: 8px;
-        padding: 20px;
-        margin-bottom: 16px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-      }
-
-      /* Global settings grid */
-      .settings-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-        gap: 16px;
-      }
-
-      .setting-field {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-      }
-
-      .setting-field label {
-        font-size: 12px;
-        font-weight: 600;
-        color: #555;
-        margin: 0;
-        cursor: default;
-      }
-
-      .setting-field input[type="number"] {
-        padding: 6px 8px;
-        border: 1px solid #ccc;
-        border-radius: 5px;
-        font-size: 13px;
-        width: 100%;
-      }
-
-      .setting-field select {
-        padding: 6px 8px;
-        border: 1px solid #ccc;
-        border-radius: 5px;
-        font-size: 13px;
-        width: 100%;
-        background: #fff;
-      }
-
-      /* Actions table */
-      #actions-table {
-        width: 100%;
-        border-collapse: collapse;
-      }
-
-      #actions-table th,
-      #actions-table td {
-        text-align: left;
-        padding: 8px 10px;
-        border-bottom: 1px solid #eee;
-        vertical-align: middle;
-      }
-
-      #actions-table th {
-        font-weight: 600;
-        font-size: 12px;
-        color: #555;
-        text-transform: uppercase;
-        letter-spacing: 0.3px;
-      }
-
-      #actions-table td:first-child {
-        font-weight: 500;
-        white-space: nowrap;
-      }
-
-      #actions-table td.overlay-unavailable {
-        color: #777;
-        font-style: italic;
-      }
-
-      /* Key chips */
-      .key-chips {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
-        align-items: center;
-      }
-
-      .key-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        background: #e8e8e8;
-        border-radius: 6px;
-        padding: 3px 8px;
-        font-size: 12px;
-        font-family: monospace;
-        line-height: 1.4;
-      }
-
-      .key-chip button {
-        background: none;
-        border: none;
-        padding: 0;
-        margin: 0;
-        cursor: pointer;
-        font-size: 13px;
-        color: #888;
-        line-height: 1;
-      }
-
-      .key-chip button:hover {
-        color: #c00;
-      }
-
-      .add-key-btn {
-        background: none;
-        border: 1px dashed #ccc;
-        border-radius: 6px;
-        padding: 3px 8px;
-        font-size: 12px;
-        cursor: pointer;
-        color: #888;
-      }
-
-      .add-key-btn:hover {
-        border-color: #888;
-        color: #444;
-      }
-
-      .add-key-btn.listening {
-        border-color: #4a90d9;
-        color: #4a90d9;
-        background: #eef4fc;
-      }
-
-      /* Overlay position select */
-      .overlay-position-select {
-        font-size: 13px;
-        padding: 4px 6px;
-        border: 1px solid #ccc;
-        border-radius: 5px;
-      }
-
-      /* Checkbox */
-      #actions-table input[type="checkbox"] {
-        width: 16px;
-        height: 16px;
-        cursor: pointer;
-      }
-
-      /* Footer buttons */
-      .footer {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-
-      button {
-        padding: 6px 14px;
-        border-radius: 5px;
-        border: 1px solid #ccc;
-        background: #fff;
-        cursor: pointer;
-        font-size: 13px;
-      }
-
-      button:hover {
-        background: #f0f0f0;
-      }
-
-      button.primary {
-        background: #4a90d9;
-        color: #fff;
-        border-color: #4a90d9;
-      }
-
-      button.primary:hover {
-        background: #3a7bc8;
-      }
-
-      #status {
-        font-size: 13px;
-        color: green;
-        opacity: 0;
-        transition: opacity 0.3s;
-      }
-
-      #status.visible {
-        opacity: 1;
-      }
-    </style>
+    <meta name="color-scheme" content="light dark" />
+    <title>Media Hotkeys — More Settings</title>
+    <link rel="stylesheet" href="ui.css" />
   </head>
-  <body>
-    <h1>Media Shortcuts Settings</h1>
+  <body class="options-page">
+    <h1>Media Hotkeys — More Settings</h1>
+    <table id="actions-table">
+      <caption class="screen-reader">
+        Media actions and their associated hotkeys, overlay visibility, and overlay position
+        settings.
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Action</th>
+          <th scope="col">Hotkeys</th>
+          <th scope="col">Overlay Visible</th>
+          <th scope="col">Overlay Position</th>
+        </tr>
+      </thead>
+      <tbody id="actions-body">
+        <!-- populated by options.ts -->
+      </tbody>
+    </table>
 
-    <div class="section">
-      <h2>Global Settings</h2>
-      <div class="settings-grid">
-        <div class="setting-field">
-          <label for="volumeStep">Volume Step</label>
-          <input type="number" id="volumeStep" min="0.01" max="1" step="0.01" />
-        </div>
-        <div class="setting-field">
-          <label for="speedMin">Speed Min</label>
-          <input type="number" id="speedMin" min="0.1" max="10" step="0.05" />
-        </div>
-        <div class="setting-field">
-          <label for="speedMax">Speed Max</label>
-          <input type="number" id="speedMax" min="0.1" max="16" step="0.25" />
-        </div>
-        <div class="setting-field">
-          <label for="speedStep">Speed Step</label>
-          <input type="number" id="speedStep" min="0.05" max="2" step="0.05" />
-        </div>
-        <div class="setting-field">
-          <label for="seekStepSmall">Seek Step Small (s)</label>
-          <input type="number" id="seekStepSmall" min="1" max="60" step="1" />
-        </div>
-        <div class="setting-field">
-          <label for="seekStepMedium">Seek Step Medium (s)</label>
-          <input type="number" id="seekStepMedium" min="1" max="120" step="1" />
-        </div>
-        <div class="setting-field">
-          <label for="seekStepLarge">Seek Step Large (s)</label>
-          <input type="number" id="seekStepLarge" min="1" max="300" step="1" />
-        </div>
-        <div class="setting-field">
-          <label for="overlayVisibility">Overlay Visibility</label>
-          <select id="overlayVisibility"></select>
-        </div>
-        <div class="setting-field">
-          <label for="overlayPosition">Overlay Position Default</label>
-          <select id="overlayPosition"></select>
-        </div>
-        <div class="setting-field">
-          <label for="overlayVisibleDuration">Overlay Visible Duration (ms)</label>
-          <input type="number" id="overlayVisibleDuration" min="0" max="5000" step="50" />
-        </div>
-        <div class="setting-field">
-          <label for="overlayFadeDuration">Overlay Fade Duration (ms)</label>
-          <input type="number" id="overlayFadeDuration" min="0" max="2000" step="50" />
-        </div>
-      </div>
+    <div class="button-group">
+      <button id="save" class="primary" type="button">Save</button>
+      <button id="reset" type="button">Restore Defaults</button>
+      <span id="status" role="status" aria-live="polite" aria-atomic="true"></span>
     </div>
-
-    <div class="section">
-      <h2>Media Actions</h2>
-      <table id="actions-table">
-        <thead>
-          <tr>
-            <th>Action</th>
-            <th>Shortcut Keys</th>
-            <th>Overlay Visible</th>
-            <th>Overlay Position</th>
-          </tr>
-        </thead>
-        <tbody id="actions-body">
-          <!-- populated by options.ts -->
-        </tbody>
-      </table>
-    </div>
-
-    <div class="section footer">
-      <button id="save" class="primary">Save Settings</button>
-      <button id="reset">Reset to Defaults</button>
-      <span id="status">Saved!</span>
-    </div>
+    <div id="announcements" class="screen-reader" aria-live="polite" aria-atomic="true"></div>
 
     <script type="module" src="options.js"></script>
   </body>
