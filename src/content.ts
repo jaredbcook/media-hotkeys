@@ -270,13 +270,26 @@ function initializeDynamicMediaTracking(): void {
 
 // #region Media Actions
 
+async function tryPlayMedia(media: HTMLMediaElement): Promise<void> {
+  try {
+    await media.play();
+  } catch {
+    // Ignore play() rejections. The extension invokes playback as a best-effort
+    // action, and pages can legitimately block it due to autoplay policies.
+  }
+}
+
+function playMedia(media: HTMLMediaElement): void {
+  void tryPlayMedia(media);
+}
+
 export function handleAction(action: MediaAction, media: HTMLMediaElement): void {
   const g = settings;
   trackInteraction(media);
 
   switch (action) {
     case "togglePlayPause":
-      media.paused ? media.play() : media.pause();
+      media.paused ? playMedia(media) : media.pause();
       break;
 
     case "toggleMute":

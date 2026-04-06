@@ -97,6 +97,43 @@ describe("handleAction", () => {
     expect(playSpy).toHaveBeenCalled();
   });
 
+  it("swallows NotAllowedError when play is blocked", async () => {
+    const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    const rejection = new DOMException("Playback blocked", "NotAllowedError");
+    const playSpy = vi.spyOn(video, "play").mockRejectedValue(rejection);
+
+    handleAction("togglePlayPause", video);
+    await Promise.resolve();
+
+    expect(playSpy).toHaveBeenCalled();
+  });
+
+  it("handles promise-like play results from another realm", async () => {
+    const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    const thenSpy = vi.fn((resolve?: () => void, reject?: (error: DOMException) => void) => {
+      reject?.(new DOMException("Playback blocked", "NotAllowedError"));
+      resolve?.();
+    });
+    vi.spyOn(video, "play").mockReturnValue({
+      then: thenSpy,
+    } as unknown as Promise<void>);
+
+    handleAction("togglePlayPause", video);
+    await Promise.resolve();
+
+    expect(thenSpy).toHaveBeenCalled();
+  });
+
+  it("swallows non-DOMException play rejections", async () => {
+    const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    const playSpy = vi.spyOn(video, "play").mockRejectedValue({ name: "NotAllowedError" });
+
+    handleAction("togglePlayPause", video);
+    await Promise.resolve();
+
+    expect(playSpy).toHaveBeenCalled();
+  });
+
   it("toggles mute", () => {
     const video = makeVideo();
     video.muted = false;
