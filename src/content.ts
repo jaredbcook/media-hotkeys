@@ -28,6 +28,15 @@ type FrameActionResponseMessage = {
 
 type FrameMessage = FrameActionRequestMessage | FrameActionResponseMessage;
 
+type SeekDirection = "forward" | "backward";
+
+type SeekOverlayState = {
+  direction: SeekDirection;
+  media: HTMLMediaElement;
+  totalSeconds: number;
+  resetTimeout: ReturnType<typeof setTimeout> | null;
+};
+
 // #endregion
 
 // #region Shared State and Constants
@@ -44,6 +53,7 @@ const trackedMedia = new WeakSet<HTMLMediaElement>();
 const observedRoots = new WeakSet<Document | ShadowRoot>();
 let rootObserver: MutationObserver | null = null;
 let shadowObserverPatched = false;
+let seekOverlayState: SeekOverlayState | null = null;
 
 // #endregion
 
@@ -56,6 +66,11 @@ async function loadSettings(): Promise<void> {
   } catch {
     // Keep defaults on failure
   }
+}
+
+export function setSettingsForTests(nextSettings: ExtensionSettings): void {
+  settings = nextSettings;
+  keyToActionMap = buildKeyToActionMap(settings.actions);
 }
 
 // #endregion
@@ -283,6 +298,97 @@ function playMedia(media: HTMLMediaElement): void {
   void tryPlayMedia(media);
 }
 
+function getEffectiveVolume(media: HTMLMediaElement): number {
+  return media.muted ? 0 : media.volume;
+}
+
+function getSeekStep(action: MediaAction, globalSettings: ExtensionSettings): number | null {
+  switch (action) {
+    case "seekForwardSmall":
+    case "seekBackwardSmall":
+      return globalSettings.seekStepSmall;
+    case "seekForwardMedium":
+    case "seekBackwardMedium":
+      return globalSettings.seekStepMedium;
+    case "seekForwardLarge":
+    case "seekBackwardLarge":
+      return globalSettings.seekStepLarge;
+    default:
+      return null;
+  }
+}
+
+function getSeekDirection(action: MediaAction): SeekDirection | null {
+  if (action.startsWith("seekForward")) {
+    return "forward";
+  }
+
+  if (action.startsWith("seekBackward")) {
+    return "backward";
+  }
+
+  return null;
+}
+
+function clearSeekOverlayState(): void {
+  if (seekOverlayState?.resetTimeout) {
+    clearTimeout(seekOverlayState.resetTimeout);
+  }
+  seekOverlayState = null;
+}
+
+function getSeekOverlayDisplay(
+  action: MediaAction,
+  media: HTMLMediaElement,
+): {
+  seekSeconds?: number;
+  animateSkipDirection?: SeekDirection;
+} {
+  const step = getSeekStep(action, settings);
+  const direction = getSeekDirection(action);
+
+  if (!step || !direction) {
+    clearSeekOverlayState();
+    return {};
+  }
+
+  const isContinuingStreak =
+    seekOverlayState?.media === media && seekOverlayState.direction === direction;
+
+  if (!isContinuingStreak) {
+    clearSeekOverlayState();
+  } else if (seekOverlayState?.resetTimeout) {
+    clearTimeout(seekOverlayState.resetTimeout);
+  }
+
+  const projectedTime =
+    direction === "forward" ? media.currentTime + step : media.currentTime - step;
+  const wouldExceedBounds =
+    projectedTime < 0 ||
+    (Number.isFinite(media.duration) && media.duration > 0 && projectedTime > media.duration);
+  const shouldResetStreak = !isContinuingStreak || wouldExceedBounds;
+  const totalSeconds = settings.sumQuickSkips
+    ? (shouldResetStreak ? 0 : (seekOverlayState?.totalSeconds ?? 0)) + step
+    : step;
+  const resetTimeout = setTimeout(() => {
+    if (seekOverlayState?.media === media && seekOverlayState.direction === direction) {
+      seekOverlayState = null;
+    }
+  }, settings.overlayVisibleDuration + settings.overlayFadeDuration);
+
+  seekOverlayState = {
+    direction,
+    media,
+    totalSeconds,
+    resetTimeout,
+  };
+
+  return {
+    seekSeconds: totalSeconds,
+    animateSkipDirection: !settings.sumQuickSkips || !isContinuingStreak ? direction : undefined,
+  };
+}
+
 export function handleAction(action: MediaAction, media: HTMLMediaElement): void {
   const g = settings;
   trackInteraction(media);
@@ -293,7 +399,12 @@ export function handleAction(action: MediaAction, media: HTMLMediaElement): void
       break;
 
     case "toggleMute":
-      media.muted = !media.muted;
+      if (media.muted || media.volume === 0) {
+        media.muted = false;
+        media.volume = Math.max(g.volumeStep, media.volume);
+      } else {
+        media.muted = true;
+      }
       break;
 
     case "toggleFullscreen":
@@ -317,11 +428,13 @@ export function handleAction(action: MediaAction, media: HTMLMediaElement): void
       break;
 
     case "volumeUp":
-      media.volume = Math.min(1, media.volume + g.volumeStep);
+      media.volume = Math.min(1, getEffectiveVolume(media) + g.volumeStep);
+      media.muted = false;
       break;
 
     case "volumeDown":
-      media.volume = Math.max(0, media.volume - g.volumeStep);
+      media.volume = Math.max(0, getEffectiveVolume(media) - g.volumeStep);
+      media.muted = false;
       break;
 
     case "seekForwardSmall":
@@ -368,7 +481,17 @@ export function handleAction(action: MediaAction, media: HTMLMediaElement): void
   const actionConfig = settings.actions[action];
   const overlaySettings = resolveActionOverlaySettings(action, actionConfig, g);
   if (overlaySettings.overlayVisible) {
-    showActionOverlay(action, media, overlaySettings.overlayPosition, g);
+    showActionOverlay(
+      action,
+      media,
+      overlaySettings.overlayPosition,
+      g,
+      getSeekOverlayDisplay(action, media),
+    );
+  } else if (getSeekDirection(action)) {
+    getSeekOverlayDisplay(action, media);
+  } else {
+    clearSeekOverlayState();
   }
 }
 

@@ -52,6 +52,24 @@ describe("showActionOverlay", () => {
     expect(el.style.display).toBe("flex");
   });
 
+  it("displays 0% when muted", () => {
+    const video = makeVideo();
+    video.volume = 0.75;
+    video.muted = true;
+    showActionOverlay("toggleMute", video, "center", globalSettings);
+    const el = document.getElementById("media-shortcuts-overlay")!;
+    expect(el.innerHTML).toContain("0%");
+  });
+
+  it("displays the current volume percentage when unmuted", () => {
+    const video = makeVideo();
+    video.volume = 0.75;
+    video.muted = false;
+    showActionOverlay("toggleMute", video, "center", globalSettings);
+    const el = document.getElementById("media-shortcuts-overlay")!;
+    expect(el.innerHTML).toContain("75%");
+  });
+
   it("displays play icon when media is playing (toggled from paused)", () => {
     const video = makeVideo();
     Object.defineProperty(video, "paused", { value: false, writable: true });
@@ -66,6 +84,23 @@ describe("showActionOverlay", () => {
     showActionOverlay("volumeUp", video, "center", globalSettings);
     const el = document.getElementById("media-shortcuts-overlay")!;
     expect(el.innerHTML).toContain("75%");
+  });
+
+  it("shows the mute icon when volume down reaches zero", () => {
+    const video = makeVideo();
+    video.volume = 0;
+    showActionOverlay("volumeDown", video, "center", globalSettings);
+    const el = document.getElementById("media-shortcuts-overlay")!;
+    expect(el.innerHTML).toContain("M671-177q-11 7-22 13");
+  });
+
+  it("shows the volume down icon when muted but volume remains above zero", () => {
+    const video = makeVideo();
+    video.volume = 0.4;
+    video.muted = true;
+    showActionOverlay("volumeDown", video, "center", globalSettings);
+    const el = document.getElementById("media-shortcuts-overlay")!;
+    expect(el.innerHTML).toContain("M200-360v-240h160l200-200v640");
   });
 
   it("displays playback rate for speed actions", () => {
@@ -95,6 +130,15 @@ describe("showActionOverlay", () => {
     showActionOverlay("seekForwardMedium", video, "center-right", globalSettings);
     const el = document.getElementById("media-shortcuts-overlay")!;
     expect(el.innerHTML).toContain("+10s");
+  });
+
+  it("displays accumulated seek seconds when provided", () => {
+    const video = makeVideo();
+    showActionOverlay("seekForwardMedium", video, "center-right", globalSettings, {
+      seekSeconds: 40,
+    });
+    const el = document.getElementById("media-shortcuts-overlay")!;
+    expect(el.innerHTML).toContain("+40s");
   });
 
   it("hides the overlay after the duration elapses", () => {
@@ -189,5 +233,24 @@ describe("showActionOverlay", () => {
     // Hidden after custom timing
     vi.advanceTimersByTime(1000 + 500 + 50);
     expect(el.style.display).toBe("none");
+  });
+
+  it("animates the first forward skip with a right slide", () => {
+    const video = makeVideo();
+    showActionOverlay("seekForwardSmall", video, "center-right", globalSettings, {
+      animateSkipDirection: "forward",
+    });
+    const el = document.getElementById("media-shortcuts-overlay")!;
+
+    expect(el.style.animation).toContain("media-shortcuts-skip-slide");
+    expect(el.style.getPropertyValue("--media-shortcuts-slide-from-x")).toBe("-20%");
+  });
+
+  it("does not animate when no skip animation direction is provided", () => {
+    const video = makeVideo();
+    showActionOverlay("seekBackwardSmall", video, "center-left", globalSettings);
+    const el = document.getElementById("media-shortcuts-overlay")!;
+
+    expect(el.style.animation).toBe("none");
   });
 });

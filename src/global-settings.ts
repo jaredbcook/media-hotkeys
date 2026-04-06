@@ -65,6 +65,7 @@ export function populateGlobalSettings(
   (document.getElementById("seekStepLarge") as HTMLInputElement).value = String(
     settings.seekStepLarge,
   );
+  (document.getElementById("sumQuickSkips") as HTMLInputElement).checked = settings.sumQuickSkips;
   fillOverlayVisibilitySelect(
     document.getElementById("overlayVisibility") as HTMLSelectElement,
     settings.overlayVisibility,
@@ -92,6 +93,7 @@ export function collectGlobalSettings(): GlobalSettings {
       (document.getElementById("seekStepMedium") as HTMLInputElement).value,
     ),
     seekStepLarge: parseFloat((document.getElementById("seekStepLarge") as HTMLInputElement).value),
+    sumQuickSkips: (document.getElementById("sumQuickSkips") as HTMLInputElement).checked,
     overlayVisibility: (document.getElementById("overlayVisibility") as HTMLSelectElement)
       .value as OverlayVisibility,
     overlayPosition: (document.getElementById("overlayPosition") as HTMLSelectElement)

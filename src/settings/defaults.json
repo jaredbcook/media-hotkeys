@@ -5,6 +5,7 @@
   "seekStepSmall": 5,
   "seekStepMedium": 10,
   "seekStepLarge": 30,
+  "sumQuickSkips": true,
   "volumeStep": 0.05,
   "overlayVisibility": "All",
   "overlayPosition": "center",

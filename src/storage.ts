@@ -56,6 +56,7 @@ export interface GlobalSettings {
   seekStepSmall: number;
   seekStepMedium: number;
   seekStepLarge: number;
+  sumQuickSkips: boolean;
   overlayVisibility: OverlayVisibility;
   overlayPosition: OverlayPosition;
   overlayVisibleDuration: number;

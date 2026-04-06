@@ -25,6 +25,7 @@ async function handleReset(): Promise<void> {
     seekStepSmall: DEFAULT_SETTINGS.seekStepSmall,
     seekStepMedium: DEFAULT_SETTINGS.seekStepMedium,
     seekStepLarge: DEFAULT_SETTINGS.seekStepLarge,
+    sumQuickSkips: DEFAULT_SETTINGS.sumQuickSkips,
     overlayVisibility: DEFAULT_SETTINGS.overlayVisibility,
     overlayPosition: DEFAULT_SETTINGS.overlayPosition,
     overlayVisibleDuration: DEFAULT_SETTINGS.overlayVisibleDuration,

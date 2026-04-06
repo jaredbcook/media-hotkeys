@@ -92,9 +92,11 @@ describe("saveSettings", () => {
   it("persists global settings changes", async () => {
     const modified = structuredClone(DEFAULT_SETTINGS);
     modified.volumeStep = 0.1;
+    modified.sumQuickSkips = false;
     await saveSettings(modified);
     const settings = await getSettings();
     expect(settings.volumeStep).toBe(0.1);
+    expect(settings.sumQuickSkips).toBe(false);
   });
 
   it("persists action config changes for overlay-capable actions", async () => {

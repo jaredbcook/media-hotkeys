@@ -39,6 +39,7 @@ function renderPopupDom(): void {
     <input id="seekStepSmall" />
     <input id="seekStepMedium" />
     <input id="seekStepLarge" />
+    <input id="sumQuickSkips" type="checkbox" />
     <select id="overlayVisibility"></select>
     <select id="overlayPosition"></select>
     <input id="overlayVisibleDuration" />
@@ -72,10 +73,12 @@ describe("popup screen", () => {
   it("loads global settings into the form", async () => {
     const settings = structuredClone(DEFAULT_SETTINGS);
     settings.volumeStep = 0.1;
+    settings.sumQuickSkips = false;
 
     await loadPopupModule(settings);
 
     expect((document.getElementById("volumeStep") as HTMLInputElement).value).toBe("0.1");
+    expect((document.getElementById("sumQuickSkips") as HTMLInputElement).checked).toBe(false);
     expect((document.getElementById("overlayVisibility") as HTMLSelectElement).value).toBe(
       settings.overlayVisibility,
     );
@@ -85,11 +88,15 @@ describe("popup screen", () => {
     await loadPopupModule();
 
     (document.getElementById("volumeStep") as HTMLInputElement).value = "0.2";
+    (document.getElementById("sumQuickSkips") as HTMLInputElement).checked = false;
     document.getElementById("save")?.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(saveSettingsMock).toHaveBeenCalledOnce();
-    expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({ volumeStep: 0.2 });
+    expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
+      volumeStep: 0.2,
+      sumQuickSkips: false,
+    });
     expect(document.getElementById("status")?.classList.contains("visible")).toBe(true);
   });
 
@@ -106,6 +113,7 @@ describe("popup screen", () => {
     expect(saveSettingsMock).toHaveBeenCalledOnce();
     expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
       volumeStep: DEFAULT_SETTINGS.volumeStep,
+      sumQuickSkips: DEFAULT_SETTINGS.sumQuickSkips,
       actions: { togglePlayPause: { keys: ["x"] } },
     });
     expect((document.getElementById("volumeStep") as HTMLInputElement).value).toBe(

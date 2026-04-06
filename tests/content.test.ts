@@ -1,20 +1,33 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const { showActionOverlayMock } = vi.hoisted(() => ({
+  showActionOverlayMock: vi.fn(),
+}));
+
 vi.mock("webextension-polyfill", () => {
-  const store: Record<string, unknown> = {};
   return {
     default: {
       storage: {
         sync: {
-          get: vi.fn(async (defaults: Record<string, unknown>) => ({ ...defaults, ...store })),
-          set: vi.fn(async (values: Record<string, unknown>) => Object.assign(store, values)),
+          get: vi.fn(async (defaults: Record<string, unknown>) => defaults),
+          set: vi.fn(async () => undefined),
         },
       },
     },
   };
 });
 
-import { delegateActionToChildFrames, getTargetMedia, handleAction } from "../src/content";
+vi.mock("../src/overlay.js", () => ({
+  showActionOverlay: showActionOverlayMock,
+}));
+
+import {
+  delegateActionToChildFrames,
+  getTargetMedia,
+  handleAction,
+  setSettingsForTests,
+} from "../src/content";
+import { DEFAULT_SETTINGS } from "../src/storage.js";
 
 function makeVideo(overrides: Partial<HTMLVideoElement> = {}): HTMLVideoElement {
   const video = document.createElement("video");
@@ -34,6 +47,8 @@ function makeVideo(overrides: Partial<HTMLVideoElement> = {}): HTMLVideoElement 
 beforeEach(() => {
   document.body.innerHTML = "";
   vi.restoreAllMocks();
+  showActionOverlayMock.mockReset();
+  setSettingsForTests(structuredClone(DEFAULT_SETTINGS));
 });
 
 describe("getTargetMedia", () => {
@@ -145,6 +160,17 @@ describe("handleAction", () => {
     expect(video.muted).toBe(false);
   });
 
+  it("restores volume step when toggling mute from zero volume", () => {
+    const video = makeVideo();
+    video.muted = false;
+    video.volume = 0;
+
+    handleAction("toggleMute", video);
+
+    expect(video.muted).toBe(false);
+    expect(video.volume).toBe(DEFAULT_SETTINGS.volumeStep);
+  });
+
   it("adjusts volume up, clamped at 1", () => {
     const video = makeVideo();
     video.volume = 0.98;
@@ -156,6 +182,29 @@ describe("handleAction", () => {
     expect(video.volume).toBe(1);
   });
 
+  it("starts volume up from zero when media is muted with a stored nonzero volume", () => {
+    const video = makeVideo();
+    video.volume = 0.8;
+    video.muted = true;
+
+    handleAction("volumeUp", video);
+
+    expect(video.muted).toBe(false);
+    expect(video.volume).toBe(DEFAULT_SETTINGS.volumeStep);
+  });
+
+  it("re-enters mute after volume up clears a previously muted state", () => {
+    const video = makeVideo();
+    video.volume = 0.8;
+    video.muted = true;
+
+    handleAction("volumeUp", video);
+    handleAction("toggleMute", video);
+
+    expect(video.muted).toBe(true);
+    expect(video.volume).toBe(DEFAULT_SETTINGS.volumeStep);
+  });
+
   it("adjusts volume down, clamped at 0", () => {
     const video = makeVideo();
     video.volume = 0.02;
@@ -164,6 +213,17 @@ describe("handleAction", () => {
     expect(video.volume).toBeCloseTo(0);
 
     handleAction("volumeDown", video);
+    expect(video.volume).toBe(0);
+  });
+
+  it("treats muted media as zero volume when lowering volume", () => {
+    const video = makeVideo();
+    video.volume = 0.8;
+    video.muted = true;
+
+    handleAction("volumeDown", video);
+
+    expect(video.muted).toBe(false);
     expect(video.volume).toBe(0);
   });
 
@@ -205,6 +265,165 @@ describe("handleAction", () => {
     handleAction("seekToPercent50", video);
 
     expect(video.currentTime).toBe(50);
+  });
+
+  it("accumulates consecutive forward skip overlay amounts during the active overlay window", () => {
+    vi.useFakeTimers();
+    const video = makeVideo();
+
+    handleAction("seekForwardSmall", video);
+    handleAction("seekForwardMedium", video);
+
+    expect(showActionOverlayMock).toHaveBeenNthCalledWith(
+      1,
+      "seekForwardSmall",
+      video,
+      "center-right",
+      expect.anything(),
+      { seekSeconds: 5, animateSkipDirection: "forward" },
+    );
+    expect(showActionOverlayMock).toHaveBeenNthCalledWith(
+      2,
+      "seekForwardMedium",
+      video,
+      "center-right",
+      expect.anything(),
+      { seekSeconds: 15, animateSkipDirection: undefined },
+    );
+    vi.useRealTimers();
+  });
+
+  it("starts a new backward skip streak after the overlay window expires", () => {
+    vi.useFakeTimers();
+    const video = makeVideo();
+
+    handleAction("seekBackwardSmall", video);
+    vi.advanceTimersByTime(
+      DEFAULT_SETTINGS.overlayVisibleDuration + DEFAULT_SETTINGS.overlayFadeDuration + 1,
+    );
+    handleAction("seekBackwardLarge", video);
+
+    expect(showActionOverlayMock).toHaveBeenNthCalledWith(
+      1,
+      "seekBackwardSmall",
+      video,
+      "center-left",
+      expect.anything(),
+      { seekSeconds: 5, animateSkipDirection: "backward" },
+    );
+    expect(showActionOverlayMock).toHaveBeenNthCalledWith(
+      2,
+      "seekBackwardLarge",
+      video,
+      "center-left",
+      expect.anything(),
+      { seekSeconds: 30, animateSkipDirection: "backward" },
+    );
+    vi.useRealTimers();
+  });
+
+  it("extends the quick-skip streak window after each repeated skip", () => {
+    vi.useFakeTimers();
+    const video = makeVideo();
+    const streakWindow =
+      DEFAULT_SETTINGS.overlayVisibleDuration + DEFAULT_SETTINGS.overlayFadeDuration;
+
+    handleAction("seekForwardSmall", video);
+    vi.advanceTimersByTime(DEFAULT_SETTINGS.overlayVisibleDuration);
+    handleAction("seekForwardSmall", video);
+
+    vi.advanceTimersByTime(DEFAULT_SETTINGS.overlayFadeDuration + 1);
+    handleAction("seekForwardSmall", video);
+
+    expect(showActionOverlayMock).toHaveBeenNthCalledWith(
+      3,
+      "seekForwardSmall",
+      video,
+      "center-right",
+      expect.anything(),
+      { seekSeconds: 15, animateSkipDirection: undefined },
+    );
+
+    vi.advanceTimersByTime(streakWindow + 1);
+    handleAction("seekForwardSmall", video);
+
+    expect(showActionOverlayMock).toHaveBeenNthCalledWith(
+      4,
+      "seekForwardSmall",
+      video,
+      "center-right",
+      expect.anything(),
+      { seekSeconds: 5, animateSkipDirection: "forward" },
+    );
+    vi.useRealTimers();
+  });
+
+  it("resets a backward quick-skip streak when the next skip would pass the beginning", () => {
+    vi.useFakeTimers();
+    const video = makeVideo();
+    video.currentTime = 8;
+
+    handleAction("seekBackwardSmall", video);
+    handleAction("seekBackwardSmall", video);
+
+    expect(showActionOverlayMock).toHaveBeenNthCalledWith(
+      2,
+      "seekBackwardSmall",
+      video,
+      "center-left",
+      expect.anything(),
+      { seekSeconds: 5, animateSkipDirection: undefined },
+    );
+    vi.useRealTimers();
+  });
+
+  it("resets a forward quick-skip streak when the next skip would pass the end", () => {
+    vi.useFakeTimers();
+    const video = makeVideo({ duration: 12 } as Partial<HTMLVideoElement>);
+    video.currentTime = 2;
+
+    handleAction("seekForwardSmall", video);
+    handleAction("seekForwardSmall", video);
+
+    expect(showActionOverlayMock).toHaveBeenNthCalledWith(
+      2,
+      "seekForwardSmall",
+      video,
+      "center-right",
+      expect.anything(),
+      { seekSeconds: 5, animateSkipDirection: undefined },
+    );
+    vi.useRealTimers();
+  });
+
+  it("replays the directional skip animation for repeated skips when sumQuickSkips is disabled", async () => {
+    vi.useFakeTimers();
+    const video = makeVideo();
+    setSettingsForTests({
+      ...structuredClone(DEFAULT_SETTINGS),
+      sumQuickSkips: false,
+    });
+
+    handleAction("seekForwardSmall", video);
+    handleAction("seekForwardSmall", video);
+
+    expect(showActionOverlayMock).toHaveBeenNthCalledWith(
+      1,
+      "seekForwardSmall",
+      video,
+      "center-right",
+      expect.anything(),
+      { seekSeconds: 5, animateSkipDirection: "forward" },
+    );
+    expect(showActionOverlayMock).toHaveBeenNthCalledWith(
+      2,
+      "seekForwardSmall",
+      video,
+      "center-right",
+      expect.anything(),
+      { seekSeconds: 5, animateSkipDirection: "forward" },
+    );
+    vi.useRealTimers();
   });
 });
 

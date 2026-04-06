@@ -190,10 +190,28 @@ test("toggles mute and adjusts seek, volume, and speed with default bindings", a
   await waitForMediaState(page, "primary", (state) => state.currentTime >= seekBaseline + 4);
 
   await page.keyboard.press("ArrowUp");
-  await waitForMediaState(page, "primary", (state) => Math.abs(state.volume - 0.55) < 0.0001);
+  await waitForMediaState(
+    page,
+    "primary",
+    (state) => !state.muted && Math.abs(state.volume - 0.05) < 0.0001,
+  );
 
   await page.keyboard.press("ArrowDown");
-  await waitForMediaState(page, "primary", (state) => Math.abs(state.volume - 0.5) < 0.0001);
+  await waitForMediaState(
+    page,
+    "primary",
+    (state) => !state.muted && Math.abs(state.volume - 0) < 0.0001,
+  );
+
+  await page.keyboard.press("ArrowUp");
+  await waitForMediaState(
+    page,
+    "primary",
+    (state) => !state.muted && Math.abs(state.volume - 0.05) < 0.0001,
+  );
+
+  await page.keyboard.press("m");
+  await waitForMediaState(page, "primary", (state) => state.muted);
 
   await pressShiftedKey(page, ".");
   await waitForMediaState(page, "primary", (state) => Math.abs(state.playbackRate - 1.25) < 0.0001);
@@ -222,7 +240,11 @@ test("prefers playing media, then last interacted media, then the first media el
 
   await markPlaying(page, "second");
   await page.keyboard.press("ArrowDown");
-  await waitForMediaState(page, "second", (state) => Math.abs(state.volume - 0.75) < 0.0001);
+  await waitForMediaState(
+    page,
+    "second",
+    (state) => !state.muted && Math.abs(state.volume - 0) < 0.0001,
+  );
   await expect.poll(async () => (await readMediaState(page, "first")).volume).toBeCloseTo(0.5, 5);
 
   await page.evaluate(() => {
@@ -235,7 +257,7 @@ test("prefers playing media, then last interacted media, then the first media el
   await page.locator("body").click({ position: { x: 1, y: 1 } });
 
   await page.keyboard.press("ArrowDown");
-  await waitForMediaState(page, "second", (state) => Math.abs(state.volume - 0.7) < 0.0001);
+  await waitForMediaState(page, "second", (state) => Math.abs(state.volume - 0) < 0.0001);
 
   await page.evaluate(() => {
     const media = document.getElementById("second");
