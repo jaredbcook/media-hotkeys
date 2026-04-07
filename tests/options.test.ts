@@ -43,7 +43,7 @@ describe("getSettings", () => {
     expect(settings.actions.togglePlayPause.overlayPosition).toBeUndefined();
   });
 
-  it("drops stale overlay overrides for actions that never show overlays", async () => {
+  it("drops stale overlay overrides only for actions that never show overlays", async () => {
     await saveSettings({
       actions: {
         toggleFullscreen: {
@@ -62,8 +62,8 @@ describe("getSettings", () => {
     const settings = await getSettings();
     expect(settings.actions.toggleFullscreen.overlayVisible).toBeUndefined();
     expect(settings.actions.toggleFullscreen.overlayPosition).toBeUndefined();
-    expect(settings.actions.seekToPercent50.overlayVisible).toBeUndefined();
-    expect(settings.actions.seekToPercent50.overlayPosition).toBeUndefined();
+    expect(settings.actions.seekToPercent50.overlayVisible).toBe(true);
+    expect(settings.actions.seekToPercent50.overlayPosition).toBe("bottom");
   });
 
   it("maps legacy nested global overlay booleans to overlayVisibility", async () => {
@@ -126,10 +126,10 @@ describe("saveSettings", () => {
 });
 
 describe("overlay settings helpers", () => {
-  it("marks fullscreen, pip, and percent seek actions as not supporting overlays", () => {
+  it("marks fullscreen and pip actions as not supporting overlays", () => {
     expect(actionSupportsOverlay("toggleFullscreen")).toBe(false);
     expect(actionSupportsOverlay("togglePip")).toBe(false);
-    expect(actionSupportsOverlay("seekToPercent50")).toBe(false);
+    expect(actionSupportsOverlay("seekToPercent50")).toBe(true);
     expect(actionSupportsOverlay("togglePlayPause")).toBe(true);
   });
 

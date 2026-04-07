@@ -11,16 +11,16 @@ import { DEFAULT_SETTINGS, type GlobalSettings } from "../src/storage.js";
 
 const globalSettings: GlobalSettings = DEFAULT_SETTINGS;
 
-function makeVideo(): HTMLVideoElement {
+function makeVideo(width = 640, height = 360): HTMLVideoElement {
   const video = document.createElement("video");
   document.body.appendChild(video);
   vi.spyOn(video, "getBoundingClientRect").mockReturnValue({
     left: 100,
     top: 100,
-    width: 640,
-    height: 360,
-    right: 740,
-    bottom: 460,
+    width,
+    height,
+    right: 100 + width,
+    bottom: 100 + height,
     x: 100,
     y: 100,
     toJSON: () => {},
@@ -118,6 +118,57 @@ describe("showActionOverlay", () => {
     expect(el.innerHTML).toContain("+30s");
   });
 
+  it("sizes overlay icons to 10% of media width", () => {
+    const video = makeVideo(500);
+    showActionOverlay("togglePlayPause", video, "center", globalSettings);
+    const icon = document.querySelector("#media-shortcuts-overlay svg") as SVGElement;
+
+    expect(icon.style.width).toBe("50px");
+    expect(icon.style.height).toBe("50px");
+  });
+
+  it("sizes overlay text to 2.5% of media width", () => {
+    const video = makeVideo(800);
+    showActionOverlay("toggleMute", video, "center", globalSettings);
+    const el = document.getElementById("media-shortcuts-overlay")!;
+
+    expect(el.style.fontSize).toBe("20px");
+  });
+
+  it("clamps overlay text to the minimum size", () => {
+    const video = makeVideo(200);
+    showActionOverlay("toggleMute", video, "center", globalSettings);
+    const el = document.getElementById("media-shortcuts-overlay")!;
+
+    expect(el.style.fontSize).toBe("16px");
+  });
+
+  it("clamps overlay text to the maximum size", () => {
+    const video = makeVideo(1200);
+    showActionOverlay("toggleMute", video, "center", globalSettings);
+    const el = document.getElementById("media-shortcuts-overlay")!;
+
+    expect(el.style.fontSize).toBe("24px");
+  });
+
+  it("clamps overlay icons to the minimum size", () => {
+    const video = makeVideo(200);
+    showActionOverlay("togglePlayPause", video, "center", globalSettings);
+    const icon = document.querySelector("#media-shortcuts-overlay svg") as SVGElement;
+
+    expect(icon.style.width).toBe("32px");
+    expect(icon.style.height).toBe("32px");
+  });
+
+  it("clamps overlay icons to the maximum size", () => {
+    const video = makeVideo(800);
+    showActionOverlay("togglePlayPause", video, "center", globalSettings);
+    const icon = document.querySelector("#media-shortcuts-overlay svg") as SVGElement;
+
+    expect(icon.style.width).toBe("80px");
+    expect(icon.style.height).toBe("80px");
+  });
+
   it("displays negative seek step for backward seek", () => {
     const video = makeVideo();
     showActionOverlay("seekBackwardSmall", video, "center-left", globalSettings);
@@ -161,11 +212,28 @@ describe("showActionOverlay", () => {
     expect(els.length).toBe(1);
   });
 
-  it("does not show overlay for seek-to-percent actions (no content)", () => {
+  it("shows a mm:ss timestamp overlay for percent seek actions on shorter media", () => {
     const video = makeVideo();
-    showActionOverlay("seekToPercent50", video, "center", globalSettings);
-    const el = document.getElementById("media-shortcuts-overlay");
-    expect(el).toBeNull();
+    Object.defineProperty(video, "duration", { configurable: true, value: 3599, writable: true });
+    showActionOverlay("seekToPercent50", video, "center", globalSettings, {
+      timestampSeconds: 743,
+      jumpDirection: "forward",
+    });
+    const el = document.getElementById("media-shortcuts-overlay")!;
+    expect(el.textContent).toBe("12:23");
+    expect(el.innerHTML).toContain("M480-120q-75 0-140.5-28.5");
+  });
+
+  it("shows a hh:mm:ss timestamp overlay for percent seek actions on longer media", () => {
+    const video = makeVideo();
+    Object.defineProperty(video, "duration", { configurable: true, value: 3600, writable: true });
+    showActionOverlay("seekToPercent50", video, "center", globalSettings, {
+      timestampSeconds: 3752,
+      jumpDirection: "backward",
+    });
+    const el = document.getElementById("media-shortcuts-overlay")!;
+    expect(el.textContent).toBe("1:02:32");
+    expect(el.innerHTML).toContain("M480-120q-138 0-240.5-91.5");
   });
 
   it("does not show overlay for fullscreen or picture-in-picture toggles", () => {
@@ -194,8 +262,8 @@ describe("showActionOverlay", () => {
     showActionOverlay("togglePlayPause", video, "top-left", globalSettings);
     const el = document.getElementById("media-shortcuts-overlay")!;
     expect(el.style.transform).toBe("translate(0%, 0%)");
-    expect(el.style.left).toBe("112px"); // 100 + 12 inset
-    expect(el.style.top).toBe("112px");
+    expect(el.style.left).toBe("116px"); // 100 + 16 inset
+    expect(el.style.top).toBe("116px");
   });
 
   it("positions overlay at center-right with inset", () => {
@@ -203,7 +271,7 @@ describe("showActionOverlay", () => {
     showActionOverlay("seekForwardSmall", video, "center-right", globalSettings);
     const el = document.getElementById("media-shortcuts-overlay")!;
     expect(el.style.transform).toBe("translate(-100%, -50%)");
-    expect(el.style.left).toBe("728px"); // 740 - 12 inset
+    expect(el.style.left).toBe("724px"); // 740 - 16 inset
     expect(el.style.top).toBe("280px"); // 100 + 360/2
   });
 
@@ -213,7 +281,7 @@ describe("showActionOverlay", () => {
     const el = document.getElementById("media-shortcuts-overlay")!;
     expect(el.style.transform).toBe("translate(-50%, -100%)");
     expect(el.style.left).toBe("420px"); // center horizontal
-    expect(el.style.top).toBe("448px"); // 460 - 12 inset
+    expect(el.style.top).toBe("444px"); // 460 - 16 inset
   });
 
   it("uses custom global settings for timing", () => {

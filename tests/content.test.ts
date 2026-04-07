@@ -267,6 +267,34 @@ describe("handleAction", () => {
     expect(video.currentTime).toBe(50);
   });
 
+  it("shows a timestamp overlay for percent seek actions", () => {
+    const video = makeVideo({ currentTime: 25, duration: 100 } as Partial<HTMLVideoElement>);
+
+    handleAction("seekToPercent50", video);
+
+    expect(showActionOverlayMock).toHaveBeenCalledWith(
+      "seekToPercent50",
+      video,
+      "center",
+      expect.anything(),
+      { timestampSeconds: 50, jumpDirection: "forward" },
+    );
+  });
+
+  it("shows a backward icon hint for percent seek actions that move earlier", () => {
+    const video = makeVideo({ currentTime: 75, duration: 100 } as Partial<HTMLVideoElement>);
+
+    handleAction("seekToPercent50", video);
+
+    expect(showActionOverlayMock).toHaveBeenCalledWith(
+      "seekToPercent50",
+      video,
+      "center",
+      expect.anything(),
+      { timestampSeconds: 50, jumpDirection: "backward" },
+    );
+  });
+
   it("accumulates consecutive forward skip overlay amounts during the active overlay window", () => {
     vi.useFakeTimers();
     const video = makeVideo();

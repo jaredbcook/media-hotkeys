@@ -389,8 +389,34 @@ function getSeekOverlayDisplay(
   };
 }
 
+function getOverlayDisplayOptions(
+  action: MediaAction,
+  media: HTMLMediaElement,
+  previousTime?: number,
+): {
+  seekSeconds?: number;
+  animateSkipDirection?: SeekDirection;
+  timestampSeconds?: number;
+  jumpDirection?: SeekDirection;
+} {
+  const percentMatch = action.match(/^seekToPercent(\d+)$/);
+  if (percentMatch) {
+    clearSeekOverlayState();
+    return {
+      timestampSeconds: media.currentTime,
+      jumpDirection:
+        typeof previousTime === "number" && media.currentTime < previousTime
+          ? "backward"
+          : "forward",
+    };
+  }
+
+  return getSeekOverlayDisplay(action, media);
+}
+
 export function handleAction(action: MediaAction, media: HTMLMediaElement): void {
   const g = settings;
+  const previousTime = media.currentTime;
   trackInteraction(media);
 
   switch (action) {
@@ -486,7 +512,7 @@ export function handleAction(action: MediaAction, media: HTMLMediaElement): void
       media,
       overlaySettings.overlayPosition,
       g,
-      getSeekOverlayDisplay(action, media),
+      getOverlayDisplayOptions(action, media, previousTime),
     );
   } else if (getSeekDirection(action)) {
     getSeekOverlayDisplay(action, media);

@@ -2,7 +2,13 @@ import type { MediaAction, OverlayPosition, GlobalSettings } from "./storage.js"
 import * as icons from "./icons.js";
 
 const OVERLAY_ID = "media-shortcuts-overlay";
-const INSET_PX = 12;
+const INSET_PX = 16;
+const OVERLAY_ICON_SIZE_RATIO = 0.1;
+const MIN_OVERLAY_ICON_SIZE_PX = 32;
+const MAX_OVERLAY_ICON_SIZE_PX = 80;
+const OVERLAY_TEXT_SIZE_RATIO = 0.025;
+const MIN_OVERLAY_TEXT_SIZE_PX = 16;
+const MAX_OVERLAY_TEXT_SIZE_PX = 24;
 
 let hideTimeout: ReturnType<typeof setTimeout> | null = null;
 let fadeTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -12,6 +18,22 @@ type SkipAnimationDirection = "forward" | "backward";
 export interface OverlayDisplayOptions {
   seekSeconds?: number;
   animateSkipDirection?: SkipAnimationDirection;
+  timestampSeconds?: number;
+  jumpDirection?: SkipAnimationDirection;
+}
+
+function formatTimestamp(seconds: number, includeHours: boolean): string {
+  const clampedSeconds = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(clampedSeconds / 3600);
+  const minutes = Math.floor((clampedSeconds % 3600) / 60);
+  const remainingSeconds = clampedSeconds % 60;
+
+  if (includeHours) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
+  }
+
+  const totalMinutes = Math.floor(clampedSeconds / 60);
+  return `${totalMinutes}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
 function getOrCreateOverlay(): HTMLElement {
@@ -28,11 +50,10 @@ function getOrCreateOverlay(): HTMLElement {
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    gap: "4px",
-    background: "rgba(0, 0, 0, 0.7)",
+    background: "rgba(0, 0, 0, 0.6)",
     color: "#fff",
     borderRadius: "10px",
-    padding: "15px 20px",
+    padding: "8px 16px",
     fontFamily: "sans-serif",
     fontSize: "16px",
     fontWeight: "bold",
@@ -163,9 +184,42 @@ function buildContent(
     case "seekBackwardMedium":
       return `${icons.SEEK_BACK_LARGE}<span>-${options.seekSeconds ?? globalSettings.seekStepMedium}s</span>`;
 
-    default:
+    default: {
+      const percentMatch = action.match(/^seekToPercent\d+$/);
+      if (percentMatch && typeof options.timestampSeconds === "number") {
+        const icon =
+          options.jumpDirection === "backward" ? icons.TIME_BACKWARD : icons.TIME_FORWARD;
+        return `${icon}<span>${formatTimestamp(
+          options.timestampSeconds,
+          Number.isFinite(media.duration) && media.duration >= 3600,
+        )}</span>`;
+      }
       return null;
+    }
   }
+}
+
+function getOverlayIconSizePx(media: HTMLMediaElement): number {
+  const desiredSize = media.getBoundingClientRect().width * OVERLAY_ICON_SIZE_RATIO;
+  return Math.min(MAX_OVERLAY_ICON_SIZE_PX, Math.max(MIN_OVERLAY_ICON_SIZE_PX, desiredSize));
+}
+
+function getOverlayTextSizePx(media: HTMLMediaElement): number {
+  const desiredSize = media.getBoundingClientRect().width * OVERLAY_TEXT_SIZE_RATIO;
+  return Math.min(MAX_OVERLAY_TEXT_SIZE_PX, Math.max(MIN_OVERLAY_TEXT_SIZE_PX, desiredSize));
+}
+
+function resizeOverlayIcons(el: HTMLElement, media: HTMLMediaElement): void {
+  const iconSizePx = getOverlayIconSizePx(media);
+
+  for (const icon of el.querySelectorAll("svg")) {
+    icon.style.width = `${iconSizePx}px`;
+    icon.style.height = `${iconSizePx}px`;
+  }
+}
+
+function resizeOverlayText(el: HTMLElement, media: HTMLMediaElement): void {
+  el.style.fontSize = `${getOverlayTextSizePx(media)}px`;
 }
 
 export function showActionOverlay(
@@ -184,6 +238,8 @@ export function showActionOverlay(
   if (fadeTimeout) clearTimeout(fadeTimeout);
 
   el.innerHTML = content;
+  resizeOverlayIcons(el, media);
+  resizeOverlayText(el, media);
   positionOverMedia(el, media, position);
   el.style.display = "flex";
   el.style.opacity = "1";

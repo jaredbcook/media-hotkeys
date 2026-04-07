@@ -67,20 +67,7 @@ export interface ExtensionSettings extends GlobalSettings {
   actions: Record<MediaAction, ActionConfig>;
 }
 
-const NON_OVERLAY_ACTIONS = new Set<MediaAction>([
-  "toggleFullscreen",
-  "togglePip",
-  "seekToPercent0",
-  "seekToPercent10",
-  "seekToPercent20",
-  "seekToPercent30",
-  "seekToPercent40",
-  "seekToPercent50",
-  "seekToPercent60",
-  "seekToPercent70",
-  "seekToPercent80",
-  "seekToPercent90",
-]);
+const NON_OVERLAY_ACTIONS = new Set<MediaAction>(["toggleFullscreen", "togglePip"]);
 
 // #endregion
 
