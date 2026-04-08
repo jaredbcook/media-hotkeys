@@ -19,10 +19,11 @@ npm run build
 
 # Build for a specific browser
 npm run build:chrome
+npm run build:edge
 npm run build:firefox
 ```
 
-`npm run build` generates unpacked extensions in `dist/chrome/` and `dist/firefox/`.
+`npm run build` generates unpacked extensions in `dist/chrome/`, `dist/edge/`, and `dist/firefox/`.
 
 ## Test
 
@@ -46,6 +47,7 @@ npm run test:e2e
 ```sh
 npm run package
 npm run package:chrome
+npm run package:edge
 npm run package:firefox
 ```
 

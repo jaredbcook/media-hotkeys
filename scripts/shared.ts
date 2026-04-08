@@ -3,7 +3,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-export type SupportedBrowser = "chrome" | "firefox";
+export type SupportedBrowser = "chrome" | "edge" | "firefox";
 
 export interface PackageJson {
   name: string;
@@ -33,7 +33,7 @@ const __dirname = path.dirname(__filename);
 export const projectRoot = path.resolve(__dirname, "..");
 export const distRoot = path.join(projectRoot, "dist");
 export const packagesDir = path.join(distRoot, "packages");
-export const supportedBrowsers: SupportedBrowser[] = ["chrome", "firefox"];
+export const supportedBrowsers: SupportedBrowser[] = ["chrome", "edge", "firefox"];
 
 export function getBrowserArgs(args: string[]): SupportedBrowser[] {
   const browsers: SupportedBrowser[] = [];

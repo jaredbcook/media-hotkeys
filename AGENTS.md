@@ -55,9 +55,9 @@ npm run test:e2e    # requires build:chrome first
 
 ### Build and package for release
 
-1. `npm run build` — builds Chrome and Firefox
-2. `npm run package` — creates Chrome and Firefox archives in `dist/packages/`
-3. Verify Chrome and Firefox packages manually before publishing
+1. `npm run build` — builds Chrome, Edge, and Firefox
+2. `npm run package` — creates Chrome, Edge, and Firefox archives in `dist/packages/`
+3. Verify Chrome, Edge, and Firefox packages manually before publishing
 
 ## Testing
 

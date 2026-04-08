@@ -5,6 +5,7 @@ Browser extension that adds hotkeys to control HTML video or audio on any websit
 ## Development Build Targets
 
 - Chrome
+- Edge
 - Firefox
 - Safari via a separate macOS/Xcode conversion step from the Chrome build
 
@@ -28,18 +29,18 @@ Note: Hotkeys are ignored if focus is on a text input or other editable element.
 | Mute/Unmute            | `m`                 |                                                  |
 | Fullscreen             | `f`                 | `Esc` exits fullscreen                           |
 | Picture in Picture     | `i`                 |                                                  |
-| Volume up              | `+`, `=`, `ArrowUp` | `ArrowUp` only works when media has focus\*      |
-| Volume down            | `-`, `ArrowDown`    | `ArrowDown` only works when media has focus\*    |
+| Speed up               | `>`                 | Default maximum is 4x. Default step is 0.25x.    |
+| Slow down              | `<`                 | Default minimum is 0.25x. Default step is 0.25x. |
+| Volume up              | `ArrowUp`, `+`, `=` | `ArrowUp` only works when media has focus\*      |
+| Volume down            | `ArrowDown`, `-`    | `ArrowDown` only works when media has focus\*    |
 | Skip forward (small)   | `ArrowRight`        | Default is 5 seconds                             |
 | Skip backward (small)  | `ArrowLeft`         | Default is 5 seconds                             |
 | Skip forward (medium)  | `l`                 | Default is 10 seconds                            |
 | Skip backward (medium) | `j`                 | Default is 10 seconds                            |
 | Skip forward (large)   | `]`                 | Default is 30 seconds                            |
 | Skip backward (large)  | `[`                 | Default is 30 seconds                            |
-| Speed up               | `>`                 | Default maximum is 4x. Default step is 0.25x.    |
-| Slow down              | `<`                 | Default minimum is 0.25x. Default step is 0.25x. |
+| Restart                | `r`                 | Restart from the beginning                       |
 | Jump to location       | `0`–`9`             | `0` jumps to the beginning, `1` to 10%, etc.     |
-| Restart                | `r`                 | Same as jump to location `0`                     |
 
 \*By default, arrow keys cause the page to scroll if no interactive element has focus.
 
@@ -67,6 +68,27 @@ Note: Hotkeys are ignored if focus is on a text input or other editable element.
 5. Enable **Developer mode** in the top right corner.
 6. Click **Load unpacked**.
 7. Select `dist/chrome`.
+
+## Installation — Edge (Developer Mode)
+
+1. Clone or download this repository.
+2. Run `npm install`.
+3. Run `npm run build:edge`.
+4. Open Edge and go to `edge://extensions/`.
+5. Enable **Developer mode**.
+6. Click **Load unpacked**.
+7. Select `dist/edge`.
+
+## Installation — Firefox (Temporary Add-on)
+
+1. Clone or download this repository.
+2. Run `npm install`.
+3. Run `npm run build:firefox`.
+4. Open Firefox and go to `about:debugging#/runtime/this-firefox`.
+5. Click **Load Temporary Add-on...**.
+6. Select the generated manifest at `dist/firefox/manifest.json`.
+
+Firefox temporary add-ons are removed when the browser restarts. For release packaging, use `npm run package:firefox` to generate the Firefox archive in `dist/packages/`.
 
 ## Release Workflow
 

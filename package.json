@@ -8,9 +8,11 @@
   "scripts": {
     "build": "tsx scripts/build.ts",
     "build:chrome": "tsx scripts/build.ts --browser chrome",
+    "build:edge": "tsx scripts/build.ts --browser edge",
     "build:firefox": "tsx scripts/build.ts --browser firefox",
     "package": "tsx scripts/package.ts",
     "package:chrome": "tsx scripts/package.ts --browser chrome",
+    "package:edge": "tsx scripts/package.ts --browser edge",
     "package:firefox": "tsx scripts/package.ts --browser firefox",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.tools.json --noEmit",
     "safari:convert": "tsx scripts/safari-convert.ts",
