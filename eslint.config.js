@@ -10,10 +10,9 @@ export default defineConfig(
   eslint.configs.recommended,
   tseslint.configs.recommended,
   {
-    files: ["scripts/**/*.js"],
+    files: ["scripts/**/*.ts", "*.config.{js,ts}"],
     languageOptions: {
       globals: {
-        process: "readonly",
         structuredClone: "readonly",
       },
     },

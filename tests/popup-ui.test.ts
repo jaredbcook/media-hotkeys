@@ -57,7 +57,7 @@ async function loadPopupModule(settings = structuredClone(DEFAULT_SETTINGS)): Pr
   saveSettingsMock.mockResolvedValue(undefined);
   openOptionsPageMock.mockResolvedValue(undefined);
   window.close = vi.fn();
-  await import("../src/popup.ts");
+  await import("../src/popup.js");
   await Promise.resolve();
 }
 

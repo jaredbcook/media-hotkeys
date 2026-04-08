@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js
+- Node.js 20
 - npm
 
 ## Setup
@@ -14,22 +14,30 @@ npm install
 ## Build
 
 ```sh
-# Build for all browsers
+# Build supported browsers
 npm run build
 
 # Build for a specific browser
 npm run build:chrome
 npm run build:firefox
-npm run build:safari
 ```
+
+`npm run build` generates unpacked extensions in `dist/chrome/` and `dist/firefox/`.
 
 ## Test
 
 ```sh
+# Typecheck app code and typed tooling
+npm run typecheck
+
+# Lint
+npm run lint
+
 # Unit tests
 npm test
 
-# End-to-end tests
+# End-to-end tests against the Chrome build
+npm run build:chrome
 npm run test:e2e
 ```
 
@@ -39,5 +47,19 @@ npm run test:e2e
 npm run package
 npm run package:chrome
 npm run package:firefox
-npm run package:safari
 ```
+
+Packages are written to `dist/packages/`.
+
+## Safari Conversion
+
+Safari is not part of the standard Linux CI or default local build/package workflow.
+
+On macOS, build the Chrome extension first and then run:
+
+```sh
+npm run build:chrome
+npm run safari:convert
+```
+
+The `safari:convert` command prints the `xcrun safari-web-extension-converter` invocation to run from the repository root.

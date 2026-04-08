@@ -1,6 +1,6 @@
 import type { Frame, Page } from "@playwright/test";
 
-import { expect, test } from "./setup";
+import { expect, test } from "./setup.js";
 
 type MediaState = {
   paused: boolean;
