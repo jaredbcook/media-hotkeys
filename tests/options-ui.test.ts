@@ -29,7 +29,7 @@ vi.mock("../src/storage.js", async () => {
 function renderOptionsDom(): void {
   document.body.innerHTML = `
     <table><tbody id="actions-body"></tbody></table>
-    <button id="save"></button>
+    <input id="debugLogging" type="checkbox" />
     <button id="reset"></button>
     <span id="status"></span>
     <div id="announcements"></div>
@@ -56,12 +56,35 @@ async function loadOptionsModule(settings = structuredClone(DEFAULT_SETTINGS)): 
 }
 
 beforeEach(() => {
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   getSettingsMock.mockReset();
   saveSettingsMock.mockReset();
   document.body.innerHTML = "";
 });
 
 describe("options screen global setting change handlers", () => {
+  it("loads the debug logging checkbox from settings", async () => {
+    const settings = structuredClone(DEFAULT_SETTINGS);
+    settings.debugLogging = false;
+
+    await loadOptionsModule(settings);
+
+    expect((document.getElementById("debugLogging") as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("persists debug logging immediately when the checkbox changes", async () => {
+    saveSettingsMock.mockResolvedValue(undefined);
+    await loadOptionsModule();
+
+    (document.getElementById("debugLogging") as HTMLInputElement).checked = false;
+    document.getElementById("debugLogging")!.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(saveSettingsMock).toHaveBeenCalledOnce();
+    expect(saveSettingsMock).toHaveBeenCalledWith(expect.objectContaining({ debugLogging: false }));
+    expect(document.getElementById("status")?.textContent).toBe("Settings saved.");
+  });
+
   it("renders per-action overlay controls using the stored global settings", async () => {
     const settings = structuredClone(DEFAULT_SETTINGS);
     settings.overlayVisibility = "Custom";
@@ -109,6 +132,7 @@ describe("options screen overlay controls", () => {
   it("unchecking the per-action overlay checkbox sets overlayVisible=false", async () => {
     const settings = structuredClone(DEFAULT_SETTINGS);
     settings.overlayVisibility = "Custom";
+    saveSettingsMock.mockResolvedValue(undefined);
 
     await loadOptionsModule(settings);
 
@@ -116,14 +140,23 @@ describe("options screen overlay controls", () => {
     const checkbox = row.querySelector('input[type="checkbox"]') as HTMLInputElement;
     checkbox.checked = false;
     checkbox.dispatchEvent(new Event("change"));
-    // No thrown errors and re-render completes
-    expect(checkbox.checked).toBe(false);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(saveSettingsMock).toHaveBeenCalledOnce();
+    expect(saveSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actions: expect.objectContaining({
+          togglePlayPause: expect.objectContaining({ overlayVisible: false }),
+        }),
+      }),
+    );
   });
 
   it("checking the per-action overlay checkbox deletes the explicit overlayVisible", async () => {
     const settings = structuredClone(DEFAULT_SETTINGS);
     settings.overlayVisibility = "Custom";
     settings.actions.togglePlayPause.overlayVisible = false;
+    saveSettingsMock.mockResolvedValue(undefined);
 
     await loadOptionsModule(settings);
 
@@ -135,16 +168,26 @@ describe("options screen overlay controls", () => {
     // Check it — should delete the explicit setting
     checkbox.checked = true;
     checkbox.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 0));
 
     // Re-render: now with no explicit setting, default is true
     const updatedRow = findRowByLabel(PLAY_PAUSE_LABEL);
     const updatedCheckbox = updatedRow.querySelector('input[type="checkbox"]') as HTMLInputElement;
     expect(updatedCheckbox.checked).toBe(true);
+    expect(saveSettingsMock).toHaveBeenCalledOnce();
+    expect(saveSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actions: expect.objectContaining({
+          togglePlayPause: expect.not.objectContaining({ overlayVisible: false }),
+        }),
+      }),
+    );
   });
 
   it("changing the per-action overlay position updates the action's position", async () => {
     const settings = structuredClone(DEFAULT_SETTINGS);
     settings.overlayVisibility = "Custom";
+    saveSettingsMock.mockResolvedValue(undefined);
 
     await loadOptionsModule(settings);
 
@@ -152,11 +195,20 @@ describe("options screen overlay controls", () => {
     const select = row.querySelector("select") as HTMLSelectElement;
     select.value = "top-left";
     select.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 0));
 
     // Re-render should show the newly set position
     const updatedRow = findRowByLabel(PLAY_PAUSE_LABEL);
     const updatedSelect = updatedRow.querySelector("select") as HTMLSelectElement;
     expect(updatedSelect.value).toBe("top-left");
+    expect(saveSettingsMock).toHaveBeenCalledOnce();
+    expect(saveSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actions: expect.objectContaining({
+          togglePlayPause: expect.objectContaining({ overlayPosition: "top-left" }),
+        }),
+      }),
+    );
   });
 
   it("selecting the global position in the per-action select removes the per-action override", async () => {
@@ -164,6 +216,7 @@ describe("options screen overlay controls", () => {
     settings.overlayVisibility = "Custom";
     settings.overlayPosition = "top-right";
     settings.actions.togglePlayPause.overlayPosition = "bottom-left";
+    saveSettingsMock.mockResolvedValue(undefined);
 
     await loadOptionsModule(settings);
 
@@ -172,16 +225,26 @@ describe("options screen overlay controls", () => {
     // Set it to the global position value to trigger deletion
     select.value = "top-right";
     select.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 0));
 
     // After re-render, inherits global position
     const updatedRow = findRowByLabel(PLAY_PAUSE_LABEL);
     const updatedSelect = updatedRow.querySelector("select") as HTMLSelectElement;
     expect(updatedSelect.value).toBe("top-right");
+    expect(saveSettingsMock).toHaveBeenCalledOnce();
+    expect(saveSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actions: expect.objectContaining({
+          togglePlayPause: expect.not.objectContaining({ overlayPosition: "bottom-left" }),
+        }),
+      }),
+    );
   });
 });
 
 describe("options screen key binding controls", () => {
   it("removes a key chip when the remove button is clicked", async () => {
+    saveSettingsMock.mockResolvedValue(undefined);
     await loadOptionsModule();
 
     // togglePlayPause has key "k" by default
@@ -190,9 +253,11 @@ describe("options screen key binding controls", () => {
     expect(removeBtn).toBeTruthy();
 
     removeBtn.click();
+    await new Promise((r) => setTimeout(r, 0));
 
     const updatedRow = findRowByLabel(PLAY_PAUSE_LABEL);
     expect(updatedRow.querySelectorAll(".key-chip").length).toBe(0);
+    expect(saveSettingsMock).toHaveBeenCalledOnce();
   });
 
   it("starts key capture when the + button is clicked", async () => {
@@ -220,6 +285,7 @@ describe("options screen key binding controls", () => {
   });
 
   it("captures a pressed key and adds it to the action", async () => {
+    saveSettingsMock.mockResolvedValue(undefined);
     await loadOptionsModule();
 
     const row = findRowByLabel(MUTE_LABEL);
@@ -227,11 +293,13 @@ describe("options screen key binding controls", () => {
     addBtn.click();
 
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "z", bubbles: true }));
+    await new Promise((r) => setTimeout(r, 0));
 
     const updatedRow = findRowByLabel(MUTE_LABEL);
     const chips = updatedRow.querySelectorAll(".key-chip");
     const keys = Array.from(chips).map((c) => c.firstChild?.textContent?.trim());
     expect(keys).toContain("z");
+    expect(saveSettingsMock).toHaveBeenCalledOnce();
   });
 
   it("ignores modifier-only keypresses during capture", async () => {
@@ -250,6 +318,7 @@ describe("options screen key binding controls", () => {
   });
 
   it("reassigns a conflicting key to the new action during capture", async () => {
+    saveSettingsMock.mockResolvedValue(undefined);
     await loadOptionsModule();
 
     // "k" is bound to togglePlayPause; bind it to toggleMute
@@ -258,6 +327,7 @@ describe("options screen key binding controls", () => {
     addBtn.click();
 
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", bubbles: true }));
+    await new Promise((r) => setTimeout(r, 0));
 
     // togglePlayPause should no longer have "k"
     const playRow = findRowByLabel(PLAY_PAUSE_LABEL);
@@ -272,6 +342,7 @@ describe("options screen key binding controls", () => {
       c.firstChild?.textContent?.trim(),
     );
     expect(muteChips).toContain("k");
+    expect(saveSettingsMock).toHaveBeenCalledOnce();
   });
 
   it("uses accessible names for key and overlay controls", async () => {
@@ -299,24 +370,11 @@ describe("options screen key binding controls", () => {
   });
 });
 
-describe("options screen save and reset", () => {
-  it("clicking save calls saveSettings with current settings", async () => {
-    saveSettingsMock.mockResolvedValue(undefined);
-    await loadOptionsModule();
-
-    document.getElementById("save")!.click();
-    // Use a macrotask to ensure all pending async continuations complete
-    await new Promise((r) => setTimeout(r, 0));
-
-    expect(saveSettingsMock).toHaveBeenCalledOnce();
-    const statusEl = document.getElementById("status")!;
-    expect(statusEl.classList.contains("visible")).toBe(true);
-    expect(statusEl.textContent).toBe("Settings saved.");
-  });
-
+describe("options screen reset", () => {
   it("clicking reset restores default settings and calls saveSettings", async () => {
     const settings = structuredClone(DEFAULT_SETTINGS);
     settings.volumeStep = 0.5;
+    settings.debugLogging = false;
     settings.actions.togglePlayPause.keys = ["x"];
     saveSettingsMock.mockResolvedValue(undefined);
     await loadOptionsModule(settings);
@@ -325,9 +383,12 @@ describe("options screen save and reset", () => {
     await new Promise((r) => setTimeout(r, 0));
 
     expect(saveSettingsMock).toHaveBeenCalledOnce();
-    expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
-      volumeStep: 0.5,
-      actions: DEFAULT_SETTINGS.actions,
-    });
+    expect(saveSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        debugLogging: DEFAULT_SETTINGS.debugLogging,
+        volumeStep: 0.5,
+        actions: DEFAULT_SETTINGS.actions,
+      }),
+    );
   });
 });

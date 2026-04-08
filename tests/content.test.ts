@@ -31,6 +31,7 @@ import { DEFAULT_SETTINGS } from "../src/storage.js";
 
 function makeVideo(overrides: Partial<HTMLVideoElement> = {}): HTMLVideoElement {
   const video = document.createElement("video");
+  video.setAttribute("src", "https://example.com/test.mp4");
 
   for (const [key, value] of Object.entries(overrides)) {
     Object.defineProperty(video, key, {
@@ -40,6 +41,12 @@ function makeVideo(overrides: Partial<HTMLVideoElement> = {}): HTMLVideoElement 
     });
   }
 
+  document.body.appendChild(video);
+  return video;
+}
+
+function makeInvalidVideo(): HTMLVideoElement {
+  const video = document.createElement("video");
   document.body.appendChild(video);
   return video;
 }
@@ -61,6 +68,13 @@ describe("getTargetMedia", () => {
     expect(getTargetMedia()).toBe(video);
   });
 
+  it("ignores invalid media elements when choosing a fallback target", () => {
+    makeInvalidVideo();
+    const validVideo = makeVideo();
+
+    expect(getTargetMedia()).toBe(validVideo);
+  });
+
   it("prefers a playing media element", () => {
     makeVideo({ paused: true } as Partial<HTMLVideoElement>);
     const playing = makeVideo({
@@ -72,9 +86,41 @@ describe("getTargetMedia", () => {
     expect(getTargetMedia()).toBe(playing);
   });
 
+  it("ignores an invalid focused media element", () => {
+    const invalidFocused = makeInvalidVideo();
+    const validVideo = makeVideo();
+
+    invalidFocused.tabIndex = 0;
+    invalidFocused.focus();
+
+    expect(document.activeElement).toBe(invalidFocused);
+    expect(getTargetMedia()).toBe(validVideo);
+  });
+
+  it("ignores an invalid last interacted media element", async () => {
+    const validVideo = makeVideo();
+    const invalidVideo = makeInvalidVideo();
+    await Promise.resolve();
+
+    invalidVideo.dispatchEvent(new Event("pointerdown"));
+
+    expect(getTargetMedia()).toBe(validVideo);
+  });
+
+  it("treats media with a child source src as valid", () => {
+    const video = document.createElement("video");
+    const source = document.createElement("source");
+    source.setAttribute("src", "https://example.com/test.mp4");
+    video.appendChild(source);
+    document.body.appendChild(video);
+
+    expect(getTargetMedia()).toBe(video);
+  });
+
   it("tracks media added after initialization", async () => {
     const initial = makeVideo();
     const addedLater = document.createElement("video");
+    addedLater.setAttribute("src", "https://example.com/later.mp4");
 
     document.body.appendChild(addedLater);
     await Promise.resolve();
@@ -86,12 +132,44 @@ describe("getTargetMedia", () => {
     addedLater.remove();
   });
 
+  it("logs tracked media events when debug logging is enabled", async () => {
+    const consoleInfoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const video = document.createElement("video");
+
+    document.body.appendChild(video);
+    await Promise.resolve();
+    video.dispatchEvent(new Event("play"));
+
+    expect(consoleInfoSpy).toHaveBeenCalledWith(
+      "[Media Hotkeys][debug] Tracked media interaction",
+      expect.objectContaining({
+        event: "play",
+        tagName: "VIDEO",
+      }),
+    );
+  });
+
+  it("resets the last interacted media when the DOM changes", async () => {
+    const first = makeVideo();
+    const second = makeVideo();
+    await Promise.resolve();
+
+    second.dispatchEvent(new Event("pointerdown"));
+    expect(getTargetMedia()).toBe(second);
+
+    document.body.appendChild(document.createElement("div"));
+    await Promise.resolve();
+
+    expect(getTargetMedia()).toBe(first);
+  });
+
   it("tracks media added inside a shadow root after initialization", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
 
     const shadowRoot = host.attachShadow({ mode: "open" });
     const shadowVideo = document.createElement("video");
+    shadowVideo.setAttribute("src", "https://example.com/shadow.mp4");
     shadowRoot.appendChild(shadowVideo);
 
     await Promise.resolve();
@@ -103,6 +181,38 @@ describe("getTargetMedia", () => {
 });
 
 describe("handleAction", () => {
+  it("logs handled actions when debug logging is enabled", () => {
+    const consoleInfoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const video = makeVideo();
+
+    handleAction("toggleMute", video);
+
+    expect(consoleInfoSpy).toHaveBeenCalledWith(
+      "[Media Hotkeys][debug] Tracked media interaction",
+      expect.objectContaining({
+        event: "action:toggleMute",
+        tagName: "VIDEO",
+      }),
+    );
+    expect(consoleInfoSpy).toHaveBeenCalledWith(
+      "[Media Hotkeys][debug] Handled media action",
+      expect.objectContaining({
+        action: "toggleMute",
+        tagName: "VIDEO",
+      }),
+    );
+  });
+
+  it("does not log handled actions when debug logging is disabled", () => {
+    const consoleInfoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const video = makeVideo();
+    setSettingsForTests({ ...structuredClone(DEFAULT_SETTINGS), debugLogging: false });
+
+    handleAction("toggleMute", video);
+
+    expect(consoleInfoSpy).not.toHaveBeenCalled();
+  });
+
   it("toggles play/pause", () => {
     const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
     const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);

@@ -77,6 +77,29 @@ export function setSettingsForTests(nextSettings: ExtensionSettings): void {
 
 // #region Media and Frame Discovery
 
+function hasNonEmptyAttribute(element: Element, name: string): boolean {
+  const value = element.getAttribute(name);
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isValidMediaElement(media: HTMLMediaElement): boolean {
+  if (typeof media.currentSrc === "string" && media.currentSrc.trim().length > 0) {
+    return true;
+  }
+
+  if (hasNonEmptyAttribute(media, "src")) {
+    return true;
+  }
+
+  if ("srcObject" in media && media.srcObject !== null) {
+    return true;
+  }
+
+  return Array.from(media.querySelectorAll("source")).some((source) =>
+    hasNonEmptyAttribute(source, "src"),
+  );
+}
+
 function findMedia(root: Document | ShadowRoot | Element): HTMLMediaElement[] {
   const results: HTMLMediaElement[] = [];
 
@@ -87,7 +110,10 @@ function findMedia(root: Document | ShadowRoot | Element): HTMLMediaElement[] {
 
   let node: Node | null = walker.currentNode;
   while (node) {
-    if (node instanceof HTMLVideoElement || node instanceof HTMLAudioElement) {
+    if (
+      (node instanceof HTMLVideoElement || node instanceof HTMLAudioElement) &&
+      isValidMediaElement(node)
+    ) {
       results.push(node);
     } else if (node instanceof Element && node.shadowRoot) {
       results.push(...findMedia(node.shadowRoot));
@@ -118,6 +144,32 @@ function findIframeWindows(root: Document | ShadowRoot | Element): Window[] {
   return results;
 }
 
+function debugLog(
+  message: string,
+  media?: HTMLMediaElement,
+  details?: Record<string, unknown>,
+): void {
+  if (!settings.debugLogging) {
+    return;
+  }
+
+  const mediaDetails = media
+    ? {
+        tagName: media.tagName,
+        id: media.id || null,
+        currentSrc: media.currentSrc || media.getAttribute("src") || null,
+        currentTime: media.currentTime,
+        paused: media.paused,
+        muted: media.muted,
+      }
+    : {};
+
+  console.info(`[Media Hotkeys][debug] ${message}`, {
+    ...mediaDetails,
+    ...details,
+  });
+}
+
 // #endregion
 
 // #region Media Targeting and Tracking
@@ -133,7 +185,10 @@ function findIframeWindows(root: Document | ShadowRoot | Element): Window[] {
 export function getTargetMedia(): HTMLMediaElement | null {
   // 1. Active element
   const focused = document.activeElement;
-  if (focused instanceof HTMLVideoElement || focused instanceof HTMLAudioElement) {
+  if (
+    (focused instanceof HTMLVideoElement || focused instanceof HTMLAudioElement) &&
+    isValidMediaElement(focused)
+  ) {
     return focused as HTMLMediaElement;
   }
 
@@ -151,7 +206,11 @@ export function getTargetMedia(): HTMLMediaElement | null {
 
   // 3. Most recently interacted media
   // Verify it's still in the document
-  if (lastInteractedMedia && lastInteractedMedia.isConnected) {
+  if (
+    lastInteractedMedia &&
+    lastInteractedMedia.isConnected &&
+    isValidMediaElement(lastInteractedMedia)
+  ) {
     return lastInteractedMedia;
   }
 
@@ -159,8 +218,9 @@ export function getTargetMedia(): HTMLMediaElement | null {
   return mediaList[0] ?? null;
 }
 
-function trackInteraction(media: HTMLMediaElement): void {
+function trackInteraction(media: HTMLMediaElement, event: string): void {
   lastInteractedMedia = media;
+  debugLog("Tracked media interaction", media, { event });
 }
 
 function attachMediaTracking(media: HTMLMediaElement): void {
@@ -169,9 +229,9 @@ function attachMediaTracking(media: HTMLMediaElement): void {
   }
 
   trackedMedia.add(media);
-  media.addEventListener("pointerdown", () => trackInteraction(media));
-  media.addEventListener("play", () => trackInteraction(media));
-  media.addEventListener("focus", () => trackInteraction(media));
+  media.addEventListener("pointerdown", () => trackInteraction(media, "pointerdown"));
+  media.addEventListener("play", () => trackInteraction(media, "play"));
+  media.addEventListener("focus", () => trackInteraction(media, "focus"));
 }
 
 function collectMediaAndShadowRoots(root: Document | ShadowRoot | Element): {
@@ -188,7 +248,10 @@ function collectMediaAndShadowRoots(root: Document | ShadowRoot | Element): {
 
   let node: Node | null = walker.currentNode;
   while (node) {
-    if (node instanceof HTMLVideoElement || node instanceof HTMLAudioElement) {
+    if (
+      (node instanceof HTMLVideoElement || node instanceof HTMLAudioElement) &&
+      isValidMediaElement(node)
+    ) {
       media.push(node);
     } else if (node instanceof Element && node.shadowRoot) {
       shadowRoots.push(node.shadowRoot);
@@ -233,10 +296,20 @@ function scanNode(node: Node): void {
 }
 
 function handleRootMutations(mutations: MutationRecord[]): void {
+  let hasDomChanges = false;
+
   for (const mutation of mutations) {
+    if (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0) {
+      hasDomChanges = true;
+    }
+
     for (const node of mutation.addedNodes) {
       scanNode(node);
     }
+  }
+
+  if (hasDomChanges) {
+    lastInteractedMedia = null;
   }
 }
 
@@ -417,7 +490,7 @@ function getOverlayDisplayOptions(
 export function handleAction(action: MediaAction, media: HTMLMediaElement): void {
   const g = settings;
   const previousTime = media.currentTime;
-  trackInteraction(media);
+  trackInteraction(media, `action:${action}`);
 
   switch (action) {
     case "togglePlayPause":
@@ -519,6 +592,8 @@ export function handleAction(action: MediaAction, media: HTMLMediaElement): void
   } else {
     clearSeekOverlayState();
   }
+
+  debugLog("Handled media action", media, { action });
 }
 
 // #endregion
@@ -676,6 +751,8 @@ async function handleKeyDown(e: KeyboardEvent): Promise<void> {
   const action = keyToActionMap.get(key);
   if (!action) return;
 
+  debugLog("Matched keydown to action", undefined, { action, key });
+
   e.preventDefault();
   e.stopPropagation();
 
@@ -687,7 +764,10 @@ async function handleKeyDown(e: KeyboardEvent): Promise<void> {
   }
 
   const media = getTargetMedia();
-  if (!media) return;
+  if (!media) {
+    debugLog("No media element found for action", undefined, { action, key });
+    return;
+  }
 
   handleAction(action, media);
 }

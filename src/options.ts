@@ -73,6 +73,7 @@ function renderKeyChipLabel(key: string): string {
 
 let currentSettings: ExtensionSettings;
 let activeKeyCaptureCleanup: (() => void) | undefined;
+let pendingSave: Promise<void> = Promise.resolve();
 
 function fillOverlayPositionSelect(
   select: HTMLSelectElement,
@@ -112,6 +113,7 @@ function removeKeyFromAction(action: MediaAction, key: string): void {
   config.keys = config.keys.filter((k) => k !== key);
   announce(`${accessibleKeyLabel(key)} removed from ${ACTION_LABELS[action]}.`);
   renderActionsTable();
+  void persistSettings();
 }
 
 function setAddButtonIdleState(button: HTMLButtonElement, action: MediaAction): void {
@@ -175,6 +177,7 @@ function startKeyCapture(action: MediaAction, button: HTMLButtonElement): void {
       : "";
     announce(`${keyLabel} assigned to ${ACTION_LABELS[action]}.${conflictMessage}`);
     renderActionsTable();
+    void persistSettings();
   };
 
   document.addEventListener("keydown", handler, true);
@@ -256,9 +259,10 @@ function renderActionsTable(): void {
       checkbox.addEventListener("change", () => {
         if (checkbox.checked) {
           delete currentSettings.actions[action].overlayVisible;
-          return;
+        } else {
+          currentSettings.actions[action].overlayVisible = false;
         }
-        currentSettings.actions[action].overlayVisible = false;
+        void persistSettings();
       });
       tdOverlay.appendChild(checkbox);
 
@@ -273,9 +277,10 @@ function renderActionsTable(): void {
         const nextValue = select.value as OverlayPosition;
         if (nextValue === currentSettings.overlayPosition) {
           delete currentSettings.actions[action].overlayPosition;
-          return;
+        } else {
+          currentSettings.actions[action].overlayPosition = nextValue;
         }
-        currentSettings.actions[action].overlayPosition = nextValue;
+        void persistSettings();
       });
       tdPosition.appendChild(select);
     } else {
@@ -292,6 +297,15 @@ function renderActionsTable(): void {
   }
 }
 
+function syncGlobalControls(): void {
+  const debugLogging = document.getElementById("debugLogging") as HTMLInputElement | null;
+  if (!debugLogging) {
+    return;
+  }
+
+  debugLogging.checked = currentSettings.debugLogging;
+}
+
 function showStatus(): void {
   const status = document.getElementById("status")!;
   status.textContent = "Settings saved.";
@@ -299,23 +313,37 @@ function showStatus(): void {
   setTimeout(() => status.classList.remove("visible"), 2000);
 }
 
-async function handleSave(): Promise<void> {
-  await saveSettings(currentSettings);
-  showStatus();
+function persistSettings(): Promise<void> {
+  const nextSettings = structuredClone(currentSettings);
+  pendingSave = pendingSave
+    .catch(() => undefined)
+    .then(async () => {
+      await saveSettings(nextSettings);
+      showStatus();
+    });
+
+  return pendingSave;
+}
+
+async function handleDebugLoggingChange(event: Event): Promise<void> {
+  currentSettings.debugLogging = (event.currentTarget as HTMLInputElement).checked;
+  await persistSettings();
 }
 
 async function handleReset(): Promise<void> {
   currentSettings.actions = structuredClone(DEFAULT_SETTINGS.actions);
+  currentSettings.debugLogging = DEFAULT_SETTINGS.debugLogging;
+  syncGlobalControls();
   renderActionsTable();
-  await saveSettings(currentSettings);
-  showStatus();
+  await persistSettings();
 }
 
 async function init(): Promise<void> {
   currentSettings = await getSettings();
+  syncGlobalControls();
   renderActionsTable();
 
-  document.getElementById("save")?.addEventListener("click", handleSave);
+  document.getElementById("debugLogging")?.addEventListener("change", handleDebugLoggingChange);
   document.getElementById("reset")?.addEventListener("click", handleReset);
 }
 

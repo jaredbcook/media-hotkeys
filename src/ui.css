@@ -84,7 +84,8 @@ h2 {
   margin: 0 0 16px;
 }
 
-input,
+input[type="text"],
+input[type="number"],
 select {
   background: var(--input-bg-color);
   border: 1px solid var(--border-color-primary);

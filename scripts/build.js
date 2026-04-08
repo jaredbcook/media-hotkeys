@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, cp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { build as viteBuild } from "vite";
 
@@ -108,7 +109,7 @@ async function copyIcons(outDir) {
   for (const size of iconSizes) {
     await cp(
       path.join(projectRoot, "assets", `icon${size}.png`),
-      path.join(outDir, "assets", `icon${size}.png`)
+      path.join(outDir, "assets", `icon${size}.png`),
     );
   }
 }
@@ -163,7 +164,7 @@ function getBrowserArgs(args) {
 function assertBrowser(browser) {
   if (!supportedBrowsers.includes(browser)) {
     throw new Error(
-      `Unsupported browser "${browser}". Expected one of: ${supportedBrowsers.join(", ")}`
+      `Unsupported browser "${browser}". Expected one of: ${supportedBrowsers.join(", ")}`,
     );
   }
 

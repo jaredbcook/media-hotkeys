@@ -44,7 +44,6 @@ function renderPopupDom(): void {
     <select id="overlayPosition"></select>
     <input id="overlayVisibleDuration" />
     <input id="overlayFadeDuration" />
-    <button id="save"></button>
     <button id="reset"></button>
     <button id="more-settings"></button>
     <span id="status"></span>
@@ -84,20 +83,33 @@ describe("popup screen", () => {
     );
   });
 
-  it("saves edited global settings", async () => {
+  it("saves edited global settings on input", async () => {
     await loadPopupModule();
 
-    (document.getElementById("volumeStep") as HTMLInputElement).value = "0.2";
-    (document.getElementById("sumQuickSkips") as HTMLInputElement).checked = false;
-    document.getElementById("save")?.click();
+    const volumeStep = document.getElementById("volumeStep") as HTMLInputElement;
+    volumeStep.value = "0.2";
+    volumeStep.dispatchEvent(new Event("input", { bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(saveSettingsMock).toHaveBeenCalledOnce();
     expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
       volumeStep: 0.2,
-      sumQuickSkips: false,
     });
     expect(document.getElementById("status")?.classList.contains("visible")).toBe(true);
+  });
+
+  it("saves checkbox changes on change", async () => {
+    await loadPopupModule();
+
+    const sumQuickSkips = document.getElementById("sumQuickSkips") as HTMLInputElement;
+    sumQuickSkips.checked = false;
+    sumQuickSkips.dispatchEvent(new Event("change", { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(saveSettingsMock).toHaveBeenCalledOnce();
+    expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
+      sumQuickSkips: false,
+    });
   });
 
   it("resets only global settings to defaults", async () => {

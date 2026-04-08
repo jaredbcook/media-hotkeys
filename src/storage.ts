@@ -64,6 +64,7 @@ export interface GlobalSettings {
 }
 
 export interface ExtensionSettings extends GlobalSettings {
+  debugLogging: boolean;
   actions: Record<MediaAction, ActionConfig>;
 }
 

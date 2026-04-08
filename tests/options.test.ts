@@ -37,6 +37,7 @@ describe("getSettings", () => {
   it("returns action-first structure with all actions", async () => {
     const settings = await getSettings();
     expect(settings.actions.togglePlayPause.keys).toEqual(["k"]);
+    expect(settings.debugLogging).toBe(true);
     expect(settings.overlayVisibility).toBe("All");
     expect(settings.overlayPosition).toBe("center");
     expect(settings.actions.togglePlayPause.overlayVisible).toBeUndefined();
@@ -93,10 +94,12 @@ describe("saveSettings", () => {
     const modified = structuredClone(DEFAULT_SETTINGS);
     modified.volumeStep = 0.1;
     modified.sumQuickSkips = false;
+    modified.debugLogging = false;
     await saveSettings(modified);
     const settings = await getSettings();
     expect(settings.volumeStep).toBe(0.1);
     expect(settings.sumQuickSkips).toBe(false);
+    expect(settings.debugLogging).toBe(false);
   });
 
   it("persists action config changes for overlay-capable actions", async () => {

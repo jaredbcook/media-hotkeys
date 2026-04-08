@@ -94,7 +94,7 @@ function getBrowserArgs(args) {
 function assertBrowser(browser) {
   if (!supportedBrowsers.includes(browser)) {
     throw new Error(
-      `Unsupported browser "${browser}". Expected one of: ${supportedBrowsers.join(", ")}`
+      `Unsupported browser "${browser}". Expected one of: ${supportedBrowsers.join(", ")}`,
     );
   }
 

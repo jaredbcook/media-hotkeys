@@ -267,6 +267,21 @@ test("prefers playing media, then last interacted media, then the first media el
   await waitForMediaState(page, "first", (state) => Math.abs(state.volume - 0.45) < 0.0001);
 });
 
+test("ignores invalid media elements without a source", async ({ page }) => {
+  await page.evaluate(() => {
+    const invalid = document.createElement("audio");
+    invalid.id = "invalid";
+    invalid.tabIndex = 0;
+    document.getElementById("app")?.appendChild(invalid);
+    invalid.focus();
+  });
+  await createMedia(page, "valid", { volume: 0.5 });
+
+  await page.keyboard.press("ArrowDown");
+
+  await waitForMediaState(page, "valid", (state) => Math.abs(state.volume - 0.45) < 0.0001);
+});
+
 test("suppresses hotkeys while typing in editable elements", async ({ page }) => {
   await createMedia(page, "primary");
 

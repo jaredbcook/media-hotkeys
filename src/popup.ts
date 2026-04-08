@@ -3,17 +3,41 @@ import { collectGlobalSettings, populateGlobalSettings } from "./global-settings
 import { DEFAULT_SETTINGS, getSettings, saveSettings, type ExtensionSettings } from "./storage.js";
 
 let currentSettings: ExtensionSettings;
+let pendingSave: Promise<void> = Promise.resolve();
+let statusTimeoutId: number | undefined;
 
 function showStatus(): void {
   const status = document.getElementById("status");
+  if (!status) {
+    return;
+  }
+
+  if (statusTimeoutId !== undefined) {
+    window.clearTimeout(statusTimeoutId);
+  }
+
   status?.classList.add("visible");
-  setTimeout(() => status?.classList.remove("visible"), 2000);
+  statusTimeoutId = window.setTimeout(() => {
+    status.classList.remove("visible");
+    statusTimeoutId = undefined;
+  }, 2000);
 }
 
-async function handleSave(): Promise<void> {
+function persistSettings(): Promise<void> {
   Object.assign(currentSettings, collectGlobalSettings());
-  await saveSettings(currentSettings);
-  showStatus();
+  const nextSettings = structuredClone(currentSettings);
+  pendingSave = pendingSave
+    .catch(() => undefined)
+    .then(async () => {
+      await saveSettings(nextSettings);
+      showStatus();
+    });
+
+  return pendingSave;
+}
+
+async function handleSettingsInput(): Promise<void> {
+  await persistSettings();
 }
 
 async function handleReset(): Promise<void> {
@@ -32,8 +56,7 @@ async function handleReset(): Promise<void> {
     overlayFadeDuration: DEFAULT_SETTINGS.overlayFadeDuration,
   });
   populateGlobalSettings(currentSettings);
-  await saveSettings(currentSettings);
-  showStatus();
+  await persistSettings();
 }
 
 async function handleMoreSettings(): Promise<void> {
@@ -45,7 +68,20 @@ async function init(): Promise<void> {
   currentSettings = await getSettings();
   populateGlobalSettings(currentSettings);
 
-  document.getElementById("save")?.addEventListener("click", handleSave);
+  for (const selector of ["input", "select"]) {
+    for (const element of document.querySelectorAll<HTMLInputElement | HTMLSelectElement>(
+      selector,
+    )) {
+      const eventName =
+        element instanceof HTMLInputElement &&
+        (element.type === "checkbox" || element.type === "radio")
+          ? "change"
+          : "input";
+      element.addEventListener(eventName, () => {
+        void handleSettingsInput();
+      });
+    }
+  }
   document.getElementById("reset")?.addEventListener("click", handleReset);
   document.getElementById("more-settings")?.addEventListener("click", () => {
     void handleMoreSettings();

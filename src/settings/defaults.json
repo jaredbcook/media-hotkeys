@@ -12,6 +12,7 @@
   "overlayOpacity": 0.7,
   "overlayVisibleDuration": 500,
   "overlayFadeDuration": 250,
+  "debugLogging": true,
   "actions": {
     "togglePlayPause": { "keys": ["k"] },
     "toggleMute": { "keys": ["m"] },
