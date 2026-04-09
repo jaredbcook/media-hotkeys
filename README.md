@@ -11,12 +11,11 @@ Browser extension that adds hotkeys to control HTML video or audio on any websit
 
 ## Features
 
-- **Hotkeys for common media actions**: Play/pause, mute, playback speed, skip forward/backward, volume, fullscreen, picture-in-picture.
+- **Hotkeys for common media actions**: Play/pause, mute, playback speed, skip forward/backward, restart, jump-to-percent, volume, fullscreen, picture-in-picture, and overlay toggling.
 - **Visual feedback**: If enabled, shows a temporary overlay for most actions.
 - **Smart selection**: Automatically selects the best media element to control even if it doesn't have focus (for example, annoying auto-playing videos).
 - **Cross-origin support**: Works with media embedded in iframes or in the shadow DOM.
-- **Customizable settings**: Adjust min/max playback speed, increments for volume and playback adjustments, visibility and placement of visual indicators, etc.
-- **Site-specific settings**: Allows custom settings for different sites so you can avoid conflicting hotkeys.
+- **Grouped settings**: Quick settings cover the global enabled toggle and action key bindings, while advanced settings cover playback, skip, overlay, and debugging behavior.
 - **Settings sync**: Syncs your extension settings between devices that have the extension installed (must be signed in and have extension sync enabled).
 
 ## Default Hotkeys
@@ -40,11 +39,19 @@ Note: Hotkeys are ignored if focus is on a text input or other editable element.
 | Skip forward (large)   | `]`                 | Default is 30 seconds                            |
 | Skip backward (large)  | `[`                 | Default is 30 seconds                            |
 | Restart                | `r`                 | Restart from the beginning                       |
-| Jump to location       | `0`–`9`             | `0` jumps to the beginning, `1` to 10%, etc.     |
+| Toggle overlays        | `o`                 | Switches visual feedback on or off               |
+| Jump to location       | `0`–`9`             | `0` jumps to 0%, `1` to 10%, etc.                |
 
 \*By default, arrow keys cause the page to scroll if no interactive element has focus.
 
-## Configurable Settings
+## Settings Model
+
+### Quick Settings
+
+- Global hotkeys enabled toggle
+- Action key bindings
+
+### Advanced Settings
 
 | Setting                             | Default Value |
 | ----------------------------------- | ------------- |
@@ -55,7 +62,6 @@ Note: Hotkeys are ignored if focus is on a text input or other editable element.
 | Volume step size                    | 5%            |
 | Overlay visibility                  | All actions   |
 | Overlay position                    | Center        |
-| Overlay opacity                     | 70%           |
 | Overlay visible time                | 500ms         |
 | Overlay fade duration               | 250ms         |
 

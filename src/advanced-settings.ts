@@ -1,8 +1,8 @@
 import {
   type ExtensionSettings,
-  type GlobalSettings,
+  type AdvancedSettings,
   type OverlayPosition,
-  type OverlayVisibility,
+  type SkipOverlayPosition,
 } from "./storage.js";
 
 const OVERLAY_POSITIONS: OverlayPosition[] = [
@@ -17,7 +17,7 @@ const OVERLAY_POSITIONS: OverlayPosition[] = [
   "bottom-right",
 ];
 
-const OVERLAY_VISIBILITY_OPTIONS: OverlayVisibility[] = ["All", "None", "Custom"];
+const SKIP_OVERLAY_POSITION_OPTIONS: SkipOverlayPosition[] = ["left / right", "same as others"];
 
 function fillOverlayPositionSelect(
   select: HTMLSelectElement,
@@ -34,13 +34,13 @@ function fillOverlayPositionSelect(
   }
 }
 
-function fillOverlayVisibilitySelect(
+function fillSkipOverlayPositionSelect(
   select: HTMLSelectElement,
-  selectedValue: OverlayVisibility,
+  selectedValue: SkipOverlayPosition,
 ): void {
   select.innerHTML = "";
 
-  for (const value of OVERLAY_VISIBILITY_OPTIONS) {
+  for (const value of SKIP_OVERLAY_POSITION_OPTIONS) {
     const option = document.createElement("option");
     option.value = value;
     option.textContent = value;
@@ -49,10 +49,10 @@ function fillOverlayVisibilitySelect(
   }
 }
 
-export function populateGlobalSettings(
-  settings: Pick<ExtensionSettings, keyof GlobalSettings>,
-): void {
-  (document.getElementById("volumeStep") as HTMLInputElement).value = String(settings.volumeStep);
+export function populateAdvancedSettings(settings: ExtensionSettings["advancedSettings"]): void {
+  (document.getElementById("volumeStep") as HTMLInputElement).value = String(
+    settings.volumeStep * 100,
+  );
   (document.getElementById("speedMin") as HTMLInputElement).value = String(settings.speedMin);
   (document.getElementById("speedMax") as HTMLInputElement).value = String(settings.speedMax);
   (document.getElementById("speedStep") as HTMLInputElement).value = String(settings.speedStep);
@@ -65,14 +65,17 @@ export function populateGlobalSettings(
   (document.getElementById("seekStepLarge") as HTMLInputElement).value = String(
     settings.seekStepLarge,
   );
+  (document.getElementById("useNumberKeysToJump") as HTMLInputElement).checked =
+    settings.useNumberKeysToJump;
   (document.getElementById("sumQuickSkips") as HTMLInputElement).checked = settings.sumQuickSkips;
-  fillOverlayVisibilitySelect(
-    document.getElementById("overlayVisibility") as HTMLSelectElement,
-    settings.overlayVisibility,
-  );
+  (document.getElementById("showOverlays") as HTMLInputElement).checked = settings.showOverlays;
   fillOverlayPositionSelect(
     document.getElementById("overlayPosition") as HTMLSelectElement,
     settings.overlayPosition,
+  );
+  fillSkipOverlayPositionSelect(
+    document.getElementById("skipOverlayPosition") as HTMLSelectElement,
+    settings.skipOverlayPosition,
   );
   (document.getElementById("overlayVisibleDuration") as HTMLInputElement).value = String(
     settings.overlayVisibleDuration,
@@ -80,11 +83,13 @@ export function populateGlobalSettings(
   (document.getElementById("overlayFadeDuration") as HTMLInputElement).value = String(
     settings.overlayFadeDuration,
   );
+  (document.getElementById("debugLogging") as HTMLInputElement).checked = settings.debugLogging;
 }
 
-export function collectGlobalSettings(): GlobalSettings {
+export function collectAdvancedSettings(): AdvancedSettings {
   return {
-    volumeStep: parseFloat((document.getElementById("volumeStep") as HTMLInputElement).value),
+    volumeStep:
+      parseInt((document.getElementById("volumeStep") as HTMLInputElement).value, 10) / 100,
     speedMin: parseFloat((document.getElementById("speedMin") as HTMLInputElement).value),
     speedMax: parseFloat((document.getElementById("speedMax") as HTMLInputElement).value),
     speedStep: parseFloat((document.getElementById("speedStep") as HTMLInputElement).value),
@@ -93,11 +98,14 @@ export function collectGlobalSettings(): GlobalSettings {
       (document.getElementById("seekStepMedium") as HTMLInputElement).value,
     ),
     seekStepLarge: parseFloat((document.getElementById("seekStepLarge") as HTMLInputElement).value),
+    useNumberKeysToJump: (document.getElementById("useNumberKeysToJump") as HTMLInputElement)
+      .checked,
     sumQuickSkips: (document.getElementById("sumQuickSkips") as HTMLInputElement).checked,
-    overlayVisibility: (document.getElementById("overlayVisibility") as HTMLSelectElement)
-      .value as OverlayVisibility,
+    showOverlays: (document.getElementById("showOverlays") as HTMLInputElement).checked,
     overlayPosition: (document.getElementById("overlayPosition") as HTMLSelectElement)
       .value as OverlayPosition,
+    skipOverlayPosition: (document.getElementById("skipOverlayPosition") as HTMLSelectElement)
+      .value as SkipOverlayPosition,
     overlayVisibleDuration: parseInt(
       (document.getElementById("overlayVisibleDuration") as HTMLInputElement).value,
       10,
@@ -106,5 +114,6 @@ export function collectGlobalSettings(): GlobalSettings {
       (document.getElementById("overlayFadeDuration") as HTMLInputElement).value,
       10,
     ),
+    debugLogging: (document.getElementById("debugLogging") as HTMLInputElement).checked,
   };
 }

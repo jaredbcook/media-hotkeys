@@ -1,10 +1,14 @@
 import {
+  type AdvancedSettings,
+  type ConfigurableMediaAction,
   type MediaAction,
   type ExtensionSettings,
   DEFAULT_SETTINGS,
   buildKeyToActionMap,
   getSettings,
+  normalizeHotkeyKey,
   resolveActionOverlaySettings,
+  saveSettings,
 } from "./storage.js";
 import { showActionOverlay } from "./overlay.js";
 
@@ -37,12 +41,27 @@ type SeekOverlayState = {
   resetTimeout: ReturnType<typeof setTimeout> | null;
 };
 
+const NUMBER_KEY_ACTIONS: Record<string, MediaAction> = {
+  "0": "seekToPercent0",
+  "1": "seekToPercent10",
+  "2": "seekToPercent20",
+  "3": "seekToPercent30",
+  "4": "seekToPercent40",
+  "5": "seekToPercent50",
+  "6": "seekToPercent60",
+  "7": "seekToPercent70",
+  "8": "seekToPercent80",
+  "9": "seekToPercent90",
+};
+
 // #endregion
 
 // #region Shared State and Constants
 
 let settings: ExtensionSettings = DEFAULT_SETTINGS;
-let keyToActionMap: Map<string, MediaAction> = buildKeyToActionMap(settings.actions);
+let keyToActionMap: Map<string, MediaAction> = buildKeyToActionMap(
+  settings.quickSettings.actionKeyBindings,
+);
 let lastInteractedMedia: HTMLMediaElement | null = null;
 const MESSAGE_SOURCE = "media-shortcuts-extension";
 const ACTION_REQUEST_TYPE = "MEDIA_SHORTCUTS_HANDLE_ACTION";
@@ -54,6 +73,10 @@ const observedRoots = new WeakSet<Document | ShadowRoot>();
 let rootObserver: MutationObserver | null = null;
 let shadowObserverPatched = false;
 let seekOverlayState: SeekOverlayState | null = null;
+let activeFullscreenWrapper: HTMLDivElement | null = null;
+let activeFullscreenMedia: HTMLVideoElement | null = null;
+
+const FULLSCREEN_WRAPPER_ATTR = "data-media-hotkeys-fullscreen-wrapper";
 
 // #endregion
 
@@ -62,7 +85,7 @@ let seekOverlayState: SeekOverlayState | null = null;
 async function loadSettings(): Promise<void> {
   try {
     settings = await getSettings();
-    keyToActionMap = buildKeyToActionMap(settings.actions);
+    keyToActionMap = buildKeyToActionMap(settings.quickSettings.actionKeyBindings);
   } catch {
     // Keep defaults on failure
   }
@@ -70,7 +93,7 @@ async function loadSettings(): Promise<void> {
 
 export function setSettingsForTests(nextSettings: ExtensionSettings): void {
   settings = nextSettings;
-  keyToActionMap = buildKeyToActionMap(settings.actions);
+  keyToActionMap = buildKeyToActionMap(settings.quickSettings.actionKeyBindings);
 }
 
 // #endregion
@@ -149,7 +172,7 @@ function debugLog(
   media?: HTMLMediaElement,
   details?: Record<string, unknown>,
 ): void {
-  if (!settings.debugLogging) {
+  if (!settings.advancedSettings.debugLogging) {
     return;
   }
 
@@ -168,6 +191,141 @@ function debugLog(
     ...mediaDetails,
     ...details,
   });
+}
+
+// #endregion
+
+// #region Fullscreen Overlay Support
+
+function createFullscreenWrapperStyle(): HTMLStyleElement {
+  const style = document.createElement("style");
+  style.dataset.mediaHotkeysFullscreen = "true";
+  style.textContent = `
+    [${FULLSCREEN_WRAPPER_ATTR}="true"]:fullscreen {
+      align-items: center;
+      background: #000;
+      display: flex;
+      height: 100%;
+      justify-content: center;
+      width: 100%;
+    }
+
+    [${FULLSCREEN_WRAPPER_ATTR}="true"]:fullscreen > video {
+      height: 100%;
+      object-fit: contain;
+      width: 100%;
+    }
+  `;
+  return style;
+}
+
+function ensureFullscreenWrapperStyles(): void {
+  if (document.head.querySelector('style[data-media-hotkeys-fullscreen="true"]')) {
+    return;
+  }
+
+  document.head.appendChild(createFullscreenWrapperStyle());
+}
+
+function getManagedFullscreenWrapper(media: HTMLVideoElement): HTMLDivElement | null {
+  const parent = media.parentElement;
+  if (!(parent instanceof HTMLDivElement)) {
+    return null;
+  }
+
+  return parent.dataset.mediaHotkeysFullscreenWrapper === "true" ? parent : null;
+}
+
+function getExistingFullscreenHost(media: HTMLVideoElement): HTMLElement | null {
+  const mediaRect = media.getBoundingClientRect();
+  if (mediaRect.width <= 0 || mediaRect.height <= 0) {
+    return null;
+  }
+
+  let candidate = media.parentElement;
+
+  while (candidate && candidate !== document.body && candidate !== document.documentElement) {
+    const mediaDescendants = candidate.querySelectorAll("video, audio");
+    const candidateRect = candidate.getBoundingClientRect();
+    const widthRatio = candidateRect.width / mediaRect.width;
+    const heightRatio = candidateRect.height / mediaRect.height;
+    const closelyWrapsMedia =
+      candidateRect.width > 0 &&
+      candidateRect.height > 0 &&
+      widthRatio <= 1.5 &&
+      heightRatio <= 1.5;
+
+    if (mediaDescendants.length === 1 && mediaDescendants[0] === media && closelyWrapsMedia) {
+      return candidate;
+    }
+
+    candidate = candidate.parentElement;
+  }
+
+  return null;
+}
+
+function wrapMediaForFullscreen(media: HTMLVideoElement): HTMLDivElement | null {
+  const existingWrapper = getManagedFullscreenWrapper(media);
+  if (existingWrapper) {
+    return existingWrapper;
+  }
+
+  const parentNode = media.parentNode;
+  if (!parentNode) {
+    return null;
+  }
+
+  ensureFullscreenWrapperStyles();
+
+  const wrapper = document.createElement("div");
+  wrapper.dataset.mediaHotkeysFullscreenWrapper = "true";
+  wrapper.style.lineHeight = "0";
+  wrapper.style.position = "relative";
+
+  const computedStyle = window.getComputedStyle(media);
+  wrapper.style.display = computedStyle.display === "block" ? "block" : "inline-block";
+
+  parentNode.insertBefore(wrapper, media);
+  wrapper.appendChild(media);
+
+  activeFullscreenWrapper = wrapper;
+  activeFullscreenMedia = media;
+  return wrapper;
+}
+
+function getFullscreenHost(media: HTMLVideoElement): HTMLElement | null {
+  return getExistingFullscreenHost(media) ?? wrapMediaForFullscreen(media);
+}
+
+function unwrapManagedFullscreenMedia(): void {
+  if (!activeFullscreenWrapper || !activeFullscreenMedia) {
+    activeFullscreenWrapper = null;
+    activeFullscreenMedia = null;
+    return;
+  }
+
+  const wrapper = activeFullscreenWrapper;
+  const media = activeFullscreenMedia;
+
+  if (wrapper.isConnected) {
+    const parentNode = wrapper.parentNode;
+    if (parentNode) {
+      parentNode.insertBefore(media, wrapper);
+      wrapper.remove();
+    }
+  }
+
+  activeFullscreenWrapper = null;
+  activeFullscreenMedia = null;
+}
+
+function handleFullscreenChange(): void {
+  if (document.fullscreenElement === activeFullscreenWrapper) {
+    return;
+  }
+
+  unwrapManagedFullscreenMedia();
 }
 
 // #endregion
@@ -375,17 +533,17 @@ function getEffectiveVolume(media: HTMLMediaElement): number {
   return media.muted ? 0 : media.volume;
 }
 
-function getSeekStep(action: MediaAction, globalSettings: ExtensionSettings): number | null {
+function getSeekStep(action: MediaAction, advancedSettings: AdvancedSettings): number | null {
   switch (action) {
     case "seekForwardSmall":
     case "seekBackwardSmall":
-      return globalSettings.seekStepSmall;
+      return advancedSettings.seekStepSmall;
     case "seekForwardMedium":
     case "seekBackwardMedium":
-      return globalSettings.seekStepMedium;
+      return advancedSettings.seekStepMedium;
     case "seekForwardLarge":
     case "seekBackwardLarge":
-      return globalSettings.seekStepLarge;
+      return advancedSettings.seekStepLarge;
     default:
       return null;
   }
@@ -410,6 +568,35 @@ function clearSeekOverlayState(): void {
   seekOverlayState = null;
 }
 
+function isGlobalAction(action: MediaAction): action is "toggleOverlays" {
+  return action === "toggleOverlays";
+}
+
+function isConfigurableMediaAction(action: MediaAction): action is ConfigurableMediaAction {
+  return action in settings.quickSettings.actionKeyBindings;
+}
+
+function toggleOverlayVisibility(): void {
+  settings.advancedSettings.showOverlays = !settings.advancedSettings.showOverlays;
+  void saveSettings({
+    advancedSettings: {
+      showOverlays: settings.advancedSettings.showOverlays,
+    },
+  });
+}
+
+async function handleGlobalAction(action: "toggleOverlays"): Promise<boolean> {
+  const media = getTargetMedia();
+  if (media) {
+    handleAction(action, media);
+  } else {
+    toggleOverlayVisibility();
+  }
+
+  const handledByChildFrame = await delegateActionToChildFrames(action);
+  return Boolean(media) || handledByChildFrame;
+}
+
 function getSeekOverlayDisplay(
   action: MediaAction,
   media: HTMLMediaElement,
@@ -417,7 +604,7 @@ function getSeekOverlayDisplay(
   seekSeconds?: number;
   animateSkipDirection?: SeekDirection;
 } {
-  const step = getSeekStep(action, settings);
+  const step = getSeekStep(action, settings.advancedSettings);
   const direction = getSeekDirection(action);
 
   if (!step || !direction) {
@@ -440,14 +627,14 @@ function getSeekOverlayDisplay(
     projectedTime < 0 ||
     (Number.isFinite(media.duration) && media.duration > 0 && projectedTime > media.duration);
   const shouldResetStreak = !isContinuingStreak || wouldExceedBounds;
-  const totalSeconds = settings.sumQuickSkips
+  const totalSeconds = settings.advancedSettings.sumQuickSkips
     ? (shouldResetStreak ? 0 : (seekOverlayState?.totalSeconds ?? 0)) + step
     : step;
   const resetTimeout = setTimeout(() => {
     if (seekOverlayState?.media === media && seekOverlayState.direction === direction) {
       seekOverlayState = null;
     }
-  }, settings.overlayVisibleDuration + settings.overlayFadeDuration);
+  }, settings.advancedSettings.overlayVisibleDuration + settings.advancedSettings.overlayFadeDuration);
 
   seekOverlayState = {
     direction,
@@ -456,9 +643,15 @@ function getSeekOverlayDisplay(
     resetTimeout,
   };
 
+  const animateSkipDirection =
+    settings.advancedSettings.skipOverlayPosition === "left / right" &&
+    (!settings.advancedSettings.sumQuickSkips || !isContinuingStreak)
+      ? direction
+      : undefined;
+
   return {
     seekSeconds: totalSeconds,
-    animateSkipDirection: !settings.sumQuickSkips || !isContinuingStreak ? direction : undefined,
+    animateSkipDirection,
   };
 }
 
@@ -471,7 +664,23 @@ function getOverlayDisplayOptions(
   animateSkipDirection?: SeekDirection;
   timestampSeconds?: number;
   jumpDirection?: SeekDirection;
+  overlayEnabled?: boolean;
 } {
+  if (action === "toggleOverlays") {
+    clearSeekOverlayState();
+    return {
+      overlayEnabled: settings.advancedSettings.showOverlays,
+    };
+  }
+
+  if (action === "restart") {
+    clearSeekOverlayState();
+    return {
+      timestampSeconds: 0,
+      jumpDirection: "backward",
+    };
+  }
+
   const percentMatch = action.match(/^seekToPercent(\d+)$/);
   if (percentMatch) {
     clearSeekOverlayState();
@@ -488,7 +697,7 @@ function getOverlayDisplayOptions(
 }
 
 export function handleAction(action: MediaAction, media: HTMLMediaElement): void {
-  const g = settings;
+  const advancedSettings = settings.advancedSettings;
   const previousTime = media.currentTime;
   trackInteraction(media, `action:${action}`);
 
@@ -500,10 +709,14 @@ export function handleAction(action: MediaAction, media: HTMLMediaElement): void
     case "toggleMute":
       if (media.muted || media.volume === 0) {
         media.muted = false;
-        media.volume = Math.max(g.volumeStep, media.volume);
+        media.volume = Math.max(advancedSettings.volumeStep, media.volume);
       } else {
         media.muted = true;
       }
+      break;
+
+    case "toggleOverlays":
+      toggleOverlayVisibility();
       break;
 
     case "toggleFullscreen":
@@ -511,7 +724,17 @@ export function handleAction(action: MediaAction, media: HTMLMediaElement): void
         if (document.fullscreenElement) {
           document.exitFullscreen();
         } else {
-          media.requestFullscreen();
+          const fullscreenHost = getFullscreenHost(media);
+          if (!fullscreenHost) {
+            media.requestFullscreen();
+            break;
+          }
+
+          void fullscreenHost.requestFullscreen().catch(() => {
+            if (document.fullscreenElement !== fullscreenHost) {
+              unwrapManagedFullscreenMedia();
+            }
+          });
         }
       }
       break;
@@ -527,45 +750,55 @@ export function handleAction(action: MediaAction, media: HTMLMediaElement): void
       break;
 
     case "volumeUp":
-      media.volume = Math.min(1, getEffectiveVolume(media) + g.volumeStep);
+      media.volume = Math.min(1, getEffectiveVolume(media) + advancedSettings.volumeStep);
       media.muted = false;
       break;
 
     case "volumeDown":
-      media.volume = Math.max(0, getEffectiveVolume(media) - g.volumeStep);
+      media.volume = Math.max(0, getEffectiveVolume(media) - advancedSettings.volumeStep);
       media.muted = false;
       break;
 
     case "seekForwardSmall":
-      media.currentTime += g.seekStepSmall;
+      media.currentTime += advancedSettings.seekStepSmall;
       break;
 
     case "seekBackwardSmall":
-      media.currentTime -= g.seekStepSmall;
+      media.currentTime -= advancedSettings.seekStepSmall;
       break;
 
     case "seekForwardMedium":
-      media.currentTime += g.seekStepMedium;
+      media.currentTime += advancedSettings.seekStepMedium;
       break;
 
     case "seekBackwardMedium":
-      media.currentTime -= g.seekStepMedium;
+      media.currentTime -= advancedSettings.seekStepMedium;
       break;
 
     case "seekForwardLarge":
-      media.currentTime += g.seekStepLarge;
+      media.currentTime += advancedSettings.seekStepLarge;
       break;
 
     case "seekBackwardLarge":
-      media.currentTime -= g.seekStepLarge;
+      media.currentTime -= advancedSettings.seekStepLarge;
+      break;
+
+    case "restart":
+      media.currentTime = 0;
       break;
 
     case "speedUp":
-      media.playbackRate = Math.min(g.speedMax, media.playbackRate + g.speedStep);
+      media.playbackRate = Math.min(
+        advancedSettings.speedMax,
+        media.playbackRate + advancedSettings.speedStep,
+      );
       break;
 
     case "slowDown":
-      media.playbackRate = Math.max(g.speedMin, media.playbackRate - g.speedStep);
+      media.playbackRate = Math.max(
+        advancedSettings.speedMin,
+        media.playbackRate - advancedSettings.speedStep,
+      );
       break;
 
     default: {
@@ -577,14 +810,16 @@ export function handleAction(action: MediaAction, media: HTMLMediaElement): void
     }
   }
 
-  const actionConfig = settings.actions[action];
-  const overlaySettings = resolveActionOverlaySettings(action, actionConfig, g);
+  const actionConfig = isConfigurableMediaAction(action)
+    ? settings.quickSettings.actionKeyBindings[action]
+    : { keys: [] };
+  const overlaySettings = resolveActionOverlaySettings(action, actionConfig, advancedSettings);
   if (overlaySettings.overlayVisible) {
     showActionOverlay(
       action,
       media,
       overlaySettings.overlayPosition,
-      g,
+      advancedSettings,
       getOverlayDisplayOptions(action, media, previousTime),
     );
   } else if (getSeekDirection(action)) {
@@ -674,6 +909,14 @@ export function delegateActionToChildFrames(action: MediaAction): Promise<boolea
 }
 
 async function handleIncomingFrameAction(action: MediaAction): Promise<boolean> {
+  if (!settings.quickSettings.hotkeysEnabled) {
+    return false;
+  }
+
+  if (isGlobalAction(action)) {
+    return handleGlobalAction(action);
+  }
+
   const localMedia = getTargetMedia();
   if (localMedia) {
     handleAction(action, localMedia);
@@ -733,10 +976,20 @@ function isEditableTarget(el: Element | null): boolean {
 }
 
 function getKeyString(e: KeyboardEvent): string {
-  if (e.shiftKey && e.key !== "Shift") {
-    return e.key;
+  return normalizeHotkeyKey(e.key);
+}
+
+function getActionForKey(key: string): MediaAction | undefined {
+  const action = keyToActionMap.get(key);
+  if (action) {
+    return action;
   }
-  return e.key;
+
+  if (settings.advancedSettings.useNumberKeysToJump) {
+    return NUMBER_KEY_ACTIONS[key];
+  }
+
+  return undefined;
 }
 
 function hasReservedModifier(e: KeyboardEvent): boolean {
@@ -744,17 +997,23 @@ function hasReservedModifier(e: KeyboardEvent): boolean {
 }
 
 async function handleKeyDown(e: KeyboardEvent): Promise<void> {
+  if (!settings.quickSettings.hotkeysEnabled) return;
   if (isEditableTarget(document.activeElement)) return;
   if (hasReservedModifier(e)) return;
 
   const key = getKeyString(e);
-  const action = keyToActionMap.get(key);
+  const action = getActionForKey(key);
   if (!action) return;
 
   debugLog("Matched keydown to action", undefined, { action, key });
 
   e.preventDefault();
   e.stopPropagation();
+
+  if (isGlobalAction(action)) {
+    await handleGlobalAction(action);
+    return;
+  }
 
   if (isTopWindow()) {
     const handledByChildFrame = await delegateActionToChildFrames(action);
@@ -777,6 +1036,7 @@ async function handleKeyDown(e: KeyboardEvent): Promise<void> {
 // #region Initialization
 
 window.addEventListener("message", handleFrameMessage);
+document.addEventListener("fullscreenchange", handleFullscreenChange);
 document.addEventListener("keydown", handleKeyDown, true);
 initializeDynamicMediaTracking();
 void loadSettings();

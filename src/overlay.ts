@@ -1,4 +1,4 @@
-import type { MediaAction, OverlayPosition, GlobalSettings } from "./storage.js";
+import type { MediaAction, OverlayPosition, AdvancedSettings } from "./storage.js";
 import * as icons from "./icons.js";
 
 const OVERLAY_ID = "media-shortcuts-overlay";
@@ -15,11 +15,25 @@ let fadeTimeout: ReturnType<typeof setTimeout> | null = null;
 
 type SkipAnimationDirection = "forward" | "backward";
 
+function getFullscreenOverlayHost(media: HTMLMediaElement | null): HTMLElement | null {
+  if (!media) {
+    return null;
+  }
+
+  const fullscreenElement = document.fullscreenElement;
+  if (!(fullscreenElement instanceof HTMLElement)) {
+    return null;
+  }
+
+  return fullscreenElement.contains(media) ? fullscreenElement : null;
+}
+
 export interface OverlayDisplayOptions {
   seekSeconds?: number;
   animateSkipDirection?: SkipAnimationDirection;
   timestampSeconds?: number;
   jumpDirection?: SkipAnimationDirection;
+  overlayEnabled?: boolean;
 }
 
 function formatTimestamp(seconds: number, includeHours: boolean): string {
@@ -36,9 +50,15 @@ function formatTimestamp(seconds: number, includeHours: boolean): string {
   return `${totalMinutes}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
-function getOrCreateOverlay(): HTMLElement {
+function getOrCreateOverlay(media?: HTMLMediaElement): HTMLElement {
+  const parent = getFullscreenOverlayHost(media ?? null) ?? document.body;
   let el = document.getElementById(OVERLAY_ID);
-  if (el) return el;
+  if (el) {
+    if (el.parentElement !== parent) {
+      parent.appendChild(el);
+    }
+    return el;
+  }
 
   el = document.createElement("div");
   el.id = OVERLAY_ID;
@@ -57,9 +77,10 @@ function getOrCreateOverlay(): HTMLElement {
     fontFamily: "sans-serif",
     fontSize: "16px",
     fontWeight: "bold",
+    lineHeight: "1.2",
     boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
   });
-  document.body.appendChild(el);
+  parent.appendChild(el);
   return el;
 }
 
@@ -69,8 +90,9 @@ function positionOverMedia(
   position: OverlayPosition,
 ): void {
   const rect = media.getBoundingClientRect();
-  const scrollX = window.scrollX;
-  const scrollY = window.scrollY;
+  const isFullscreen = Boolean(getFullscreenOverlayHost(media));
+  const scrollX = isFullscreen ? 0 : window.scrollX;
+  const scrollY = isFullscreen ? 0 : window.scrollY;
 
   const parts = position.split("-");
   let vertical: string;
@@ -126,6 +148,7 @@ function positionOverMedia(
 
   el.style.left = `${left}px`;
   el.style.top = `${top}px`;
+  el.style.position = isFullscreen ? "fixed" : "absolute";
   el.style.transform = `translate(${translateX}, ${translateY})`;
   el.style.setProperty("--media-shortcuts-translate-x", translateX);
   el.style.setProperty("--media-shortcuts-translate-y", translateY);
@@ -134,7 +157,7 @@ function positionOverMedia(
 function buildContent(
   action: MediaAction,
   media: HTMLMediaElement,
-  globalSettings: GlobalSettings,
+  advancedSettings: AdvancedSettings,
   options: OverlayDisplayOptions,
 ): string | null {
   switch (action) {
@@ -143,6 +166,9 @@ function buildContent(
 
     case "toggleMute":
       return `${media.muted ? icons.MUTE : icons.UNMUTE}<span>${media.muted ? 0 : Math.round(media.volume * 100)}%</span>`;
+
+    case "toggleOverlays":
+      return `<span>Overlays ${options.overlayEnabled ? "on" : "off"}</span>`;
 
     case "toggleFullscreen":
     case "togglePip":
@@ -167,22 +193,25 @@ function buildContent(
       return `${icons.SPEED_DOWN}<span>${media.playbackRate}x</span>`;
 
     case "seekForwardLarge":
-      return `${icons.SEEK_FWD_LARGE}<span>+${options.seekSeconds ?? globalSettings.seekStepLarge}s</span>`;
+      return `${icons.SEEK_FWD_LARGE}<span>+${options.seekSeconds ?? advancedSettings.seekStepLarge}s</span>`;
 
     case "seekBackwardLarge":
-      return `${icons.SEEK_BACK_LARGE}<span>-${options.seekSeconds ?? globalSettings.seekStepLarge}s</span>`;
+      return `${icons.SEEK_BACK_LARGE}<span>-${options.seekSeconds ?? advancedSettings.seekStepLarge}s</span>`;
 
     case "seekForwardSmall":
-      return `${icons.SEEK_FWD_SMALL}<span>+${options.seekSeconds ?? globalSettings.seekStepSmall}s</span>`;
+      return `${icons.SEEK_FWD_SMALL}<span>+${options.seekSeconds ?? advancedSettings.seekStepSmall}s</span>`;
 
     case "seekBackwardSmall":
-      return `${icons.SEEK_BACK_SMALL}<span>-${options.seekSeconds ?? globalSettings.seekStepSmall}s</span>`;
+      return `${icons.SEEK_BACK_SMALL}<span>-${options.seekSeconds ?? advancedSettings.seekStepSmall}s</span>`;
 
     case "seekForwardMedium":
-      return `${icons.SEEK_FWD_LARGE}<span>+${options.seekSeconds ?? globalSettings.seekStepMedium}s</span>`;
+      return `${icons.SEEK_FWD_LARGE}<span>+${options.seekSeconds ?? advancedSettings.seekStepMedium}s</span>`;
 
     case "seekBackwardMedium":
-      return `${icons.SEEK_BACK_LARGE}<span>-${options.seekSeconds ?? globalSettings.seekStepMedium}s</span>`;
+      return `${icons.SEEK_BACK_LARGE}<span>-${options.seekSeconds ?? advancedSettings.seekStepMedium}s</span>`;
+
+    case "restart":
+      return `${icons.TIME_BACKWARD}<span>${formatTimestamp(0, Number.isFinite(media.duration) && media.duration >= 3600)}</span>`;
 
     default: {
       const percentMatch = action.match(/^seekToPercent\d+$/);
@@ -226,13 +255,13 @@ export function showActionOverlay(
   action: MediaAction,
   media: HTMLMediaElement,
   position: OverlayPosition,
-  globalSettings: GlobalSettings,
+  advancedSettings: AdvancedSettings,
   options: OverlayDisplayOptions = {},
 ): void {
-  const content = buildContent(action, media, globalSettings, options);
+  const content = buildContent(action, media, advancedSettings, options);
   if (!content) return;
 
-  const el = getOrCreateOverlay();
+  const el = getOrCreateOverlay(media);
 
   if (hideTimeout) clearTimeout(hideTimeout);
   if (fadeTimeout) clearTimeout(fadeTimeout);
@@ -254,13 +283,13 @@ export function showActionOverlay(
   }
 
   hideTimeout = setTimeout(() => {
-    el.style.transition = `opacity ${globalSettings.overlayFadeDuration}ms ease-out`;
+    el.style.transition = `opacity ${advancedSettings.overlayFadeDuration}ms ease-out`;
     el.style.opacity = "0";
     fadeTimeout = setTimeout(() => {
       el.style.display = "none";
       el.style.animation = "none";
-    }, globalSettings.overlayFadeDuration);
-  }, globalSettings.overlayVisibleDuration);
+    }, advancedSettings.overlayFadeDuration);
+  }, advancedSettings.overlayVisibleDuration);
 }
 
 const overlayStyles = document.createElement("style");

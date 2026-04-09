@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Media Hotkeys &mdash; Quick Settings</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body class="popup-page">
+    <h1>Media Hotkeys &mdash; Quick Settings</h1>
+
+    <div class="settings-field settings-toggle settings-field-full">
+      <input type="checkbox" id="hotkeysEnabled" />
+      <label for="hotkeysEnabled">Hotkeys Enabled</label>
+    </div>
+
+    <section class="settings-section" aria-labelledby="bindings-title">
+      <h2 id="bindings-title">Key Bindings</h2>
+      <table id="actions-table">
+        <caption class="screen-reader">
+          Media actions and their associated hotkeys.
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Action</th>
+            <th scope="col">Hotkeys</th>
+          </tr>
+        </thead>
+        <tbody id="actions-body">
+          <!-- populated by quick-settings-popup.ts -->
+        </tbody>
+      </table>
+    </section>
+
+    <div class="button-group button-group">
+      <button id="advanced-settings" type="button">Advanced Settings</button>
+      <button id="reset" type="button">Restore Defaults</button>
+    </div>
+
+    <div id="announcements"></div>
+    <div
+      id="announcement-live-region"
+      class="screen-reader"
+      aria-live="polite"
+      aria-atomic="true"
+    ></div>
+
+    <script type="module" src="quick-settings-popup.js"></script>
+  </body>
+</html>

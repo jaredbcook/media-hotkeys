@@ -36,9 +36,9 @@ export function createViteConfigs(outDir: string): UserConfig[] {
         outDir,
         sourcemap: false,
         lib: {
-          entry: path.resolve(projectRoot, "src/popup.ts"),
+          entry: path.resolve(projectRoot, "src/quick-settings-popup.ts"),
           formats: ["es"],
-          fileName: () => "popup.js",
+          fileName: () => "quick-settings-popup.js",
         },
       },
     },
@@ -50,9 +50,9 @@ export function createViteConfigs(outDir: string): UserConfig[] {
         outDir,
         sourcemap: false,
         lib: {
-          entry: path.resolve(projectRoot, "src/options.ts"),
+          entry: path.resolve(projectRoot, "src/advanced-settings-page.ts"),
           formats: ["es"],
-          fileName: () => "options.js",
+          fileName: () => "advanced-settings-page.js",
         },
         rollupOptions: {
           output: {

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Media Hotkeys &mdash; Advanced Settings</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body class="options-page">
+    <h1>Media Hotkeys &mdash; Advanced Settings</h1>
+    <div class="settings-sections">
+      <section class="settings-section" aria-labelledby="playback-settings-title">
+        <h2 id="playback-settings-title">Playback Speed</h2>
+        <div class="settings-grid">
+          <div class="settings-field">
+            <label for="speedMin">Min Speed (multiple of 1x)</label>
+            <input type="number" id="speedMin" min="0.1" max="1" step="0.05" />
+          </div>
+          <div class="settings-field">
+            <label for="speedMax">Max Speed (multiple of 1x)</label>
+            <input type="number" id="speedMax" min="1" max="8" step="0.25" />
+          </div>
+          <div class="settings-field">
+            <label for="speedStep">Speed Increment</label>
+            <input type="number" id="speedStep" min="0.05" max="1" step="0.05" />
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-section" aria-labelledby="volume-settings-title">
+        <h2 id="volume-settings-title">Volume Controls</h2>
+        <div class="settings-grid settings-grid-single">
+          <div class="settings-field">
+            <label for="volumeStep">Volume Increment (%)</label>
+            <input type="number" id="volumeStep" min="1" max="10" step="1" />
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-section" aria-labelledby="seek-settings-title">
+        <h2 id="seek-settings-title">Skip &amp; Jump Actions</h2>
+        <div class="settings-grid">
+          <div class="settings-field">
+            <label for="seekStepSmall">Small Skip (seconds)</label>
+            <input type="number" id="seekStepSmall" min="1" max="15" step="1" />
+          </div>
+          <div class="settings-field">
+            <label for="seekStepMedium">Medium Skip (seconds)</label>
+            <input type="number" id="seekStepMedium" min="2" max="30" step="1" />
+          </div>
+          <div class="settings-field">
+            <label for="seekStepLarge">Large Skip (seconds)</label>
+            <input type="number" id="seekStepLarge" min="3" max="60" step="1" />
+          </div>
+          <div class="settings-field">
+            <input type="checkbox" id="sumQuickSkips" />
+            <label for="sumQuickSkips">Sum skips before overlay fadeout</label>
+          </div>
+          <div class="settings-field">
+            <input type="checkbox" id="useNumberKeysToJump" />
+            <label for="useNumberKeysToJump">
+              Number keys jump to playback percentage
+              <span id="number-keys-sub-label" class="sub-label">(0 = 0%, 1 = 10%, etc.)</span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-section" aria-labelledby="overlay-settings-title">
+        <h2 id="overlay-settings-title">Overlays</h2>
+        <div class="settings-grid">
+          <div class="settings-field">
+            <input type="checkbox" id="showOverlays" />
+            <label for="showOverlays">Show overlays</label>
+          </div>
+          <div class="settings-field">
+            <label for="overlayPosition">Overlay Position</label>
+            <select id="overlayPosition"></select>
+          </div>
+          <div class="settings-field">
+            <label for="skipOverlayPosition">Skip Back/Forward Position</label>
+            <select id="skipOverlayPosition"></select>
+          </div>
+          <div class="settings-field">
+            <label for="overlayVisibleDuration">Overlay Duration (ms)</label>
+            <input type="number" id="overlayVisibleDuration" min="0" max="1000" step="50" />
+          </div>
+          <div class="settings-field">
+            <label for="overlayFadeDuration">Fade Duration (ms)</label>
+            <input type="number" id="overlayFadeDuration" min="0" max="2000" step="50" />
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-section" aria-labelledby="advanced-settings-title">
+        <h2 id="advanced-settings-title">Miscellaneous</h2>
+        <div class="settings-grid settings-grid-single">
+          <div class="settings-field">
+            <input type="checkbox" id="debugLogging" />
+            <label for="debugLogging">Debug Logging</label>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div id="announcements" aria-live="polite" aria-atomic="true"></div>
+
+    <div class="button-group">
+      <button id="reset" type="button">Restore Defaults</button>
+      <span id="status" role="status" aria-live="polite" aria-atomic="true"></span>
+    </div>
+
+    <script type="module" src="advanced-settings-page.js"></script>
+  </body>
+</html>

@@ -17,7 +17,7 @@
       "128": "assets/icon128.png"
     },
     "default_title": "Media Hotkeys",
-    "default_popup": "popup.html"
+    "default_popup": "quick-settings-popup.html"
   },
   "content_scripts": [
     {
@@ -28,7 +28,7 @@
     }
   ],
   "options_ui": {
-    "page": "options.html",
+    "page": "advanced-settings-page.html",
     "open_in_tab": true
   }
 }

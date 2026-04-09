@@ -6,6 +6,7 @@ import defaults from "./settings/defaults.json";
 export type MediaAction =
   | "togglePlayPause"
   | "toggleMute"
+  | "toggleOverlays"
   | "toggleFullscreen"
   | "togglePip"
   | "speedUp"
@@ -18,6 +19,7 @@ export type MediaAction =
   | "seekBackwardMedium"
   | "seekForwardLarge"
   | "seekBackwardLarge"
+  | "restart"
   | "seekToPercent0"
   | "seekToPercent10"
   | "seekToPercent20"
@@ -28,6 +30,20 @@ export type MediaAction =
   | "seekToPercent70"
   | "seekToPercent80"
   | "seekToPercent90";
+
+export type ConfigurableMediaAction = Exclude<
+  MediaAction,
+  | "seekToPercent0"
+  | "seekToPercent10"
+  | "seekToPercent20"
+  | "seekToPercent30"
+  | "seekToPercent40"
+  | "seekToPercent50"
+  | "seekToPercent60"
+  | "seekToPercent70"
+  | "seekToPercent80"
+  | "seekToPercent90"
+>;
 
 export type OverlayPosition =
   | "top-left"
@@ -40,15 +56,18 @@ export type OverlayPosition =
   | "bottom"
   | "bottom-right";
 
-export type OverlayVisibility = "All" | "None" | "Custom";
+export type SkipOverlayPosition = "left / right" | "same as others";
 
 export interface ActionConfig {
   keys: string[];
-  overlayVisible?: boolean;
-  overlayPosition?: OverlayPosition;
 }
 
-export interface GlobalSettings {
+export interface QuickSettings {
+  hotkeysEnabled: boolean;
+  actionKeyBindings: Record<ConfigurableMediaAction, ActionConfig>;
+}
+
+export interface AdvancedSettings {
   volumeStep: number;
   speedMin: number;
   speedMax: number;
@@ -56,16 +75,30 @@ export interface GlobalSettings {
   seekStepSmall: number;
   seekStepMedium: number;
   seekStepLarge: number;
+  useNumberKeysToJump: boolean;
   sumQuickSkips: boolean;
-  overlayVisibility: OverlayVisibility;
+  showOverlays: boolean;
   overlayPosition: OverlayPosition;
+  skipOverlayPosition: SkipOverlayPosition;
   overlayVisibleDuration: number;
   overlayFadeDuration: number;
+  debugLogging: boolean;
 }
 
-export interface ExtensionSettings extends GlobalSettings {
-  debugLogging: boolean;
-  actions: Record<MediaAction, ActionConfig>;
+export interface ExtensionSettings {
+  quickSettings: QuickSettings;
+  advancedSettings: AdvancedSettings;
+}
+
+export interface SettingsUpdate extends Partial<AdvancedSettings> {
+  quickSettings?: {
+    hotkeysEnabled?: boolean;
+    actionKeyBindings?: Partial<Record<ConfigurableMediaAction, ActionConfig>>;
+  };
+  advancedSettings?: Partial<AdvancedSettings>;
+  actions?: Partial<Record<ConfigurableMediaAction, ActionConfig>>;
+  hotkeysEnabled?: boolean;
+  globalSettings?: Partial<AdvancedSettings>;
 }
 
 const NON_OVERLAY_ACTIONS = new Set<MediaAction>(["toggleFullscreen", "togglePip"]);
@@ -75,111 +108,143 @@ const NON_OVERLAY_ACTIONS = new Set<MediaAction>(["toggleFullscreen", "togglePip
 // #region Defaults
 
 export const DEFAULT_SETTINGS: ExtensionSettings = defaults as ExtensionSettings;
+export const DEFAULT_QUICK_SETTINGS: QuickSettings = DEFAULT_SETTINGS.quickSettings;
+export const DEFAULT_ADVANCED_SETTINGS: AdvancedSettings = DEFAULT_SETTINGS.advancedSettings;
 
 export function actionSupportsOverlay(action: MediaAction): boolean {
   return !NON_OVERLAY_ACTIONS.has(action);
 }
 
-function isOverlayVisibility(value: unknown): value is OverlayVisibility {
-  return value === "All" || value === "None" || value === "Custom";
+function isDirectionalSkipAction(
+  action: MediaAction,
+): action is
+  | "seekForwardSmall"
+  | "seekBackwardSmall"
+  | "seekForwardMedium"
+  | "seekBackwardMedium"
+  | "seekForwardLarge"
+  | "seekBackwardLarge" {
+  return action.startsWith("seekForward") || action.startsWith("seekBackward");
 }
 
-function normalizeOverlayVisibility(
-  flatSettings: Partial<GlobalSettings>,
-  legacyGlobalSettings:
-    | (Partial<GlobalSettings> & {
-        overlaysVisible?: boolean;
-        overlayVisible?: boolean;
-      })
-    | undefined,
-): OverlayVisibility {
-  if (isOverlayVisibility(flatSettings.overlayVisibility)) {
-    return flatSettings.overlayVisibility;
+function mergeActionKeyBindings(
+  storedBindings?: Partial<Record<ConfigurableMediaAction, Partial<ActionConfig>>>,
+  legacyBindings?: Partial<Record<ConfigurableMediaAction, Partial<ActionConfig>>>,
+): Record<ConfigurableMediaAction, ActionConfig> {
+  const normalizedBindings = {} as Record<ConfigurableMediaAction, ActionConfig>;
+
+  for (const action of Object.keys(
+    DEFAULT_QUICK_SETTINGS.actionKeyBindings,
+  ) as ConfigurableMediaAction[]) {
+    normalizedBindings[action] = {
+      ...DEFAULT_QUICK_SETTINGS.actionKeyBindings[action],
+      ...legacyBindings?.[action],
+      ...storedBindings?.[action],
+    };
   }
 
-  if (isOverlayVisibility(legacyGlobalSettings?.overlayVisibility)) {
-    return legacyGlobalSettings.overlayVisibility;
-  }
-
-  const legacyVisible =
-    legacyGlobalSettings?.overlaysVisible ?? legacyGlobalSettings?.overlayVisible;
-
-  if (typeof legacyVisible === "boolean") {
-    return legacyVisible ? "All" : "None";
-  }
-
-  return DEFAULT_SETTINGS.overlayVisibility;
+  return normalizedBindings;
 }
 
-function normalizeSettings(settings: Partial<ExtensionSettings>): ExtensionSettings {
-  const legacyGlobalSettings = (
-    settings as {
-      globalSettings?: Partial<GlobalSettings> & {
-        overlaysVisible?: boolean;
-        overlayVisible?: boolean;
-      };
-    }
-  ).globalSettings;
+function normalizeSettings(
+  settings: Partial<ExtensionSettings> & SettingsUpdate,
+): ExtensionSettings {
+  const nestedQuickSettings: Partial<QuickSettings> & {
+    actionKeyBindings?: Partial<Record<ConfigurableMediaAction, ActionConfig>>;
+  } = settings.quickSettings ?? {};
+  const nestedAdvancedSettings: Partial<AdvancedSettings> = settings.advancedSettings ?? {};
+  const legacyGlobalSettings = settings.globalSettings ?? {};
 
-  const normalizedSettings: ExtensionSettings = {
-    ...DEFAULT_SETTINGS,
+  const quickSettings: QuickSettings = {
+    ...DEFAULT_QUICK_SETTINGS,
+    ...nestedQuickSettings,
+    hotkeysEnabled:
+      nestedQuickSettings.hotkeysEnabled ??
+      settings.hotkeysEnabled ??
+      DEFAULT_QUICK_SETTINGS.hotkeysEnabled,
+    actionKeyBindings: mergeActionKeyBindings(
+      nestedQuickSettings.actionKeyBindings,
+      settings.actions,
+    ),
+  };
+
+  const advancedSettings: AdvancedSettings = {
+    ...DEFAULT_ADVANCED_SETTINGS,
     ...settings,
     ...legacyGlobalSettings,
-    overlayVisibility: normalizeOverlayVisibility(settings, legacyGlobalSettings),
-    actions: DEFAULT_SETTINGS.actions,
+    ...nestedAdvancedSettings,
   };
-
-  const normalizedActions = {} as Record<MediaAction, ActionConfig>;
-
-  for (const action of Object.keys(DEFAULT_SETTINGS.actions) as MediaAction[]) {
-    const normalizedAction: ActionConfig = {
-      ...DEFAULT_SETTINGS.actions[action],
-      ...settings.actions?.[action],
-    };
-
-    if (!actionSupportsOverlay(action)) {
-      delete normalizedAction.overlayVisible;
-      delete normalizedAction.overlayPosition;
-    }
-
-    normalizedActions[action] = normalizedAction;
-  }
 
   return {
-    ...normalizedSettings,
-    actions: normalizedActions,
+    quickSettings,
+    advancedSettings,
   };
+}
+
+function mergeSettings(
+  baseSettings: ExtensionSettings,
+  settingsUpdate: SettingsUpdate,
+): ExtensionSettings {
+  return normalizeSettings({
+    ...baseSettings,
+    ...settingsUpdate,
+    quickSettings: {
+      ...baseSettings.quickSettings,
+      ...settingsUpdate.quickSettings,
+      hotkeysEnabled:
+        settingsUpdate.quickSettings?.hotkeysEnabled ??
+        settingsUpdate.hotkeysEnabled ??
+        baseSettings.quickSettings.hotkeysEnabled,
+      actionKeyBindings: mergeActionKeyBindings(
+        settingsUpdate.quickSettings?.actionKeyBindings,
+        settingsUpdate.actions,
+      ),
+    },
+    advancedSettings: {
+      ...baseSettings.advancedSettings,
+      ...settingsUpdate,
+      ...settingsUpdate.globalSettings,
+      ...settingsUpdate.advancedSettings,
+    },
+  });
 }
 
 export function resolveActionOverlaySettings(
   action: MediaAction,
-  actionConfig: ActionConfig,
-  globalSettings: GlobalSettings,
+  _actionConfig: ActionConfig,
+  advancedSettings: AdvancedSettings,
 ): { overlayVisible: boolean; overlayPosition: OverlayPosition } {
   if (!actionSupportsOverlay(action)) {
     return {
       overlayVisible: false,
-      overlayPosition: globalSettings.overlayPosition,
+      overlayPosition: advancedSettings.overlayPosition,
     };
   }
 
-  if (globalSettings.overlayVisibility === "None") {
-    return {
-      overlayVisible: false,
-      overlayPosition: actionConfig.overlayPosition ?? globalSettings.overlayPosition,
-    };
-  }
-
-  if (globalSettings.overlayVisibility === "All") {
+  if (action === "toggleOverlays") {
     return {
       overlayVisible: true,
-      overlayPosition: actionConfig.overlayPosition ?? globalSettings.overlayPosition,
+      overlayPosition: advancedSettings.overlayPosition,
+    };
+  }
+
+  if (!advancedSettings.showOverlays) {
+    return {
+      overlayVisible: false,
+      overlayPosition: advancedSettings.overlayPosition,
+    };
+  }
+
+  if (isDirectionalSkipAction(action) && advancedSettings.skipOverlayPosition === "left / right") {
+    return {
+      overlayVisible: true,
+      overlayPosition: action.startsWith("seekForward") ? "center-right" : "center-left",
     };
   }
 
   return {
-    overlayVisible: actionConfig.overlayVisible ?? true,
-    overlayPosition: actionConfig.overlayPosition ?? globalSettings.overlayPosition,
+    overlayVisible: true,
+    overlayPosition: advancedSettings.overlayPosition,
   };
 }
 
@@ -188,25 +253,31 @@ export function resolveActionOverlaySettings(
 // #region Storage
 
 export async function getSettings(): Promise<ExtensionSettings> {
-  const result = await browser.storage.sync.get();
-  return normalizeSettings(result as Partial<ExtensionSettings>);
+  const result = await browser.storage.sync.get({});
+  return normalizeSettings(result as Partial<ExtensionSettings> & SettingsUpdate);
 }
 
-export async function saveSettings(settings: Partial<ExtensionSettings>): Promise<void> {
-  await browser.storage.sync.set(settings);
+export async function saveSettings(settingsUpdate: SettingsUpdate): Promise<void> {
+  const currentSettings = await getSettings();
+  const mergedSettings = mergeSettings(currentSettings, settingsUpdate);
+  await browser.storage.sync.set(mergedSettings as unknown as Record<string, unknown>);
 }
 
 // #endregion
 
 // #region Utilities
 
+export function normalizeHotkeyKey(key: string): string {
+  return /^[a-z]$/i.test(key) ? key.toLowerCase() : key;
+}
+
 export function buildKeyToActionMap(
-  actions: Record<MediaAction, ActionConfig>,
-): Map<string, MediaAction> {
-  const map = new Map<string, MediaAction>();
-  for (const [action, config] of Object.entries(actions)) {
+  actionKeyBindings: Record<ConfigurableMediaAction, ActionConfig>,
+): Map<string, ConfigurableMediaAction> {
+  const map = new Map<string, ConfigurableMediaAction>();
+  for (const [action, config] of Object.entries(actionKeyBindings)) {
     for (const key of config.keys) {
-      map.set(key, action as MediaAction);
+      map.set(normalizeHotkeyKey(key), action as ConfigurableMediaAction);
     }
   }
   return map;

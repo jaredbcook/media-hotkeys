@@ -50,8 +50,14 @@ async function buildBrowser(
   }
 
   await Promise.all([
-    cp(path.join(projectRoot, "src", "popup.html"), path.join(outDir, "popup.html")),
-    cp(path.join(projectRoot, "src", "options.html"), path.join(outDir, "options.html")),
+    cp(
+      path.join(projectRoot, "src", "quick-settings-popup.html"),
+      path.join(outDir, "quick-settings-popup.html"),
+    ),
+    cp(
+      path.join(projectRoot, "src", "advanced-settings-page.html"),
+      path.join(outDir, "advanced-settings-page.html"),
+    ),
     cp(path.join(projectRoot, "src", "ui.css"), path.join(outDir, "ui.css")),
     cp(path.join(projectRoot, "src", "settings"), path.join(outDir, "settings"), {
       recursive: true,
