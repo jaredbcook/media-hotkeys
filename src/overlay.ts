@@ -14,6 +14,14 @@ let hideTimeout: ReturnType<typeof setTimeout> | null = null;
 let fadeTimeout: ReturnType<typeof setTimeout> | null = null;
 
 type SkipAnimationDirection = "forward" | "backward";
+type OverlayAnchorKind = "media" | "viewport";
+
+interface OverlayAnchor {
+  kind: OverlayAnchorKind;
+  host: HTMLElement;
+  position: "absolute" | "fixed";
+  rect: DOMRect;
+}
 
 function getFullscreenOverlayHost(media: HTMLMediaElement | null): HTMLElement | null {
   if (!media) {
@@ -84,15 +92,91 @@ function getOrCreateOverlay(media?: HTMLMediaElement): HTMLElement {
   return el;
 }
 
-function positionOverMedia(
+function isRectOutsideViewport(rect: DOMRect): boolean {
+  return (
+    rect.right <= 0 ||
+    rect.bottom <= 0 ||
+    rect.left >= window.innerWidth ||
+    rect.top >= window.innerHeight
+  );
+}
+
+function isMediaVisiblyAnchorable(media: HTMLMediaElement, rect: DOMRect): boolean {
+  if (media.hidden) {
+    return false;
+  }
+
+  const computedStyle = window.getComputedStyle(media);
+  if (computedStyle.display === "none") {
+    return false;
+  }
+
+  if (computedStyle.visibility === "hidden" || computedStyle.visibility === "collapse") {
+    return false;
+  }
+
+  if (Number.parseFloat(computedStyle.opacity) === 0) {
+    return false;
+  }
+
+  if (rect.width <= 1 || rect.height <= 1) {
+    return false;
+  }
+
+  return !isRectOutsideViewport(rect);
+}
+
+function getViewportAnchorRect(): DOMRect {
+  return new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+}
+
+function resolveOverlayAnchor(media: HTMLMediaElement): OverlayAnchor {
+  const fullscreenHost = getFullscreenOverlayHost(media);
+  if (fullscreenHost) {
+    return {
+      kind: "media",
+      host: fullscreenHost,
+      position: "fixed",
+      rect: media.getBoundingClientRect(),
+    };
+  }
+
+  const mediaRect = media.getBoundingClientRect();
+  if (isMediaVisiblyAnchorable(media, mediaRect)) {
+    return {
+      kind: "media",
+      host: document.body,
+      position: "absolute",
+      rect: mediaRect,
+    };
+  }
+
+  return {
+    kind: "viewport",
+    host: document.body,
+    position: "fixed",
+    rect: getViewportAnchorRect(),
+  };
+}
+
+function clampCoordinate(value: number, minimum: number, maximum: number): number {
+  if (maximum < minimum) {
+    return minimum;
+  }
+
+  return Math.min(Math.max(value, minimum), maximum);
+}
+
+function positionOverAnchor(
   el: HTMLElement,
-  media: HTMLMediaElement,
+  anchor: OverlayAnchor,
   position: OverlayPosition,
 ): void {
-  const rect = media.getBoundingClientRect();
-  const isFullscreen = Boolean(getFullscreenOverlayHost(media));
-  const scrollX = isFullscreen ? 0 : window.scrollX;
-  const scrollY = isFullscreen ? 0 : window.scrollY;
+  const rect = anchor.rect;
+  const scrollX = anchor.position === "fixed" ? 0 : window.scrollX;
+  const scrollY = anchor.position === "fixed" ? 0 : window.scrollY;
+  const overlayWidth = el.offsetWidth;
+  const overlayHeight = el.offsetHeight;
 
   const parts = position.split("-");
   let vertical: string;
@@ -146,9 +230,39 @@ function positionOverMedia(
       break;
   }
 
+  if (anchor.kind === "viewport") {
+    const minLeft =
+      horizontal === "right"
+        ? INSET_PX + overlayWidth
+        : horizontal === "center"
+          ? INSET_PX + overlayWidth / 2
+          : INSET_PX;
+    const maxLeft =
+      horizontal === "right"
+        ? window.innerWidth - INSET_PX
+        : horizontal === "center"
+          ? window.innerWidth - INSET_PX - overlayWidth / 2
+          : window.innerWidth - INSET_PX - overlayWidth;
+    const minTop =
+      vertical === "bottom"
+        ? INSET_PX + overlayHeight
+        : vertical === "center"
+          ? INSET_PX + overlayHeight / 2
+          : INSET_PX;
+    const maxTop =
+      vertical === "bottom"
+        ? window.innerHeight - INSET_PX
+        : vertical === "center"
+          ? window.innerHeight - INSET_PX - overlayHeight / 2
+          : window.innerHeight - INSET_PX - overlayHeight;
+
+    left = clampCoordinate(left, minLeft, maxLeft);
+    top = clampCoordinate(top, minTop, maxTop);
+  }
+
   el.style.left = `${left}px`;
   el.style.top = `${top}px`;
-  el.style.position = isFullscreen ? "fixed" : "absolute";
+  el.style.position = anchor.position;
   el.style.transform = `translate(${translateX}, ${translateY})`;
   el.style.setProperty("--media-shortcuts-translate-x", translateX);
   el.style.setProperty("--media-shortcuts-translate-y", translateY);
@@ -261,7 +375,11 @@ export function showActionOverlay(
   const content = buildContent(action, media, advancedSettings, options);
   if (!content) return;
 
-  const el = getOrCreateOverlay(media);
+  const anchor = resolveOverlayAnchor(media);
+  const el = getOrCreateOverlay(anchor.kind === "media" ? media : undefined);
+  if (el.parentElement !== anchor.host) {
+    anchor.host.appendChild(el);
+  }
 
   if (hideTimeout) clearTimeout(hideTimeout);
   if (fadeTimeout) clearTimeout(fadeTimeout);
@@ -269,12 +387,14 @@ export function showActionOverlay(
   el.innerHTML = content;
   resizeOverlayIcons(el, media);
   resizeOverlayText(el, media);
-  positionOverMedia(el, media, position);
   el.style.display = "flex";
   el.style.opacity = "1";
+  el.style.visibility = "hidden";
   el.style.transition = "";
   el.style.animation = "none";
   void el.offsetWidth;
+  positionOverAnchor(el, anchor, position);
+  el.style.visibility = "visible";
 
   if (options.animateSkipDirection) {
     const deltaX = options.animateSkipDirection === "forward" ? "-20%" : "20%";
@@ -287,6 +407,7 @@ export function showActionOverlay(
     el.style.opacity = "0";
     fadeTimeout = setTimeout(() => {
       el.style.display = "none";
+      el.style.visibility = "visible";
       el.style.animation = "none";
     }, advancedSettings.overlayFadeDuration);
   }, advancedSettings.overlayVisibleDuration);

@@ -5,6 +5,19 @@ import { DEFAULT_ADVANCED_SETTINGS, type AdvancedSettings } from "../../../src/s
 
 const advancedSettings: AdvancedSettings = DEFAULT_ADVANCED_SETTINGS;
 
+function setViewportSize(width: number, height: number): void {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    writable: true,
+    value: width,
+  });
+  Object.defineProperty(window, "innerHeight", {
+    configurable: true,
+    writable: true,
+    value: height,
+  });
+}
+
 describe("overlay layout", () => {
   it("sizes overlay icons to 10% of media width and clamps them to min and max sizes", () => {
     const mediumVideo = makeVideo(500);
@@ -74,6 +87,57 @@ describe("overlay layout", () => {
     expect(overlay.style.transform).toBe("translate(-50%, -100%)");
     expect(overlay.style.left).toBe("420px");
     expect(overlay.style.top).toBe("444px");
+  });
+
+  it("falls back to the viewport center when the media is display:none", () => {
+    setViewportSize(1280, 720);
+    const video = makeVideo({ display: "none", width: 0, height: 0, left: 0, top: 0 });
+
+    showActionOverlay("togglePlayPause", video, "center", advancedSettings);
+
+    const overlay = getOverlayElement()!;
+    expect(overlay.style.position).toBe("fixed");
+    expect(overlay.style.transform).toBe("translate(-50%, -50%)");
+    expect(overlay.style.left).toBe("640px");
+    expect(overlay.style.top).toBe("360px");
+  });
+
+  it("falls back to the viewport center when the media rect is zero-sized", () => {
+    setViewportSize(1200, 800);
+    const video = makeVideo({ width: 0, height: 0, left: 0, top: 0 });
+
+    showActionOverlay("togglePlayPause", video, "center", advancedSettings);
+
+    const overlay = getOverlayElement()!;
+    expect(overlay.style.position).toBe("fixed");
+    expect(overlay.style.left).toBe("600px");
+    expect(overlay.style.top).toBe("400px");
+  });
+
+  it("falls back to the viewport when the media rect is fully off-screen", () => {
+    setViewportSize(1024, 768);
+    const video = makeVideo({ left: -800, top: 100, width: 640, height: 360 });
+
+    showActionOverlay("togglePlayPause", video, "bottom", advancedSettings);
+
+    const overlay = getOverlayElement()!;
+    expect(overlay.style.position).toBe("fixed");
+    expect(overlay.style.transform).toBe("translate(-50%, -100%)");
+    expect(overlay.style.left).toBe("512px");
+    expect(overlay.style.top).toBe("752px");
+  });
+
+  it("uses viewport positions with insets for hidden media fallbacks", () => {
+    setViewportSize(360, 240);
+    const video = makeVideo({ hidden: true, width: 0, height: 0, left: 0, top: 0 });
+
+    showActionOverlay("togglePlayPause", video, "top-left", advancedSettings);
+
+    const overlay = getOverlayElement()!;
+    expect(overlay.style.position).toBe("fixed");
+    expect(overlay.style.transform).toBe("translate(0%, 0%)");
+    expect(overlay.style.left).toBe("16px");
+    expect(overlay.style.top).toBe("16px");
   });
 
   it("mounts the overlay inside the fullscreen host when the media is fullscreen", () => {
