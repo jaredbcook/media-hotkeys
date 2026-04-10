@@ -75,6 +75,29 @@ test("ignores invalid media elements without a source", async ({ page }) => {
   await waitForMediaState(page, "valid", (state) => Math.abs(state.volume - 0.45) < 0.0001);
 });
 
+test("ignores muted videos without controls when selecting a target", async ({ page }) => {
+  await createMedia(
+    page,
+    "ambient",
+    {
+      muted: true,
+      controls: false,
+      paused: false,
+      ended: false,
+      readyState: 4,
+    },
+    "video",
+  );
+  await createMedia(page, "primary", { volume: 0.5 });
+
+  await page.locator("#ambient").focus();
+  await page.keyboard.press("ArrowDown");
+
+  await waitForMediaState(page, "primary", (state) => Math.abs(state.volume - 0.45) < 0.0001);
+  await expect.poll(async () => (await readMediaState(page, "ambient")).muted).toBe(true);
+  await expect.poll(async () => (await readMediaState(page, "ambient")).volume).toBeCloseTo(0.5, 5);
+});
+
 test("delegates actions from the top window into a child iframe", async ({ page, server }) => {
   await page.goto(server.getUrl("/page-with-iframe"));
 

@@ -66,10 +66,12 @@ Uses `webextension-polyfill` to normalize `chrome.*` vs `browser.*` APIs across 
 
 ## Smart Media Selection (priority order)
 
-1. Active/focused element (if it's a media element)
-2. Currently playing media (`!paused && !ended && readyState > 2`)
-3. Last interacted media (tracked via module-level variable, verified to still exist in DOM)
-4. First media element on the page (fallback)
+Muted videos without native controls are treated as ambient/background media and skipped by the selector. This is a heuristic and may need refinement for sites that use custom player controls.
+
+1. Active/focused element (if it's a targetable media element)
+2. Currently playing targetable media (`!paused && !ended && readyState > 2`)
+3. Last interacted targetable media (tracked via module-level variable, verified to still exist in DOM)
+4. First targetable media element on the page (fallback)
 
 **Edge Cases:**
 

@@ -13,7 +13,7 @@ Browser extension that adds hotkeys to control HTML video or audio on any websit
 
 - **Hotkeys for common media actions**: Play/pause, mute, playback speed, skip forward/backward, restart, jump-to-percent, volume, fullscreen, picture-in-picture, and overlay toggling.
 - **Visual feedback**: If enabled, shows a temporary overlay for most actions.
-- **Smart selection**: Automatically selects the best media element to control even if it doesn't have focus (for example, annoying auto-playing videos).
+- **Smart selection**: Automatically selects the best media element to control even if it doesn't have focus, while skipping muted videos without native controls as likely ambient/background media.
 - **Cross-origin support**: Works with media embedded in iframes or in the shadow DOM.
 - **Grouped settings**: Quick settings cover the global enabled toggle and action key bindings, while advanced settings cover playback, skip, overlay, and debugging behavior.
 - **Settings sync**: Syncs your extension settings between devices that have the extension installed (must be signed in and have extension sync enabled).

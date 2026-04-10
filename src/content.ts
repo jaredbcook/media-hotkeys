@@ -105,7 +105,14 @@ function hasNonEmptyAttribute(element: Element, name: string): boolean {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function isValidMediaElement(media: HTMLMediaElement): boolean {
+function isTargetableMediaElement(media: HTMLMediaElement): boolean {
+  // If a video doesn't have controls and is muted (or defaults to muted),
+  // then it may be an ambient video rather than primary content.
+  // TODO: Test with custom video players to ensure this doesn't cause false negatives
+  if (media instanceof HTMLVideoElement && !media.controls && (media.muted || media.defaultMuted)) {
+    return false;
+  }
+
   if (typeof media.currentSrc === "string" && media.currentSrc.trim().length > 0) {
     return true;
   }
@@ -135,7 +142,7 @@ function findMedia(root: Document | ShadowRoot | Element): HTMLMediaElement[] {
   while (node) {
     if (
       (node instanceof HTMLVideoElement || node instanceof HTMLAudioElement) &&
-      isValidMediaElement(node)
+      isTargetableMediaElement(node)
     ) {
       results.push(node);
     } else if (node instanceof Element && node.shadowRoot) {
@@ -334,10 +341,10 @@ function handleFullscreenChange(): void {
 
 /**
  * Determines which media element to control based on priority:
- * 1. Active element (if it's a supported media type)
- * 2. Currently playing media
- * 3. Most recently interacted media
- * 4. First supported media on page
+ * 1. Active element (if it's a supported, non-ambient media type)
+ * 2. Currently playing non-ambient media
+ * 3. Most recently interacted non-ambient media
+ * 4. First supported non-ambient media on page
  * @returns {HTMLMediaElement|null}
  */
 export function getTargetMedia(): HTMLMediaElement | null {
@@ -345,12 +352,12 @@ export function getTargetMedia(): HTMLMediaElement | null {
   const focused = document.activeElement;
   if (
     (focused instanceof HTMLVideoElement || focused instanceof HTMLAudioElement) &&
-    isValidMediaElement(focused)
+    isTargetableMediaElement(focused)
   ) {
     return focused as HTMLMediaElement;
   }
 
-  const mediaList = findMedia(document);
+  const mediaList = findMedia(document).filter(isTargetableMediaElement);
   if (mediaList.length === 0) {
     return null;
   }
@@ -367,7 +374,7 @@ export function getTargetMedia(): HTMLMediaElement | null {
   if (
     lastInteractedMedia &&
     lastInteractedMedia.isConnected &&
-    isValidMediaElement(lastInteractedMedia)
+    isTargetableMediaElement(lastInteractedMedia)
   ) {
     return lastInteractedMedia;
   }
@@ -408,7 +415,7 @@ function collectMediaAndShadowRoots(root: Document | ShadowRoot | Element): {
   while (node) {
     if (
       (node instanceof HTMLVideoElement || node instanceof HTMLAudioElement) &&
-      isValidMediaElement(node)
+      isTargetableMediaElement(node)
     ) {
       media.push(node);
     } else if (node instanceof Element && node.shadowRoot) {

@@ -17,6 +17,16 @@ describe("media target selection", () => {
     expect(getTargetMedia()).toBe(video);
   });
 
+  it("ignores ambient videos when choosing a fallback target", () => {
+    makeVideo({
+      muted: true,
+      controls: false,
+    } as Partial<HTMLVideoElement>);
+    const primaryVideo = makeVideo();
+
+    expect(getTargetMedia()).toBe(primaryVideo);
+  });
+
   it("ignores invalid media elements when choosing a fallback target", () => {
     makeInvalidVideo();
     const validVideo = makeVideo();
@@ -35,6 +45,19 @@ describe("media target selection", () => {
     expect(getTargetMedia()).toBe(playing);
   });
 
+  it("ignores ambient videos even when they are playing", () => {
+    makeVideo({
+      muted: true,
+      controls: false,
+      paused: false,
+      ended: false,
+      readyState: 4,
+    } as Partial<HTMLVideoElement>);
+    const primaryVideo = makeVideo();
+
+    expect(getTargetMedia()).toBe(primaryVideo);
+  });
+
   it("ignores an invalid focused media element", () => {
     const invalidFocused = makeInvalidVideo();
     const validVideo = makeVideo();
@@ -46,6 +69,20 @@ describe("media target selection", () => {
     expect(getTargetMedia()).toBe(validVideo);
   });
 
+  it("ignores an ambient focused media element", () => {
+    const ambientVideo = makeVideo({
+      muted: true,
+      controls: false,
+    } as Partial<HTMLVideoElement>);
+    const primaryVideo = makeVideo();
+
+    ambientVideo.tabIndex = 0;
+    ambientVideo.focus();
+
+    expect(document.activeElement).toBe(ambientVideo);
+    expect(getTargetMedia()).toBe(primaryVideo);
+  });
+
   it("ignores an invalid last interacted media element", async () => {
     const validVideo = makeVideo();
     const invalidVideo = makeInvalidVideo();
@@ -54,6 +91,28 @@ describe("media target selection", () => {
     invalidVideo.dispatchEvent(new Event("pointerdown"));
 
     expect(getTargetMedia()).toBe(validVideo);
+  });
+
+  it("ignores an ambient last interacted media element", async () => {
+    const primaryVideo = makeVideo();
+    const ambientVideo = makeVideo({
+      muted: true,
+      controls: false,
+    } as Partial<HTMLVideoElement>);
+    await Promise.resolve();
+
+    ambientVideo.dispatchEvent(new Event("pointerdown"));
+
+    expect(getTargetMedia()).toBe(primaryVideo);
+  });
+
+  it("still targets muted videos when native controls are present", () => {
+    const controlledMutedVideo = makeVideo({
+      muted: true,
+      controls: true,
+    } as Partial<HTMLVideoElement>);
+
+    expect(getTargetMedia()).toBe(controlledMutedVideo);
   });
 
   it("treats media with a child source src as valid", () => {

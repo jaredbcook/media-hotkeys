@@ -16,9 +16,10 @@ export async function createMedia(
   page: Page,
   id: string,
   overrides: Record<string, unknown> = {},
+  tagName?: "audio" | "video",
 ): Promise<void> {
   await page.evaluate(
-    ({ mediaId, mediaOverrides }) => {
+    ({ mediaId, mediaOverrides, mediaTagName }) => {
       (
         window as typeof window & {
           __mediaFixtures: {
@@ -29,9 +30,9 @@ export async function createMedia(
             ) => void;
           };
         }
-      ).__mediaFixtures.createMedia(mediaId, undefined, mediaOverrides);
+      ).__mediaFixtures.createMedia(mediaId, mediaTagName, mediaOverrides);
     },
-    { mediaId: id, mediaOverrides: overrides },
+    { mediaId: id, mediaOverrides: overrides, mediaTagName: tagName },
   );
   await waitForMediaLoaded(page, id);
 }
