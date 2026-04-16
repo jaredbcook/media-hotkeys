@@ -29,3 +29,6 @@ test-results/
 
 # TypeScript
 *.tsbuildinfo
+
+# Claude
+.claude/worktrees
