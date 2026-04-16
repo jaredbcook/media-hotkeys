@@ -524,7 +524,38 @@ function initializeDynamicMediaTracking(): void {
 // #region Media Actions
 
 async function tryPlayMedia(media: HTMLMediaElement): Promise<void> {
+  // If the video is in a web component, try to call play() on the host element or
+  // simulate a click on a play button within it before calling play() on the media
+  // element itself. This can help with certain custom video players that only allow
+  // play() to be called from a user interaction event handler on their host element.
   try {
+    const root = media.getRootNode();
+    const host = root instanceof ShadowRoot ? root.host : null;
+    if (host && host.tagName.includes("-")) {
+      debugLog("Attempting to play media in a web component", media, { customElement: host });
+      if ("play" in host && typeof host.play === "function") {
+        debugLog("Attempting to call play() on host element (web component)", media, {
+          customElement: host,
+        });
+        await host.play();
+        return;
+      } else if (root instanceof DocumentFragment) {
+        debugLog("Attempting to find and click play button within media host element", media, {
+          customElement: host,
+        });
+        root.querySelectorAll("button").forEach((button) => {
+          if (
+            button.innerText.toLowerCase().includes("play") ||
+            button.getAttribute("aria-label")?.toLowerCase().includes("play")
+          ) {
+            debugLog("Found button with 'play' in the label. Clicking it...", media, { button });
+            button.click();
+            return;
+          }
+        });
+      }
+    }
+
     await media.play();
   } catch {
     // Ignore play() rejections. The extension invokes playback as a best-effort

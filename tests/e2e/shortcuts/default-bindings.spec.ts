@@ -22,6 +22,89 @@ test("toggles play/pause on a focused top-level media element", async ({ page })
   await waitForMediaState(page, "primary", (state) => state.paused);
 });
 
+test("plays media inside a custom element shadow root via a play button fallback", async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    const app = document.getElementById("app");
+    const host = document.createElement("custom-player");
+    host.id = "custom-player-host";
+    const shadowRoot = host.attachShadow({ mode: "open" });
+    const playButton = document.createElement("button");
+    playButton.type = "button";
+    playButton.setAttribute("aria-label", "Play media");
+    playButton.innerText = "Play media";
+    const media = document.createElement("audio");
+    media.id = "custom-player-media";
+    shadowRoot.appendChild(playButton);
+    shadowRoot.appendChild(media);
+    app?.appendChild(host);
+
+    media.src = "/silence.wav";
+    media.preload = "auto";
+    media.tabIndex = 0;
+    media.volume = 0.5;
+    media.currentTime = 0;
+    media.playbackRate = 1;
+
+    (
+      window as typeof window & {
+        __customPlayerPlayButtonClicks?: number;
+      }
+    ).__customPlayerPlayButtonClicks = 0;
+
+    playButton.addEventListener("click", () => {
+      (
+        window as typeof window & {
+          __customPlayerPlayButtonClicks?: number;
+        }
+      ).__customPlayerPlayButtonClicks =
+        ((
+          window as typeof window & {
+            __customPlayerPlayButtonClicks?: number;
+          }
+        ).__customPlayerPlayButtonClicks ?? 0) + 1;
+      void media.play();
+    });
+  });
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const host = document.getElementById("custom-player-host");
+        const media = host?.shadowRoot?.getElementById(
+          "custom-player-media",
+        ) as HTMLMediaElement | null;
+        return media?.readyState ?? 0;
+      }),
+    )
+    .toBeGreaterThan(0);
+
+  await page.keyboard.press("k");
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const host = document.getElementById("custom-player-host");
+        const media = host?.shadowRoot?.getElementById(
+          "custom-player-media",
+        ) as HTMLMediaElement | null;
+        return {
+          paused: media?.paused ?? true,
+          playButtonClicks:
+            (
+              window as typeof window & {
+                __customPlayerPlayButtonClicks?: number;
+              }
+            ).__customPlayerPlayButtonClicks ?? 0,
+        };
+      }),
+    )
+    .toEqual({
+      paused: false,
+      playButtonClicks: 1,
+    });
+});
+
 test("toggles mute and adjusts seek, volume, and speed with default bindings", async ({ page }) => {
   await createMedia(page, "primary", {
     muted: false,

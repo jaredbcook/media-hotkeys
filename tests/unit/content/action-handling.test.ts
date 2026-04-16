@@ -71,6 +71,65 @@ describe("media action handling", () => {
     await Promise.resolve();
   });
 
+  it("prefers a custom element host play() method for shadow-root media", async () => {
+    const host = document.createElement("custom-player");
+    const shadowRoot = host.attachShadow({ mode: "open" });
+    const video = document.createElement("video");
+    video.setAttribute("src", "https://example.com/test.mp4");
+    Object.defineProperty(video, "paused", {
+      configurable: true,
+      value: true,
+      writable: true,
+    });
+    shadowRoot.appendChild(video);
+    document.body.appendChild(host);
+
+    const hostPlay = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(host, "play", {
+      configurable: true,
+      value: hostPlay,
+      writable: true,
+    });
+    const mediaPlaySpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
+
+    handleAction("togglePlayPause", video);
+    await Promise.resolve();
+
+    expect(hostPlay).toHaveBeenCalledOnce();
+    expect(mediaPlaySpy).not.toHaveBeenCalled();
+  });
+
+  it("clicks a shadow play button before falling back to media.play()", async () => {
+    const host = document.createElement("custom-player");
+    const shadowRoot = host.attachShadow({ mode: "open" });
+    const video = document.createElement("video");
+    video.setAttribute("src", "https://example.com/test.mp4");
+    Object.defineProperty(video, "paused", {
+      configurable: true,
+      value: true,
+      writable: true,
+    });
+    const playButton = document.createElement("button");
+    playButton.setAttribute("aria-label", "Play media");
+    Object.defineProperty(playButton, "innerText", {
+      configurable: true,
+      value: "Play media",
+      writable: true,
+    });
+    shadowRoot.appendChild(playButton);
+    shadowRoot.appendChild(video);
+    document.body.appendChild(host);
+
+    const clickSpy = vi.spyOn(playButton, "click");
+    const mediaPlaySpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
+
+    handleAction("togglePlayPause", video);
+    await Promise.resolve();
+
+    expect(clickSpy).toHaveBeenCalledOnce();
+    expect(mediaPlaySpy).toHaveBeenCalledOnce();
+  });
+
   it("toggles mute and restores the configured volume step from zero volume", () => {
     const video = makeVideo();
     video.muted = false;
