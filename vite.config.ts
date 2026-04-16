@@ -36,6 +36,26 @@ export function createViteConfigs(outDir: string): UserConfig[] {
         outDir,
         sourcemap: false,
         lib: {
+          entry: path.resolve(projectRoot, "src/player-bridge.ts"),
+          formats: ["iife"],
+          name: "MediaHotkeysPlayerBridge",
+          fileName: () => "player-bridge.js",
+        },
+        rollupOptions: {
+          output: {
+            inlineDynamicImports: true,
+          },
+        },
+      },
+    },
+    {
+      publicDir: false,
+      build: {
+        emptyOutDir: false,
+        minify: false,
+        outDir,
+        sourcemap: false,
+        lib: {
           entry: path.resolve(projectRoot, "src/quick-settings-popup.ts"),
           formats: ["es"],
           fileName: () => "quick-settings-popup.js",

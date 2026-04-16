@@ -24,6 +24,7 @@ Uses `webextension-polyfill` to normalize `chrome.*` vs `browser.*` APIs across 
     advanced-settings-page.html   # advanced settings page UI
     advanced-settings-page.ts     # advanced settings page logic
     content.ts          # key event listener + video/audio control logic
+    player-bridge.ts    # main-world bridge for custom element player host APIs
     overlay.ts          # visual indicators
     icons.ts            # icons for visual indicators
     quick-settings-popup.html     # quick settings popup UI
@@ -78,6 +79,38 @@ Muted videos without native controls are treated as ambient/background media and
 - Multiple playing media: first found is selected
 - Iframe media: content script runs independently per frame
 - Shadow DOM: recursively searched via `findMedia()`
+
+## Third-Party Player Compatibility
+
+The extension is native-media first: it targets real `HTMLMediaElement` instances whenever possible, then uses narrow custom-player host APIs only when the media is inside an open Shadow DOM custom element. Provider iframe players and closed shadow roots remain best-effort.
+
+### Player Landscape
+
+| Player / Tech                              | Common Shape                                                           | Custom Player?                   | Direct `<video>`/`<audio>` Control Likely OK?                                                                               |
+| ------------------------------------------ | ---------------------------------------------------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| YouTube                                    | Cross-origin iframe, IFrame API                                        | Yes                              | Usually only from inside the iframe document; provider API exposes play, pause, seek, volume, mute, and rate controls.      |
+| Vimeo                                      | Cross-origin iframe, Player SDK                                        | Yes                              | Usually no from the parent page; provider SDK exposes play, pause, current time, volume, rate, fullscreen, and PiP methods. |
+| TikTok Embed                               | Provider embed or iframe                                               | Yes                              | Low confidence; treat as provider-owned custom embed.                                                                       |
+| MediaElement.js                            | Custom UI over HTML5 media                                             | Yes, native-backed               | Usually yes when the underlying media element is reachable.                                                                 |
+| Video.js                                   | Custom UI over native media; newer work includes Web Components        | Yes                              | Usually yes for native-backed players; Web Component hosts may also expose host APIs.                                       |
+| Wistia                                     | Aurora `<wistia-player>` Web Component; iframe fallback                | Yes                              | Often yes, but host APIs are preferred when reachable for state sync.                                                       |
+| Brightcove                                 | Hosted custom player with Video.js lineage                             | Yes                              | Often yes, but player APIs are safer for ads, analytics, and UI state.                                                      |
+| JW Player                                  | Custom JavaScript player                                               | Yes                              | Often yes after setup, but JW Player exposes its own play, pause, seek, mute, and volume APIs.                              |
+| SoundCloud                                 | Provider iframe/audio embed                                            | Yes                              | Usually provider-owned; direct media may not be reachable from the parent page.                                             |
+| Vidyard / Loom                             | Provider iframe/player SDK                                             | Yes                              | Usually API or iframe-owned; frame-local media discovery may help when accessible.                                          |
+| Flowplayer / Plyr / Fluid Player / DPlayer | Custom controls over native media                                      | Yes, native-backed               | Usually yes unless wrapping YouTube/Vimeo provider embeds.                                                                  |
+| dash.js / hls.js / Shaka                   | Streaming engines attached to native media, sometimes with optional UI | Mostly not a UI player by itself | Yes; these libraries normally attach to a real media element.                                                               |
+| Kaltura / Dailymotion / Twitch             | Provider iframe/player SDK                                             | Yes                              | Usually API or iframe-owned; frame-local media discovery may help when accessible.                                          |
+| Bitmovin / THEOplayer                      | Commercial custom players                                              | Yes                              | Mixed; direct media may work, but player APIs are more semantically correct when available.                                 |
+
+### Compatibility Model
+
+- Provider iframe players usually require provider APIs or frame-local media discovery. The extension does not inject provider SDKs or add per-provider adapters by default.
+- Native-backed custom UI players usually work through direct `HTMLMediaElement` control, so direct media control remains the default fallback for every action.
+- Web Component hosts may need host APIs for state sync. For open-shadow custom elements, `content.ts` tries high-confidence native-equivalent host operations before falling back to the media element.
+- Extension content scripts run in an isolated world by default, so page-defined custom element methods may not be visible to `content.ts`. A small `player-bridge.js` content script runs in the page's main world and handles only whitelisted synchronous host operations via DOM events and temporary `data-media-hotkeys-*` attributes. See Chrome's [`content_scripts.world`](https://developer.chrome.com/docs/extensions/reference/manifest/content-scripts) documentation and MDN's [`content_scripts`](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/content_scripts) reference.
+- Closed shadow roots, unavailable provider frames, blocked autoplay, and player API failures are best-effort. Failures fall back to direct media control when possible and should not surface errors to users.
+- Do not add generic button-clicking beyond the play-button fallback. Clicking arbitrary mute, seek, speed, fullscreen, or PiP buttons is too likely to hit the wrong control or double-toggle state.
 
 ## Settings UI
 

@@ -105,6 +105,254 @@ test("plays media inside a custom element shadow root via a play button fallback
     });
 });
 
+test("uses custom element host APIs for shadow-root media actions", async ({ page }) => {
+  await page.evaluate(() => {
+    const counts = {
+      play: 0,
+      pause: 0,
+      muted: 0,
+      volume: 0,
+      currentTime: 0,
+      playbackRate: 0,
+      fullscreen: 0,
+    };
+    (
+      window as typeof window & {
+        __customPlayerApiCounts?: typeof counts;
+      }
+    ).__customPlayerApiCounts = counts;
+
+    class MediaHotkeysTestPlayer extends HTMLElement {
+      connectedCallback(): void {
+        if (this.shadowRoot) {
+          return;
+        }
+
+        const shadowRoot = this.attachShadow({ mode: "open" });
+        const media = document.createElement("audio");
+        media.id = "custom-api-media";
+        media.src = "/silence.wav";
+        media.preload = "auto";
+        media.tabIndex = 0;
+        media.volume = 0.5;
+        media.currentTime = 0;
+        media.playbackRate = 1;
+        shadowRoot.appendChild(media);
+      }
+
+      get media(): HTMLMediaElement {
+        const media = this.shadowRoot?.getElementById("custom-api-media");
+        if (!(media instanceof HTMLMediaElement)) {
+          throw new Error("Missing custom player media");
+        }
+        return media;
+      }
+
+      play(): Promise<void> {
+        counts.play += 1;
+        return this.media.play();
+      }
+
+      pause(): void {
+        counts.pause += 1;
+        this.media.pause();
+      }
+
+      get muted(): boolean {
+        return this.media.muted;
+      }
+
+      set muted(value: boolean) {
+        counts.muted += 1;
+        this.media.muted = value;
+      }
+
+      get volume(): number {
+        return this.media.volume;
+      }
+
+      set volume(value: number) {
+        counts.volume += 1;
+        this.media.volume = value;
+      }
+
+      get currentTime(): number {
+        return this.media.currentTime;
+      }
+
+      set currentTime(value: number) {
+        counts.currentTime += 1;
+        this.media.currentTime = value;
+      }
+
+      get duration(): number {
+        return this.media.duration;
+      }
+
+      get playbackRate(): number {
+        return this.media.playbackRate;
+      }
+
+      set playbackRate(value: number) {
+        counts.playbackRate += 1;
+        this.media.playbackRate = value;
+      }
+
+      requestFullscreen(): Promise<void> {
+        counts.fullscreen += 1;
+        return HTMLElement.prototype.requestFullscreen.call(this);
+      }
+    }
+
+    if (!customElements.get("media-hotkeys-test-player")) {
+      customElements.define("media-hotkeys-test-player", MediaHotkeysTestPlayer);
+    }
+
+    const host = document.createElement("media-hotkeys-test-player");
+    host.id = "custom-api-host";
+    document.getElementById("app")?.appendChild(host);
+  });
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const host = document.getElementById("custom-api-host");
+        const media = host?.shadowRoot?.getElementById(
+          "custom-api-media",
+        ) as HTMLMediaElement | null;
+        return media?.readyState ?? 0;
+      }),
+    )
+    .toBeGreaterThan(0);
+
+  await page.keyboard.press("k");
+  await waitForMediaState(page, "custom-api-media", (state) => !state.paused);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as typeof window & {
+              __customPlayerApiCounts?: { play: number };
+            }
+          ).__customPlayerApiCounts?.play ?? 0,
+      ),
+    )
+    .toBe(1);
+
+  await page.keyboard.press("k");
+  await waitForMediaState(page, "custom-api-media", (state) => state.paused);
+
+  await page.keyboard.press("m");
+  await waitForMediaState(page, "custom-api-media", (state) => state.muted);
+
+  await page.keyboard.press("ArrowUp");
+  await waitForMediaState(
+    page,
+    "custom-api-media",
+    (state) => !state.muted && Math.abs(state.volume - 0.05) < 0.0001,
+  );
+
+  await markPlaying(page, "custom-api-media");
+  await waitForMediaState(page, "custom-api-media", (state) => !state.paused);
+  const seekBaseline = (await readMediaState(page, "custom-api-media")).currentTime;
+  await page.keyboard.press("ArrowRight");
+  await waitForMediaState(
+    page,
+    "custom-api-media",
+    (state) => state.currentTime >= seekBaseline + 4,
+  );
+
+  await pressShiftedKey(page, ".");
+  await waitForMediaState(
+    page,
+    "custom-api-media",
+    (state) => Math.abs(state.playbackRate - 1.25) < 0.0001,
+  );
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        return (
+          window as typeof window & {
+            __customPlayerApiCounts?: Record<string, number>;
+          }
+        ).__customPlayerApiCounts;
+      }),
+    )
+    .toMatchObject({
+      pause: 1,
+      muted: 2,
+      volume: 1,
+      currentTime: 1,
+      playbackRate: 1,
+    });
+});
+
+test("uses a custom element host fullscreen API for shadow-root video", async ({ page }) => {
+  await page.evaluate(() => {
+    const counts = {
+      fullscreen: 0,
+    };
+    (
+      window as typeof window & {
+        __customPlayerFullscreenCounts?: typeof counts;
+      }
+    ).__customPlayerFullscreenCounts = counts;
+
+    class MediaHotkeysFullscreenPlayer extends HTMLElement {
+      connectedCallback(): void {
+        if (this.shadowRoot) {
+          return;
+        }
+
+        const shadowRoot = this.attachShadow({ mode: "open" });
+        const media = document.createElement("video");
+        media.id = "custom-fullscreen-video";
+        media.src = "/silence.wav";
+        media.controls = true;
+        media.tabIndex = 0;
+        shadowRoot.appendChild(media);
+      }
+
+      requestFullscreen(): Promise<void> {
+        counts.fullscreen += 1;
+        return HTMLElement.prototype.requestFullscreen.call(this);
+      }
+    }
+
+    if (!customElements.get("media-hotkeys-fullscreen-player")) {
+      customElements.define("media-hotkeys-fullscreen-player", MediaHotkeysFullscreenPlayer);
+    }
+
+    const host = document.createElement("media-hotkeys-fullscreen-player");
+    host.id = "custom-fullscreen-host";
+    document.getElementById("app")?.appendChild(host);
+  });
+
+  await page.keyboard.press("f");
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const host = document.getElementById("custom-fullscreen-host");
+        return {
+          fullscreenCount:
+            (
+              window as typeof window & {
+                __customPlayerFullscreenCounts?: { fullscreen: number };
+              }
+            ).__customPlayerFullscreenCounts?.fullscreen ?? 0,
+          hostIsFullscreen: document.fullscreenElement === host,
+        };
+      }),
+    )
+    .toEqual({
+      fullscreenCount: 1,
+      hostIsFullscreen: true,
+    });
+});
+
 test("toggles mute and adjusts seek, volume, and speed with default bindings", async ({ page }) => {
   await createMedia(page, "primary", {
     muted: false,

@@ -7,6 +7,21 @@ beforeEach(() => {
   resetContentTestState();
 });
 
+function makeCustomPlayerVideo(): {
+  host: HTMLElement;
+  shadowRoot: ShadowRoot;
+  video: HTMLVideoElement;
+} {
+  const host = document.createElement("custom-player");
+  const shadowRoot = host.attachShadow({ mode: "open" });
+  const video = document.createElement("video");
+  video.setAttribute("src", "https://example.com/test.mp4");
+  shadowRoot.appendChild(video);
+  document.body.appendChild(host);
+
+  return { host, shadowRoot, video };
+}
+
 describe("media action handling", () => {
   it("logs handled actions when debug logging is enabled", () => {
     const consoleInfoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
@@ -128,6 +143,99 @@ describe("media action handling", () => {
 
     expect(clickSpy).toHaveBeenCalledOnce();
     expect(mediaPlaySpy).toHaveBeenCalledOnce();
+  });
+
+  it("prefers a custom element host pause() method for shadow-root media", () => {
+    const { host, video } = makeCustomPlayerVideo();
+    Object.defineProperty(video, "paused", {
+      configurable: true,
+      value: false,
+      writable: true,
+    });
+    const hostPause = vi.fn();
+    Object.defineProperty(host, "pause", {
+      configurable: true,
+      value: hostPause,
+      writable: true,
+    });
+    const mediaPauseSpy = vi.spyOn(video, "pause").mockImplementation(() => undefined);
+
+    handleAction("togglePlayPause", video);
+
+    expect(hostPause).toHaveBeenCalledOnce();
+    expect(mediaPauseSpy).not.toHaveBeenCalled();
+  });
+
+  it("uses custom element host properties for native-equivalent actions", () => {
+    const { host, video } = makeCustomPlayerVideo();
+    let muted = false;
+    let volume = 0.5;
+    let currentTime = 10;
+    let playbackRate = 1;
+
+    Object.defineProperties(host, {
+      muted: {
+        configurable: true,
+        get: () => muted,
+        set: (value: boolean) => {
+          muted = value;
+        },
+      },
+      volume: {
+        configurable: true,
+        get: () => volume,
+        set: (value: number) => {
+          volume = value;
+        },
+      },
+      currentTime: {
+        configurable: true,
+        get: () => currentTime,
+        set: (value: number) => {
+          currentTime = value;
+        },
+      },
+      duration: {
+        configurable: true,
+        get: () => 100,
+      },
+      playbackRate: {
+        configurable: true,
+        get: () => playbackRate,
+        set: (value: number) => {
+          playbackRate = value;
+        },
+      },
+    });
+
+    handleAction("toggleMute", video);
+    expect(muted).toBe(true);
+
+    handleAction("volumeUp", video);
+    expect(muted).toBe(false);
+    expect(volume).toBe(DEFAULT_SETTINGS.advancedSettings.volumeStep);
+
+    handleAction("seekForwardSmall", video);
+    expect(currentTime).toBe(15);
+
+    handleAction("restart", video);
+    expect(currentTime).toBe(0);
+
+    currentTime = 25;
+    handleAction("seekToPercent50", video);
+    expect(currentTime).toBe(50);
+
+    handleAction("speedUp", video);
+    expect(playbackRate).toBe(1.25);
+  });
+
+  it("falls back to direct media control when a custom element host has no matching API", () => {
+    const { video } = makeCustomPlayerVideo();
+    video.volume = 0.5;
+
+    handleAction("volumeUp", video);
+
+    expect(video.volume).toBeCloseTo(0.55);
   });
 
   it("toggles mute and restores the configured volume step from zero volume", () => {
@@ -350,6 +458,30 @@ describe("media action handling", () => {
     expect(wrapper?.dataset.mediaHotkeysFullscreenWrapper).toBe("true");
     expect(requestFullscreenMock).toHaveBeenCalledTimes(1);
     expect(requestFullscreenMock.mock.instances[0]).toBe(wrapper);
+  });
+
+  it("prefers a custom element host for fullscreen when available", () => {
+    const { host, video } = makeCustomPlayerVideo();
+    const hostRequestFullscreenMock = vi.fn().mockResolvedValue(undefined);
+    const wrapperRequestFullscreenMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(host, "requestFullscreen", {
+      configurable: true,
+      value: hostRequestFullscreenMock,
+    });
+    Object.defineProperty(HTMLDivElement.prototype, "requestFullscreen", {
+      configurable: true,
+      value: wrapperRequestFullscreenMock,
+    });
+    Object.defineProperty(document, "fullscreenElement", {
+      configurable: true,
+      get: () => null,
+    });
+
+    handleAction("toggleFullscreen", video);
+
+    expect(hostRequestFullscreenMock).toHaveBeenCalledOnce();
+    expect(wrapperRequestFullscreenMock).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-media-hotkeys-fullscreen-wrapper="true"]')).toBeNull();
   });
 
   it("restores the original DOM structure after fullscreen exits", () => {

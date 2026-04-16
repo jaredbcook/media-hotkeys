@@ -523,37 +523,257 @@ function initializeDynamicMediaTracking(): void {
 
 // #region Media Actions
 
-async function tryPlayMedia(media: HTMLMediaElement): Promise<void> {
-  // If the video is in a web component, try to call play() on the host element or
-  // simulate a click on a play button within it before calling play() on the media
-  // element itself. This can help with certain custom video players that only allow
-  // play() to be called from a user interaction event handler on their host element.
+type PlayerBridgeCommandName =
+  | "play"
+  | "pause"
+  | "setMuted"
+  | "readMuted"
+  | "setVolume"
+  | "readVolume"
+  | "setCurrentTime"
+  | "readCurrentTime"
+  | "readDuration"
+  | "setPlaybackRate"
+  | "readPlaybackRate"
+  | "requestFullscreen";
+
+type PlayerBridgeResponse = {
+  id: string;
+  handled: boolean;
+  value?: unknown;
+};
+
+const PLAYER_BRIDGE_EVENT = "media-hotkeys-player-bridge-command";
+const PLAYER_BRIDGE_COMMAND_ATTR = "data-media-hotkeys-player-command";
+const PLAYER_BRIDGE_RESPONSE_ATTR = "data-media-hotkeys-player-response";
+
+let playerBridgeRequestCounter = 0;
+
+function getCustomMediaHost(media: HTMLMediaElement): HTMLElement | null {
+  const root = media.getRootNode();
+  if (!(root instanceof ShadowRoot)) {
+    return null;
+  }
+
+  return root.host instanceof HTMLElement && root.host.tagName.includes("-") ? root.host : null;
+}
+
+function requestPlayerBridge(
+  host: HTMLElement,
+  command: PlayerBridgeCommandName,
+  value?: boolean | number,
+): PlayerBridgeResponse | null {
+  const id = `${Date.now()}-${playerBridgeRequestCounter++}`;
+
   try {
-    const root = media.getRootNode();
-    const host = root instanceof ShadowRoot ? root.host : null;
-    if (host && host.tagName.includes("-")) {
+    host.removeAttribute(PLAYER_BRIDGE_RESPONSE_ATTR);
+    host.setAttribute(PLAYER_BRIDGE_COMMAND_ATTR, JSON.stringify({ id, command, value }));
+    host.dispatchEvent(new CustomEvent(PLAYER_BRIDGE_EVENT));
+
+    const rawResponse = host.getAttribute(PLAYER_BRIDGE_RESPONSE_ATTR);
+    if (!rawResponse) {
+      return null;
+    }
+
+    const response: unknown = JSON.parse(rawResponse);
+    if (
+      !response ||
+      typeof response !== "object" ||
+      (response as Partial<PlayerBridgeResponse>).id !== id ||
+      typeof (response as Partial<PlayerBridgeResponse>).handled !== "boolean"
+    ) {
+      return null;
+    }
+
+    return response as PlayerBridgeResponse;
+  } catch {
+    return null;
+  } finally {
+    host.removeAttribute(PLAYER_BRIDGE_COMMAND_ATTR);
+    host.removeAttribute(PLAYER_BRIDGE_RESPONSE_ATTR);
+  }
+}
+
+function getHostMember(host: HTMLElement, memberName: string): unknown {
+  return (host as unknown as Record<string, unknown>)[memberName];
+}
+
+function tryDirectHostMethodSync(host: HTMLElement, methodName: string): boolean {
+  const method = getHostMember(host, methodName);
+  if (typeof method !== "function") {
+    return false;
+  }
+
+  try {
+    void method.call(host);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function tryBridgeMethod(host: HTMLElement, command: PlayerBridgeCommandName): boolean {
+  return requestPlayerBridge(host, command)?.handled ?? false;
+}
+
+function readDirectHostBoolean(host: HTMLElement, propertyName: string): boolean | null {
+  if (!(propertyName in host)) {
+    return null;
+  }
+
+  const value = getHostMember(host, propertyName);
+  return typeof value === "boolean" ? value : null;
+}
+
+function readDirectHostNumber(host: HTMLElement, propertyName: string): number | null {
+  if (!(propertyName in host)) {
+    return null;
+  }
+
+  const value = getHostMember(host, propertyName);
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readBridgeBoolean(host: HTMLElement, command: PlayerBridgeCommandName): boolean | null {
+  const response = requestPlayerBridge(host, command);
+  return response?.handled === true && typeof response.value === "boolean" ? response.value : null;
+}
+
+function readBridgeNumber(host: HTMLElement, command: PlayerBridgeCommandName): number | null {
+  const response = requestPlayerBridge(host, command);
+  return response?.handled === true &&
+    typeof response.value === "number" &&
+    Number.isFinite(response.value)
+    ? response.value
+    : null;
+}
+
+function setDirectHostProperty(
+  host: HTMLElement,
+  propertyName: string,
+  value: boolean | number,
+): boolean {
+  if (!(propertyName in host)) {
+    return false;
+  }
+
+  try {
+    (host as unknown as Record<string, boolean | number>)[propertyName] = value;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function setBridgeProperty(
+  host: HTMLElement,
+  command: PlayerBridgeCommandName,
+  value: boolean | number,
+): boolean {
+  return requestPlayerBridge(host, command, value)?.handled ?? false;
+}
+
+function readCustomPlayerBoolean(
+  media: HTMLMediaElement,
+  propertyName: string,
+  command: PlayerBridgeCommandName,
+): boolean | null {
+  const host = getCustomMediaHost(media);
+  if (!host) {
+    return null;
+  }
+
+  return readDirectHostBoolean(host, propertyName) ?? readBridgeBoolean(host, command);
+}
+
+function readCustomPlayerNumber(
+  media: HTMLMediaElement,
+  propertyName: string,
+  command: PlayerBridgeCommandName,
+): number | null {
+  const host = getCustomMediaHost(media);
+  if (!host) {
+    return null;
+  }
+
+  return readDirectHostNumber(host, propertyName) ?? readBridgeNumber(host, command);
+}
+
+function setCustomPlayerProperty(
+  media: HTMLMediaElement,
+  propertyName: string,
+  command: PlayerBridgeCommandName,
+  value: boolean | number,
+): boolean {
+  const host = getCustomMediaHost(media);
+  if (!host) {
+    return false;
+  }
+
+  return (
+    setDirectHostProperty(host, propertyName, value) || setBridgeProperty(host, command, value)
+  );
+}
+
+function tryCustomPlayerMethodSync(
+  media: HTMLMediaElement,
+  methodName: string,
+  command: PlayerBridgeCommandName,
+): boolean {
+  const host = getCustomMediaHost(media);
+  if (!host) {
+    return false;
+  }
+
+  return tryDirectHostMethodSync(host, methodName) || tryBridgeMethod(host, command);
+}
+
+function clickShadowPlayButton(media: HTMLMediaElement): boolean {
+  const root = media.getRootNode();
+  const host = getCustomMediaHost(media);
+  if (!host || !(root instanceof DocumentFragment)) {
+    return false;
+  }
+
+  debugLog("Attempting to find and click play button within media host element", media, {
+    customElement: host,
+  });
+
+  for (const button of root.querySelectorAll("button")) {
+    if (
+      button.innerText.toLowerCase().includes("play") ||
+      button.getAttribute("aria-label")?.toLowerCase().includes("play")
+    ) {
+      debugLog("Found button with 'play' in the label. Clicking it...", media, { button });
+      button.click();
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function tryPlayMedia(media: HTMLMediaElement): Promise<void> {
+  try {
+    const host = getCustomMediaHost(media);
+    if (host) {
       debugLog("Attempting to play media in a web component", media, { customElement: host });
-      if ("play" in host && typeof host.play === "function") {
-        debugLog("Attempting to call play() on host element (web component)", media, {
-          customElement: host,
-        });
-        await host.play();
-        return;
-      } else if (root instanceof DocumentFragment) {
-        debugLog("Attempting to find and click play button within media host element", media, {
-          customElement: host,
-        });
-        root.querySelectorAll("button").forEach((button) => {
-          if (
-            button.innerText.toLowerCase().includes("play") ||
-            button.getAttribute("aria-label")?.toLowerCase().includes("play")
-          ) {
-            debugLog("Found button with 'play' in the label. Clicking it...", media, { button });
-            button.click();
-            return;
-          }
-        });
+
+      const play = getHostMember(host, "play");
+      if (typeof play === "function") {
+        try {
+          await play.call(host);
+          return;
+        } catch {
+          // Fall back to the bridge, play-button click, then native media playback.
+        }
       }
+
+      if (tryBridgeMethod(host, "play")) {
+        return;
+      }
+
+      clickShadowPlayButton(media);
     }
 
     await media.play();
@@ -567,8 +787,81 @@ function playMedia(media: HTMLMediaElement): void {
   void tryPlayMedia(media);
 }
 
+function pauseMedia(media: HTMLMediaElement): void {
+  if (tryCustomPlayerMethodSync(media, "pause", "pause")) {
+    return;
+  }
+
+  media.pause();
+}
+
 function getEffectiveVolume(media: HTMLMediaElement): number {
-  return media.muted ? 0 : media.volume;
+  return readPlayerMuted(media) ? 0 : readPlayerVolume(media);
+}
+
+function readPlayerMuted(media: HTMLMediaElement): boolean {
+  return readCustomPlayerBoolean(media, "muted", "readMuted") ?? media.muted;
+}
+
+function setPlayerMuted(media: HTMLMediaElement, muted: boolean): void {
+  if (setCustomPlayerProperty(media, "muted", "setMuted", muted)) {
+    return;
+  }
+
+  media.muted = muted;
+}
+
+function readPlayerVolume(media: HTMLMediaElement): number {
+  const volume = readCustomPlayerNumber(media, "volume", "readVolume");
+  return typeof volume === "number" && volume >= 0 && volume <= 1 ? volume : media.volume;
+}
+
+function setPlayerVolume(media: HTMLMediaElement, volume: number): void {
+  const clampedVolume = Math.min(1, Math.max(0, volume));
+  if (setCustomPlayerProperty(media, "volume", "setVolume", clampedVolume)) {
+    return;
+  }
+
+  media.volume = clampedVolume;
+}
+
+function readPlayerCurrentTime(media: HTMLMediaElement): number {
+  return readCustomPlayerNumber(media, "currentTime", "readCurrentTime") ?? media.currentTime;
+}
+
+function setPlayerCurrentTime(media: HTMLMediaElement, currentTime: number): void {
+  if (setCustomPlayerProperty(media, "currentTime", "setCurrentTime", currentTime)) {
+    return;
+  }
+
+  media.currentTime = currentTime;
+}
+
+function readPlayerDuration(media: HTMLMediaElement): number {
+  return readCustomPlayerNumber(media, "duration", "readDuration") ?? media.duration;
+}
+
+function readPlayerPlaybackRate(media: HTMLMediaElement): number {
+  return readCustomPlayerNumber(media, "playbackRate", "readPlaybackRate") ?? media.playbackRate;
+}
+
+function setPlayerPlaybackRate(media: HTMLMediaElement, playbackRate: number): void {
+  if (setCustomPlayerProperty(media, "playbackRate", "setPlaybackRate", playbackRate)) {
+    return;
+  }
+
+  media.playbackRate = playbackRate;
+}
+
+function requestCustomPlayerFullscreen(media: HTMLMediaElement): boolean {
+  const host = getCustomMediaHost(media);
+  if (!host) {
+    return false;
+  }
+
+  return (
+    tryBridgeMethod(host, "requestFullscreen") || tryDirectHostMethodSync(host, "requestFullscreen")
+  );
 }
 
 function getSeekStep(action: MediaAction, advancedSettings: AdvancedSettings): number | null {
@@ -741,15 +1034,15 @@ export function handleAction(action: MediaAction, media: HTMLMediaElement): void
 
   switch (action) {
     case "togglePlayPause":
-      media.paused ? playMedia(media) : media.pause();
+      media.paused ? playMedia(media) : pauseMedia(media);
       break;
 
     case "toggleMute":
-      if (media.muted || media.volume === 0) {
-        media.muted = false;
-        media.volume = Math.max(advancedSettings.volumeStep, media.volume);
+      if (readPlayerMuted(media) || readPlayerVolume(media) === 0) {
+        setPlayerMuted(media, false);
+        setPlayerVolume(media, Math.max(advancedSettings.volumeStep, readPlayerVolume(media)));
       } else {
-        media.muted = true;
+        setPlayerMuted(media, true);
       }
       break;
 
@@ -762,6 +1055,10 @@ export function handleAction(action: MediaAction, media: HTMLMediaElement): void
         if (document.fullscreenElement) {
           document.exitFullscreen();
         } else {
+          if (requestCustomPlayerFullscreen(media)) {
+            break;
+          }
+
           const fullscreenHost = getFullscreenHost(media);
           if (!fullscreenHost) {
             media.requestFullscreen();
@@ -788,62 +1085,69 @@ export function handleAction(action: MediaAction, media: HTMLMediaElement): void
       break;
 
     case "volumeUp":
-      media.volume = Math.min(1, getEffectiveVolume(media) + advancedSettings.volumeStep);
-      media.muted = false;
+      setPlayerVolume(media, Math.min(1, getEffectiveVolume(media) + advancedSettings.volumeStep));
+      setPlayerMuted(media, false);
       break;
 
     case "volumeDown":
-      media.volume = Math.max(0, getEffectiveVolume(media) - advancedSettings.volumeStep);
-      media.muted = false;
+      setPlayerVolume(media, Math.max(0, getEffectiveVolume(media) - advancedSettings.volumeStep));
+      setPlayerMuted(media, false);
       break;
 
     case "seekForwardSmall":
-      media.currentTime += advancedSettings.seekStepSmall;
+      setPlayerCurrentTime(media, readPlayerCurrentTime(media) + advancedSettings.seekStepSmall);
       break;
 
     case "seekBackwardSmall":
-      media.currentTime -= advancedSettings.seekStepSmall;
+      setPlayerCurrentTime(media, readPlayerCurrentTime(media) - advancedSettings.seekStepSmall);
       break;
 
     case "seekForwardMedium":
-      media.currentTime += advancedSettings.seekStepMedium;
+      setPlayerCurrentTime(media, readPlayerCurrentTime(media) + advancedSettings.seekStepMedium);
       break;
 
     case "seekBackwardMedium":
-      media.currentTime -= advancedSettings.seekStepMedium;
+      setPlayerCurrentTime(media, readPlayerCurrentTime(media) - advancedSettings.seekStepMedium);
       break;
 
     case "seekForwardLarge":
-      media.currentTime += advancedSettings.seekStepLarge;
+      setPlayerCurrentTime(media, readPlayerCurrentTime(media) + advancedSettings.seekStepLarge);
       break;
 
     case "seekBackwardLarge":
-      media.currentTime -= advancedSettings.seekStepLarge;
+      setPlayerCurrentTime(media, readPlayerCurrentTime(media) - advancedSettings.seekStepLarge);
       break;
 
     case "restart":
-      media.currentTime = 0;
+      setPlayerCurrentTime(media, 0);
       break;
 
     case "speedUp":
-      media.playbackRate = Math.min(
-        advancedSettings.speedMax,
-        media.playbackRate + advancedSettings.speedStep,
+      setPlayerPlaybackRate(
+        media,
+        Math.min(
+          advancedSettings.speedMax,
+          readPlayerPlaybackRate(media) + advancedSettings.speedStep,
+        ),
       );
       break;
 
     case "slowDown":
-      media.playbackRate = Math.max(
-        advancedSettings.speedMin,
-        media.playbackRate - advancedSettings.speedStep,
+      setPlayerPlaybackRate(
+        media,
+        Math.max(
+          advancedSettings.speedMin,
+          readPlayerPlaybackRate(media) - advancedSettings.speedStep,
+        ),
       );
       break;
 
     default: {
       const percentMatch = action.match(/^seekToPercent(\d+)$/);
-      if (percentMatch && media.duration) {
+      const duration = readPlayerDuration(media);
+      if (percentMatch && duration) {
         const percent = parseInt(percentMatch[1], 10) / 100;
-        media.currentTime = media.duration * percent;
+        setPlayerCurrentTime(media, duration * percent);
       }
     }
   }
