@@ -131,6 +131,7 @@ describe("frame message handling", () => {
     );
 
     await Promise.resolve();
+    await Promise.resolve();
 
     expect(playSpy).toHaveBeenCalled();
     expect(mockSource.postMessage).toHaveBeenCalledWith(

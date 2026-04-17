@@ -22,6 +22,64 @@ test("toggles play/pause on a focused top-level media element", async ({ page })
   await waitForMediaState(page, "primary", (state) => state.paused);
 });
 
+test("activates a video placeholder before controlling the injected media", async ({ page }) => {
+  await page.evaluate(() => {
+    const app = document.getElementById("app");
+    const placeholder = document.createElement("div");
+    placeholder.id = "video-placeholder";
+    placeholder.style.position = "relative";
+    placeholder.style.alignItems = "center";
+    placeholder.style.backgroundImage = "linear-gradient(#333, #111)";
+    placeholder.style.cursor = "pointer";
+    placeholder.style.display = "flex";
+    placeholder.style.height = "270px";
+    placeholder.style.justifyContent = "center";
+    placeholder.style.width = "480px";
+
+    const duration = document.createElement("div");
+    duration.textContent = "1:01:17";
+    duration.style.position = "absolute";
+    duration.style.right = "12px";
+    duration.style.bottom = "10px";
+
+    const playIcon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    playIcon.setAttribute("width", "64");
+    playIcon.setAttribute("height", "46");
+    playIcon.setAttribute("viewBox", "0 0 64 46");
+    playIcon.innerHTML =
+      '<path d="M0 0h64v46H0z" fill="#333"></path><path d="M42 23L25 13v20z" fill="#fff"></path>';
+
+    placeholder.append(duration, playIcon);
+    placeholder.addEventListener("click", () => {
+      if (document.getElementById("placeholder-video")) {
+        return;
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = 32;
+      canvas.height = 18;
+      const context = canvas.getContext("2d");
+      context!.fillStyle = "#111";
+      context!.fillRect(0, 0, canvas.width, canvas.height);
+
+      const video = document.createElement("video");
+      video.id = "placeholder-video";
+      video.controls = true;
+      video.muted = true;
+      video.srcObject = canvas.captureStream(1);
+      app?.appendChild(video);
+    });
+
+    app?.appendChild(placeholder);
+  });
+
+  await page.keyboard.press("k");
+  await waitForMediaState(page, "placeholder-video", (state) => !state.paused);
+
+  await page.keyboard.press("k");
+  await waitForMediaState(page, "placeholder-video", (state) => state.paused);
+});
+
 test("plays media inside a custom element shadow root via a play button fallback", async ({
   page,
 }) => {

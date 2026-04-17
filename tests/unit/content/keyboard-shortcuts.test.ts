@@ -13,6 +13,64 @@ beforeEach(() => {
   resetContentTestState();
 });
 
+function rect(left: number, top: number, width: number, height: number): DOMRect {
+  return {
+    x: left,
+    y: top,
+    left,
+    top,
+    width,
+    height,
+    right: left + width,
+    bottom: top + height,
+    toJSON: () => ({}),
+  } as DOMRect;
+}
+
+function mockRect(element: Element, nextRect: DOMRect): void {
+  vi.spyOn(element, "getBoundingClientRect").mockReturnValue(nextRect);
+}
+
+function makePlaceholder({
+  id,
+  nextMedia,
+  placeholderRect = rect(0, 0, 320, 180),
+  playIconRect = rect(128, 67, 64, 46),
+}: {
+  id: string;
+  nextMedia?: HTMLMediaElement;
+  placeholderRect?: DOMRect;
+  playIconRect?: DOMRect;
+}): HTMLDivElement {
+  const placeholder = document.createElement("div");
+  placeholder.id = id;
+  placeholder.style.backgroundImage = 'url("https://example.com/thumb.png")';
+  placeholder.style.cursor = "pointer";
+  placeholder.textContent = "6:37";
+
+  const playIcon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  placeholder.appendChild(playIcon);
+  document.body.appendChild(placeholder);
+
+  mockRect(placeholder, placeholderRect);
+  mockRect(playIcon, playIconRect);
+
+  if (nextMedia) {
+    placeholder.addEventListener("click", () => {
+      document.body.appendChild(nextMedia);
+    });
+  }
+
+  return placeholder;
+}
+
+async function settleHotkey(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 describe("keyboard shortcut routing", () => {
   it("performs an action on a mapped key when media is present", async () => {
     const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
@@ -184,5 +242,130 @@ describe("keyboard shortcut routing", () => {
     expect(playSpy).not.toHaveBeenCalled();
     expect(preventDefaultSpy).not.toHaveBeenCalled();
     expect(event.defaultPrevented).toBe(false);
+  });
+});
+
+describe("playable placeholder activation", () => {
+  it("clicks a Skool-like placeholder and plays injected paused media", async () => {
+    const video = document.createElement("video");
+    video.setAttribute("src", "https://example.com/injected.mp4");
+    Object.defineProperty(video, "paused", { configurable: true, value: true });
+    const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
+    const placeholder = makePlaceholder({ id: "placeholder", nextMedia: video });
+    const clickSpy = vi.spyOn(placeholder, "click");
+
+    await dispatchMappedKey("k");
+    await settleHotkey();
+
+    expect(clickSpy).toHaveBeenCalledOnce();
+    expect(playSpy).toHaveBeenCalledOnce();
+  });
+
+  it("uses the most visible matching placeholder", async () => {
+    const smallVideo = document.createElement("video");
+    smallVideo.setAttribute("src", "https://example.com/small.mp4");
+    const largeVideo = document.createElement("video");
+    largeVideo.setAttribute("src", "https://example.com/large.mp4");
+    vi.spyOn(largeVideo, "play").mockResolvedValue(undefined);
+
+    const small = makePlaceholder({
+      id: "small-placeholder",
+      nextMedia: smallVideo,
+      placeholderRect: rect(0, 0, 160, 90),
+      playIconRect: rect(48, 22, 64, 46),
+    });
+    const large = makePlaceholder({
+      id: "large-placeholder",
+      nextMedia: largeVideo,
+      placeholderRect: rect(0, 120, 480, 270),
+      playIconRect: rect(208, 232, 64, 46),
+    });
+    const smallClickSpy = vi.spyOn(small, "click");
+    const largeClickSpy = vi.spyOn(large, "click");
+
+    await dispatchMappedKey("k");
+    await settleHotkey();
+
+    expect(smallClickSpy).not.toHaveBeenCalled();
+    expect(largeClickSpy).toHaveBeenCalledOnce();
+  });
+
+  it("ignores weak or unsafe placeholder candidates", async () => {
+    const validVideo = document.createElement("video");
+    validVideo.setAttribute("src", "https://example.com/valid.mp4");
+    vi.spyOn(validVideo, "play").mockResolvedValue(undefined);
+
+    const hidden = makePlaceholder({ id: "hidden" });
+    hidden.style.display = "none";
+    const offscreen = makePlaceholder({
+      id: "offscreen",
+      placeholderRect: rect(1200, 0, 320, 180),
+      playIconRect: rect(1328, 67, 64, 46),
+    });
+    const tiny = makePlaceholder({
+      id: "tiny",
+      placeholderRect: rect(0, 220, 40, 30),
+      playIconRect: rect(8, 8, 24, 20),
+    });
+    const editable = makePlaceholder({ id: "editable" });
+    editable.setAttribute("contenteditable", "true");
+    const valid = makePlaceholder({
+      id: "valid",
+      nextMedia: validVideo,
+      placeholderRect: rect(0, 440, 320, 180),
+      playIconRect: rect(128, 507, 64, 46),
+    });
+
+    const hiddenClickSpy = vi.spyOn(hidden, "click");
+    const offscreenClickSpy = vi.spyOn(offscreen, "click");
+    const tinyClickSpy = vi.spyOn(tiny, "click");
+    const editableClickSpy = vi.spyOn(editable, "click");
+    const validClickSpy = vi.spyOn(valid, "click");
+
+    await dispatchMappedKey("k");
+    await settleHotkey();
+
+    expect(hiddenClickSpy).not.toHaveBeenCalled();
+    expect(offscreenClickSpy).not.toHaveBeenCalled();
+    expect(tinyClickSpy).not.toHaveBeenCalled();
+    expect(editableClickSpy).not.toHaveBeenCalled();
+    expect(validClickSpy).toHaveBeenCalledOnce();
+  });
+
+  it("does not activate placeholders for non-play actions", async () => {
+    const placeholder = makePlaceholder({ id: "placeholder" });
+    const clickSpy = vi.spyOn(placeholder, "click");
+
+    await dispatchMappedKey("m");
+    await settleHotkey();
+
+    expect(clickSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not activate placeholders when targetable media already exists", async () => {
+    const placeholder = makePlaceholder({ id: "placeholder" });
+    const clickSpy = vi.spyOn(placeholder, "click");
+    const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
+
+    await dispatchMappedKey("k");
+    await settleHotkey();
+
+    expect(clickSpy).not.toHaveBeenCalled();
+    expect(playSpy).toHaveBeenCalledOnce();
+  });
+
+  it("does not replay media that starts playing after placeholder activation", async () => {
+    const video = document.createElement("video");
+    video.setAttribute("src", "https://example.com/playing.mp4");
+    Object.defineProperty(video, "paused", { configurable: true, value: false });
+    const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
+
+    makePlaceholder({ id: "placeholder", nextMedia: video });
+
+    await dispatchMappedKey("k");
+    await settleHotkey();
+
+    expect(playSpy).not.toHaveBeenCalled();
   });
 });
