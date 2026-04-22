@@ -46,6 +46,7 @@
     "vitest": "^1.4.0"
   },
   "dependencies": {
+    "tldts": "^7.0.27",
     "webextension-polyfill": "^0.10.0"
   },
   "bugs": {

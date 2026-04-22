@@ -6,6 +6,7 @@ import {
   type ExtensionSettings,
   DEFAULT_SETTINGS,
   buildKeyToActionMap,
+  findMatchingSitePolicy,
   getSettings,
   normalizeHotkeyKey,
   resolveActionOverlaySettings,
@@ -31,7 +32,13 @@ type FrameActionResponseMessage = {
   handled: boolean;
 };
 
-type FrameMessage = FrameActionRequestMessage | FrameActionResponseMessage;
+type FrameSitePolicyMessage = {
+  source: "media-shortcuts-extension";
+  type: "MEDIA_HOTKEYS_SITE_POLICY";
+  disabled: boolean;
+};
+
+type FrameMessage = FrameActionRequestMessage | FrameActionResponseMessage | FrameSitePolicyMessage;
 
 type SeekDirection = "forward" | "backward";
 
@@ -78,6 +85,7 @@ let lastInteractedMedia: HTMLMediaElement | null = null;
 const MESSAGE_SOURCE = "media-shortcuts-extension";
 const ACTION_REQUEST_TYPE = "MEDIA_SHORTCUTS_HANDLE_ACTION";
 const ACTION_RESPONSE_TYPE = "MEDIA_SHORTCUTS_ACTION_RESULT";
+const SITE_POLICY_TYPE = "MEDIA_HOTKEYS_SITE_POLICY";
 const FRAME_ACTION_TIMEOUT_MS = 150;
 const pendingFrameActionRequests = new Map<string, (handled: boolean) => void>();
 const trackedMedia = new WeakSet<HTMLMediaElement>();
@@ -87,6 +95,8 @@ let shadowObserverPatched = false;
 let seekOverlayState: SeekOverlayState | null = null;
 let activeFullscreenWrapper: HTMLDivElement | null = null;
 let activeFullscreenMedia: HTMLVideoElement | null = null;
+let topLevelSitePolicyDisabled = false;
+let topLevelSitePolicyDisabledForEmbeds = false;
 
 const FULLSCREEN_WRAPPER_ATTR = "data-media-hotkeys-fullscreen-wrapper";
 const CLICKABLE_PLACEHOLDER_SELECTOR =
@@ -106,6 +116,7 @@ async function loadSettings(): Promise<void> {
   try {
     settings = await getSettings();
     keyToActionMap = buildKeyToActionMap(settings.quickSettings.actionKeyBindings);
+    refreshTopLevelSitePolicy();
   } catch {
     // Keep defaults on failure
   }
@@ -122,6 +133,7 @@ function handleStorageChanged(_changes: unknown, areaName: string): void {
 export function setSettingsForTests(nextSettings: ExtensionSettings): void {
   settings = nextSettings;
   keyToActionMap = buildKeyToActionMap(settings.quickSettings.actionKeyBindings);
+  refreshTopLevelSitePolicy();
 }
 
 // #endregion
@@ -918,6 +930,7 @@ function handleRootMutations(mutations: MutationRecord[]): void {
 
   if (hasDomChanges) {
     lastInteractedMedia = null;
+    broadcastTopLevelSitePolicy();
   }
 }
 
@@ -1666,7 +1679,40 @@ export function handleAction(action: MediaAction, media: HTMLMediaElement): void
 // #region Frame Messaging
 
 function isTopWindow(): boolean {
-  return window.top === window;
+  return window.parent === window;
+}
+
+function isSiteDisabledByPolicy(): boolean {
+  return topLevelSitePolicyDisabled;
+}
+
+function createSitePolicyMessage(): FrameSitePolicyMessage {
+  return {
+    source: MESSAGE_SOURCE,
+    type: SITE_POLICY_TYPE,
+    disabled: topLevelSitePolicyDisabledForEmbeds,
+  };
+}
+
+function refreshTopLevelSitePolicy(): void {
+  if (!isTopWindow()) {
+    return;
+  }
+
+  const matchingPolicy = findMatchingSitePolicy(window.location.href, settings.siteSettings);
+  topLevelSitePolicyDisabled = matchingPolicy?.policy === "disabled";
+  topLevelSitePolicyDisabledForEmbeds =
+    topLevelSitePolicyDisabled && matchingPolicy?.embedsPolicy !== "ignore";
+  broadcastTopLevelSitePolicy();
+}
+
+function broadcastTopLevelSitePolicy(): void {
+  const childFrames = getChildFrameWindows();
+  if (childFrames.length === 0) {
+    return;
+  }
+
+  postMessageToFrames(childFrames, createSitePolicyMessage());
 }
 
 function isFrameActionMessage(data: unknown): data is FrameMessage {
@@ -1675,11 +1721,15 @@ function isFrameActionMessage(data: unknown): data is FrameMessage {
   }
 
   const message = data as Partial<FrameMessage>;
-  return (
-    message.source === MESSAGE_SOURCE &&
-    typeof message.type === "string" &&
-    typeof message.requestId === "string"
-  );
+  if (message.source !== MESSAGE_SOURCE || typeof message.type !== "string") {
+    return false;
+  }
+
+  if (message.type === SITE_POLICY_TYPE) {
+    return typeof (message as Partial<FrameSitePolicyMessage>).disabled === "boolean";
+  }
+
+  return typeof (message as Partial<FrameActionRequestMessage>).requestId === "string";
 }
 
 function createFrameActionRequest(action: MediaAction): FrameActionRequestMessage {
@@ -1692,10 +1742,17 @@ function createFrameActionRequest(action: MediaAction): FrameActionRequestMessag
 }
 
 function getChildFrameWindows(): Window[] {
+  if (typeof document === "undefined") {
+    return [];
+  }
+
   return findIframeWindows(document);
 }
 
-function postMessageToFrames(frameWindows: Window[], message: FrameActionRequestMessage): boolean {
+function postMessageToFrames(
+  frameWindows: Window[],
+  message: FrameActionRequestMessage | FrameSitePolicyMessage,
+): boolean {
   let posted = false;
 
   for (const frameWindow of frameWindows) {
@@ -1739,7 +1796,7 @@ export function delegateActionToChildFrames(action: MediaAction): Promise<boolea
 }
 
 async function handleIncomingFrameAction(action: MediaAction): Promise<boolean> {
-  if (!settings.quickSettings.hotkeysEnabled) {
+  if (!settings.quickSettings.hotkeysEnabled || isSiteDisabledByPolicy()) {
     return false;
   }
 
@@ -1775,6 +1832,17 @@ function handleFrameMessage(event: MessageEvent): void {
   }
 
   if (!isFrameActionMessage(event.data)) {
+    return;
+  }
+
+  if (event.data.type === SITE_POLICY_TYPE) {
+    if (isTopWindow() || event.source !== window.parent) {
+      return;
+    }
+
+    topLevelSitePolicyDisabled = event.data.disabled;
+    topLevelSitePolicyDisabledForEmbeds = event.data.disabled;
+    broadcastTopLevelSitePolicy();
     return;
   }
 
@@ -1833,6 +1901,7 @@ function hasReservedModifier(e: KeyboardEvent): boolean {
 
 async function handleKeyDown(e: KeyboardEvent): Promise<void> {
   if (!settings.quickSettings.hotkeysEnabled) return;
+  if (isSiteDisabledByPolicy()) return;
   if (isEditableKeyEvent(e)) return;
   if (hasReservedModifier(e)) return;
 

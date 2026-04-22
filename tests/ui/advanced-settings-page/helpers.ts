@@ -33,6 +33,7 @@ vi.mock("../../../src/storage.js", async () => {
 });
 
 export function renderAdvancedSettingsDom(): void {
+  Element.prototype.scrollIntoView = vi.fn();
   document.body.innerHTML = `
     <input type="number" id="volumeStep" min="1" max="10" step="1" />
     <input type="number" id="speedMin" min="0.1" max="1" step="0.05" />
@@ -49,6 +50,21 @@ export function renderAdvancedSettingsDom(): void {
     <input type="number" id="overlayVisibleDuration" min="0" max="1000" step="50" />
     <input type="number" id="overlayFadeDuration" min="0" max="2000" step="50" />
     <input id="debugLogging" type="checkbox" />
+    <section id="site-policies-section">
+      <table>
+        <thead>
+          <tr>
+            <th>URL</th>
+            <th>Page Policy</th>
+            <th>Embeds Policy</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="site-policies-list"></tbody>
+      </table>
+      <div id="site-policies-error" aria-live="polite"></div>
+      <button id="add-site-policy" type="button"></button>
+    </section>
     <button id="reset"></button>
     <div id="announcements" aria-live="polite" aria-atomic="true"></div>
   `;
@@ -62,9 +78,11 @@ export function resetAdvancedSettingsTestState(): void {
 
 export async function loadAdvancedSettingsModule(
   settings = structuredClone(DEFAULT_SETTINGS),
+  search = "",
 ): Promise<void> {
   vi.resetModules();
   renderAdvancedSettingsDom();
+  window.history.pushState({}, "", `/${search}`);
   getSettingsMock.mockResolvedValue(structuredClone(settings));
   saveSettingsMock.mockResolvedValue(undefined);
   await import("../../../src/advanced-settings-page.js");

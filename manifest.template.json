@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Media Hotkeys",
   "description": "Adds hotkeys to control HTML video or audio on any webpage",
-  "permissions": ["storage"],
+  "permissions": ["storage", "activeTab"],
   "icons": {
     "16": "assets/icon16.png",
     "32": "assets/icon32.png",

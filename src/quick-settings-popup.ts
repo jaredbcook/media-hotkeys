@@ -1,10 +1,16 @@
 import browser from "webextension-polyfill";
+import { DELETE } from "./icons.js";
 import {
   type ConfigurableMediaAction,
   type ExtensionSettings,
+  type SitePolicy,
   DEFAULT_QUICK_SETTINGS,
+  findMatchingSitePolicy,
+  getDisabledSitePrefillForUrl,
+  getSitePolicySectionPatternForUrl,
   getSettings,
   normalizeHotkeyKey,
+  normalizeSitePolicies,
   saveSettings,
   settingsEqual,
 } from "./storage.js";
@@ -53,6 +59,8 @@ let activeKeyCaptureCleanup: (() => void) | undefined;
 let pendingSave: Promise<void> = Promise.resolve();
 let activeBindingAnnouncement: HTMLDivElement | undefined;
 let bindingAnnouncementFrameId: number | undefined;
+
+const DISABLED_SITE_HIGHLIGHT_URL_PARAM = "highlightDisabledSiteUrl";
 
 function displayKey(key: string): string {
   return KEY_DISPLAY[key] ?? key;
@@ -205,19 +213,19 @@ function renderActionKeyBindingsTable(): void {
       chip.className = "key-chip";
       chip.innerHTML = `<span class="key-chip-label">${renderKeyChipLabel(key)}</span>`;
 
-      const removeBtn = document.createElement("button");
-      removeBtn.type = "button";
-      removeBtn.className = "remove-key-button";
-      removeBtn.innerHTML = `<span aria-hidden="true">\u00d7</span>`;
-      removeBtn.setAttribute(
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "delete-button";
+      deleteButton.innerHTML = `<span class="delete-icon" aria-hidden="true">${DELETE}</span>`;
+      deleteButton.setAttribute(
         "aria-label",
-        `Remove ${accessibleKeyLabel(key)} from ${actionLabel} action`,
+        `Remove ${accessibleKeyLabel(key)} key from ${actionLabel} action`,
       );
-      removeBtn.addEventListener("click", () => {
+      deleteButton.addEventListener("click", () => {
         removeKeyFromAction(action, key);
       });
 
-      chip.appendChild(removeBtn);
+      chip.appendChild(deleteButton);
       chipsContainer.appendChild(chip);
     }
 
@@ -233,6 +241,221 @@ function renderActionKeyBindingsTable(): void {
     tdKeys.appendChild(chipsContainer);
     tr.appendChild(tdKeys);
     tbody.appendChild(tr);
+  }
+}
+
+async function getActiveTabUrl(): Promise<string | null> {
+  const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+  return tabs[0]?.url ?? null;
+}
+
+function getAdvancedSettingsUrl(params?: Record<string, string>): string {
+  const advancedSettingsUrl = new URL(browser.runtime.getURL("advanced-settings-page.html"));
+
+  for (const [key, value] of Object.entries(params ?? {})) {
+    advancedSettingsUrl.searchParams.set(key, value);
+  }
+
+  return advancedSettingsUrl.href;
+}
+
+async function openAdvancedSettingsPage(params?: Record<string, string>): Promise<void> {
+  await browser.tabs.create({
+    url: getAdvancedSettingsUrl(params),
+  });
+  window.close();
+}
+
+function setUnavailableSiteControls(): void {
+  const container = document.getElementById("site-controls-container");
+  if (container) {
+    container.style.display = "none";
+  }
+}
+
+function resetSiteControlButton(): HTMLButtonElement | null {
+  const button = document.getElementById("site-control-button") as HTMLButtonElement | null;
+  if (!button) {
+    return null;
+  }
+
+  const nextButton = button.cloneNode() as HTMLButtonElement;
+  button.replaceWith(nextButton);
+  return nextButton;
+}
+
+function resetSiteEditButton(): HTMLButtonElement | null {
+  const button = document.getElementById("site-edit-rule-button") as HTMLButtonElement | null;
+  if (!button) {
+    return null;
+  }
+
+  const nextButton = button.cloneNode() as HTMLButtonElement;
+  button.replaceWith(nextButton);
+  return nextButton;
+}
+
+function getSiteControlStatus(): HTMLParagraphElement | null {
+  return document.getElementById("site-control-status") as HTMLParagraphElement | null;
+}
+
+function setSiteControlStatus(message: string): void {
+  const status = getSiteControlStatus();
+  if (status) {
+    status.textContent = message;
+  }
+}
+
+function withoutSitePolicyPattern(policies: SitePolicy[], pattern: string): SitePolicy[] {
+  return policies.filter((policy) => policy.pattern !== pattern);
+}
+
+function hasBroaderDisabledPolicy(activeTabUrl: string, excludedPattern: string): boolean {
+  return (
+    findMatchingSitePolicy(activeTabUrl, {
+      ...currentSettings.siteSettings,
+      sitePolicies: currentSettings.siteSettings.sitePolicies.filter(
+        (policy) => policy.pattern !== excludedPattern,
+      ),
+    })?.policy === "disabled"
+  );
+}
+
+async function persistSitePolicies(
+  sitePolicies: SitePolicy[],
+  successMessage: string,
+): Promise<void> {
+  const nextSettings = structuredClone(currentSettings);
+  nextSettings.siteSettings.sitePolicies = normalizeSitePolicies(sitePolicies);
+  nextSettings.siteSettings.disabledUrlPatterns = nextSettings.siteSettings.sitePolicies
+    .filter((policy) => policy.policy === "disabled")
+    .map((policy) => policy.pattern);
+  await persistSettings(nextSettings, { successMessage });
+  void renderSiteControls();
+}
+
+function addOrReplaceSitePolicy(policy: SitePolicy): SitePolicy[] {
+  return [
+    ...withoutSitePolicyPattern(currentSettings.siteSettings.sitePolicies, policy.pattern),
+    policy,
+  ];
+}
+
+async function renderSiteControls(): Promise<void> {
+  const container = document.getElementById("site-controls-container");
+  const button = resetSiteControlButton();
+  const editButton = resetSiteEditButton();
+  if (!container || !button) {
+    return;
+  }
+  const status = getSiteControlStatus();
+  if (status) {
+    status.textContent = "";
+  }
+  if (editButton) {
+    editButton.style.display = "none";
+  }
+
+  try {
+    const activeTabUrl = await getActiveTabUrl();
+    if (!activeTabUrl) {
+      setUnavailableSiteControls();
+      return;
+    }
+
+    const hostPattern = getDisabledSitePrefillForUrl(activeTabUrl);
+    const sectionPattern = getSitePolicySectionPatternForUrl(activeTabUrl);
+    if (!hostPattern || !sectionPattern) {
+      setUnavailableSiteControls();
+      return;
+    }
+
+    const matchingPolicy = findMatchingSitePolicy(activeTabUrl, currentSettings.siteSettings);
+    const editMatchingRule = () => {
+      void openAdvancedSettingsPage({
+        [DISABLED_SITE_HIGHLIGHT_URL_PARAM]: activeTabUrl,
+      });
+    };
+
+    if (matchingPolicy?.policy === "disabled") {
+      container.style.display = "";
+      setSiteControlStatus(`Media Hotkeys disabled by rule: ${matchingPolicy.pattern}`);
+      if (matchingPolicy.pattern === sectionPattern) {
+        button.textContent = "Enable on this site";
+        button.addEventListener("click", () => {
+          void persistSitePolicies(
+            withoutSitePolicyPattern(
+              currentSettings.siteSettings.sitePolicies,
+              matchingPolicy.pattern,
+            ),
+            `Enabled on ${matchingPolicy.pattern}`,
+          );
+        });
+      } else {
+        button.textContent = "Enable on this section";
+        button.addEventListener("click", () => {
+          void persistSitePolicies(
+            addOrReplaceSitePolicy({
+              pattern: sectionPattern,
+              policy: "enabled",
+              embedsPolicy: "inherit",
+            }),
+            `Enabled on ${sectionPattern}`,
+          );
+        });
+      }
+      if (editButton) {
+        editButton.style.display = "";
+        editButton.textContent = "Edit site rule";
+        editButton.addEventListener("click", editMatchingRule);
+      }
+      return;
+    }
+
+    if (matchingPolicy?.policy === "enabled") {
+      container.style.display = "";
+      setSiteControlStatus(`Media Hotkeys enabled by rule: ${matchingPolicy.pattern}`);
+      button.textContent = "Disable on this section";
+      button.addEventListener("click", () => {
+        const remainingPolicies = withoutSitePolicyPattern(
+          currentSettings.siteSettings.sitePolicies,
+          matchingPolicy.pattern,
+        );
+        const nextPolicies = hasBroaderDisabledPolicy(activeTabUrl, matchingPolicy.pattern)
+          ? remainingPolicies
+          : [
+              ...withoutSitePolicyPattern(remainingPolicies, sectionPattern),
+              {
+                pattern: sectionPattern,
+                policy: "disabled" as const,
+                embedsPolicy: "inherit" as const,
+              },
+            ];
+        void persistSitePolicies(nextPolicies, `Disabled on ${sectionPattern}`);
+      });
+      if (editButton) {
+        editButton.style.display = "";
+        editButton.textContent = "Edit site rule";
+        editButton.addEventListener("click", editMatchingRule);
+      }
+      return;
+    }
+
+    container.style.display = "";
+    setSiteControlStatus(`Media Hotkeys enabled on ${hostPattern}`);
+    button.textContent = `Disable on ${hostPattern}`;
+    button.addEventListener("click", () => {
+      void persistSitePolicies(
+        addOrReplaceSitePolicy({
+          pattern: hostPattern,
+          policy: "disabled",
+          embedsPolicy: "inherit",
+        }),
+        `Disabled on ${hostPattern}`,
+      );
+    });
+  } catch {
+    setUnavailableSiteControls();
   }
 }
 
@@ -329,6 +552,7 @@ async function init(): Promise<void> {
   (document.getElementById("hotkeysEnabled") as HTMLInputElement).checked =
     currentSettings.quickSettings.hotkeysEnabled;
   renderActionKeyBindingsTable();
+  void renderSiteControls();
 
   document.getElementById("hotkeysEnabled")?.addEventListener("change", () => {
     const hotkeysEnabled = (document.getElementById("hotkeysEnabled") as HTMLInputElement).checked;

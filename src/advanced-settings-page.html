@@ -93,6 +93,42 @@
         </div>
       </section>
 
+      <section
+        class="settings-section settings-section-wide"
+        id="site-policies-section"
+        aria-labelledby="site-policies-title"
+      >
+        <h2 id="site-policies-title">Site Policies</h2>
+        <p>
+          More specific URL patterns beat more generic ones. For example, you can disable Media
+          Hotkeys on youtube.com, but enable it on youtube.com/shorts.
+        </p>
+        <p>
+          Embeds (iframes) inherit policies from the page they're embedded in by default, but may be
+          set to ignore them. This can be useful in rare edge cases.
+        </p>
+        <table class="site-policies-table">
+          <caption class="screen-reader">
+            Site policies and iframe inheritance behavior.
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">URL</th>
+              <th scope="col">Page Policy</th>
+              <th scope="col">Embeds Policy</th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="site-policies-list">
+            <!-- populated by advanced-settings-page.ts -->
+          </tbody>
+        </table>
+        <div id="site-policies-error" class="error-message" aria-live="polite"></div>
+        <div class="button-group">
+          <button id="add-site-policy" type="button">Add site policy</button>
+        </div>
+      </section>
+
       <section class="settings-section" aria-labelledby="advanced-settings-title">
         <h2 id="advanced-settings-title">Miscellaneous</h2>
         <div class="settings-grid settings-grid-single">

@@ -36,5 +36,9 @@
     "overlayVisibleDuration": 500,
     "overlayFadeDuration": 250,
     "debugLogging": false
+  },
+  "siteSettings": {
+    "sitePolicies": [],
+    "disabledUrlPatterns": []
   }
 }

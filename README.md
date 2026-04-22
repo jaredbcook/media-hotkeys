@@ -15,12 +15,13 @@ Browser extension that adds hotkeys to control HTML video or audio on any websit
 - **Visual feedback**: If enabled, shows a temporary overlay for most actions.
 - **Smart selection**: Automatically selects the best media element to control even if it doesn't have focus, while skipping muted videos without native controls as likely ambient/background media.
 - **Cross-origin support**: Works with media embedded in iframes or in the shadow DOM.
-- **Grouped settings**: Quick settings cover the global enabled toggle and action key bindings, while advanced settings cover playback, skip, overlay, and debugging behavior.
+- **Grouped settings**: Quick settings cover the global enabled toggle, action key bindings, and current-site policy controls, while advanced settings cover playback, skip, overlay, site policy rules, and debugging behavior.
 - **Settings sync**: Syncs your extension settings between devices that have the extension installed (must be signed in and have extension sync enabled).
 
 ## Default Hotkeys
 
 Note: Hotkeys are ignored if focus is on a text input or other editable element.
+Hotkeys are also ignored on pages whose effective site policy is disabled.
 
 | Action                 | Key                 | Notes                                            |
 | ---------------------- | ------------------- | ------------------------------------------------ |
@@ -64,6 +65,14 @@ Note: Hotkeys are ignored if focus is on a text input or other editable element.
 | Overlay position                    | Center        |
 | Overlay visible time                | 500ms         |
 | Overlay fade duration               | 250ms         |
+
+### Site Policies
+
+Advanced Settings includes site policies for sites where native page shortcuts should win.
+Rules can be domains such as `youtube.com` or paths such as `youtube.com/shorts`, and more specific paths override broader domain rules.
+For example, `youtube.com` can be disabled while `youtube.com/shorts` is enabled.
+Quick Settings can immediately disable the current hostname, enable a more specific current section, or open the matching rule for editing.
+Policies apply to top-level pages by default. Embedded frames inherit a disabled top-level page policy unless that rule's embeds policy is set to ignore.
 
 ## Installation — Chrome (Developer Mode)
 

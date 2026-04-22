@@ -6,17 +6,28 @@ const hoistedMocks = vi.hoisted(() => ({
   getSettingsMock: vi.fn<[], Promise<ExtensionSettings>>(),
   saveSettingsMock: vi.fn(),
   openOptionsPageMock: vi.fn(),
+  runtimeGetUrlMock: vi.fn((path: string) => `chrome-extension://test/${path}`),
+  tabsCreateMock: vi.fn(),
+  tabsQueryMock: vi.fn(),
 }));
 
 export const getSettingsMock = hoistedMocks.getSettingsMock;
 export const saveSettingsMock = hoistedMocks.saveSettingsMock;
 export const openOptionsPageMock = hoistedMocks.openOptionsPageMock;
+export const runtimeGetUrlMock = hoistedMocks.runtimeGetUrlMock;
+export const tabsCreateMock = hoistedMocks.tabsCreateMock;
+export const tabsQueryMock = hoistedMocks.tabsQueryMock;
 const DEFAULT_SETTINGS = defaults as ExtensionSettings;
 
 vi.mock("webextension-polyfill", () => ({
   default: {
     runtime: {
+      getURL: runtimeGetUrlMock,
       openOptionsPage: openOptionsPageMock,
+    },
+    tabs: {
+      create: tabsCreateMock,
+      query: tabsQueryMock,
     },
     storage: {
       sync: {
@@ -41,6 +52,11 @@ export function renderQuickSettingsDom(): void {
   document.body.innerHTML = `
     <input id="hotkeysEnabled" type="checkbox" />
     <table><tbody id="actions-body"></tbody></table>
+    <div id="site-controls-container">
+      <p id="site-control-status"></p>
+      <button id="site-control-button"></button>
+      <button id="site-edit-rule-button"></button>
+    </div>
     <div id="announcements"></div>
     <div id="announcement-live-region" class="screen-reader" aria-live="polite" aria-atomic="true"></div>
     <button id="reset"></button>
@@ -53,17 +69,24 @@ export function resetQuickSettingsTestState(): void {
   getSettingsMock.mockReset();
   saveSettingsMock.mockReset();
   openOptionsPageMock.mockReset();
+  runtimeGetUrlMock.mockReset();
+  runtimeGetUrlMock.mockImplementation((path: string) => `chrome-extension://test/${path}`);
+  tabsCreateMock.mockReset();
+  tabsQueryMock.mockReset();
   document.body.innerHTML = "";
 }
 
 export async function loadQuickSettingsModule(
   settings = structuredClone(DEFAULT_SETTINGS),
+  activeTabUrl = "https://example.com/watch",
 ): Promise<void> {
   vi.resetModules();
   renderQuickSettingsDom();
   getSettingsMock.mockResolvedValue(structuredClone(settings));
   saveSettingsMock.mockResolvedValue(undefined);
   openOptionsPageMock.mockResolvedValue(undefined);
+  tabsCreateMock.mockResolvedValue({});
+  tabsQueryMock.mockResolvedValue([{ url: activeTabUrl }]);
   window.close = vi.fn();
   await import("../../../src/quick-settings-popup.js");
   await Promise.resolve();

@@ -266,6 +266,12 @@ export const test = base.extend<Fixtures>({
       "/": {
         body: createFixturePage("Media Hotkeys E2E", ""),
       },
+      "/shorts": {
+        body: createFixturePage("Media Hotkeys E2E Shorts", ""),
+      },
+      "/watch": {
+        body: createFixturePage("Media Hotkeys E2E Watch", ""),
+      },
       "/silence.wav": {
         contentType: "audio/wav",
         body: createSilentWavBuffer(12),

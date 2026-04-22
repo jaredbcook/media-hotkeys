@@ -3,8 +3,17 @@ import browser from "webextension-polyfill";
 import {
   DEFAULT_ADVANCED_SETTINGS,
   DEFAULT_QUICK_SETTINGS,
+  DEFAULT_SITE_SETTINGS,
   DEFAULT_SETTINGS,
+  findMatchingDisabledUrlPattern,
+  findMatchingSitePolicy,
   getSettings,
+  getDisabledSitePrefillForUrl,
+  getSitePolicySectionPatternForUrl,
+  isUrlDisabledBySiteSettings,
+  normalizeDisabledUrlPattern,
+  normalizeDisabledUrlPatterns,
+  normalizeSitePolicies,
   saveSettings,
 } from "../../../src/storage.js";
 
@@ -36,6 +45,7 @@ describe("settings storage", () => {
     expect(settings).toMatchObject(DEFAULT_SETTINGS);
     expect(settings.quickSettings).toEqual(DEFAULT_QUICK_SETTINGS);
     expect(settings.advancedSettings).toEqual(DEFAULT_ADVANCED_SETTINGS);
+    expect(settings.siteSettings).toEqual(DEFAULT_SITE_SETTINGS);
     expect(settings.quickSettings.actionKeyBindings).toEqual(
       DEFAULT_SETTINGS.quickSettings.actionKeyBindings,
     );
@@ -144,5 +154,147 @@ describe("settings storage", () => {
     expect(store.advancedSettings).toMatchObject({
       showOverlays: false,
     });
+  });
+
+  it("normalizes disabled URL patterns and drops invalid entries", async () => {
+    await saveSettings({
+      siteSettings: {
+        disabledUrlPatterns: [
+          "https://www.youtube.com/shorts?feature=share#clip",
+          "youtube.com/shorts/",
+          "not a site",
+        ],
+      },
+    });
+
+    const settings = await getSettings();
+    expect(settings.siteSettings.disabledUrlPatterns).toEqual(["youtube.com/shorts"]);
+    expect(settings.siteSettings.sitePolicies).toEqual([
+      { pattern: "youtube.com/shorts", policy: "disabled", embedsPolicy: "inherit" },
+    ]);
+  });
+
+  it("normalizes site policies and derives legacy disabled URL patterns", async () => {
+    await saveSettings({
+      siteSettings: {
+        sitePolicies: [
+          {
+            pattern: "https://www.youtube.com/shorts?feature=share#clip",
+            policy: "enabled",
+            embedsPolicy: "ignore",
+          },
+          { pattern: "vimeo.com", policy: "disabled", embedsPolicy: "inherit" },
+          { pattern: "not a site", policy: "disabled", embedsPolicy: "inherit" },
+        ],
+      },
+    });
+
+    const settings = await getSettings();
+    expect(settings.siteSettings.sitePolicies).toEqual([
+      { pattern: "vimeo.com", policy: "disabled", embedsPolicy: "inherit" },
+      { pattern: "youtube.com/shorts", policy: "enabled", embedsPolicy: "ignore" },
+    ]);
+    expect(settings.siteSettings.disabledUrlPatterns).toEqual(["vimeo.com"]);
+  });
+
+  it("matches disabled URL patterns against top-level URLs", () => {
+    const siteSettings = {
+      sitePolicies: [
+        { pattern: "youtube.com/shorts", policy: "disabled" as const, embedsPolicy: "inherit" },
+        { pattern: "vimeo.com", policy: "disabled" as const, embedsPolicy: "inherit" },
+      ],
+      disabledUrlPatterns: ["youtube.com/shorts", "vimeo.com"],
+    };
+
+    expect(isUrlDisabledBySiteSettings("https://www.youtube.com/shorts/abc", siteSettings)).toBe(
+      true,
+    );
+    expect(isUrlDisabledBySiteSettings("https://www.youtube.com/watch?v=1", siteSettings)).toBe(
+      false,
+    );
+    expect(isUrlDisabledBySiteSettings("https://player.vimeo.com/video/1", siteSettings)).toBe(
+      true,
+    );
+  });
+
+  it("uses more specific enabled site policies over broader disabled policies", () => {
+    const siteSettings = {
+      sitePolicies: [
+        { pattern: "youtube.com", policy: "disabled" as const, embedsPolicy: "inherit" },
+        { pattern: "youtube.com/shorts", policy: "enabled" as const, embedsPolicy: "inherit" },
+      ],
+      disabledUrlPatterns: ["youtube.com"],
+    };
+
+    expect(findMatchingSitePolicy("https://www.youtube.com/shorts/abc", siteSettings)?.policy).toBe(
+      "enabled",
+    );
+    expect(isUrlDisabledBySiteSettings("https://www.youtube.com/shorts/abc", siteSettings)).toBe(
+      false,
+    );
+    expect(isUrlDisabledBySiteSettings("https://www.youtube.com/watch?v=1", siteSettings)).toBe(
+      true,
+    );
+  });
+
+  it("normalizes missing and invalid embed policies to inherit", () => {
+    expect(
+      normalizeSitePolicies([
+        { pattern: "youtube.com", policy: "disabled" as const },
+        {
+          pattern: "vimeo.com",
+          policy: "disabled" as const,
+          embedsPolicy: "unsupported" as "inherit",
+        },
+      ]),
+    ).toEqual([
+      { pattern: "vimeo.com", policy: "disabled", embedsPolicy: "inherit" },
+      { pattern: "youtube.com", policy: "disabled", embedsPolicy: "inherit" },
+    ]);
+  });
+
+  it("sorts normalized site policies alphabetically", () => {
+    expect(
+      normalizeSitePolicies([
+        { pattern: "youtube.com/shorts", policy: "enabled", embedsPolicy: "inherit" },
+        { pattern: "vimeo.com", policy: "disabled", embedsPolicy: "inherit" },
+        { pattern: "youtube.com", policy: "disabled", embedsPolicy: "inherit" },
+      ]),
+    ).toEqual([
+      { pattern: "vimeo.com", policy: "disabled", embedsPolicy: "inherit" },
+      { pattern: "youtube.com", policy: "disabled", embedsPolicy: "inherit" },
+      { pattern: "youtube.com/shorts", policy: "enabled", embedsPolicy: "inherit" },
+    ]);
+  });
+
+  it("normalizes URL-ish disabled site entries", () => {
+    expect(normalizeDisabledUrlPattern("https://www.bbc.co.uk/news?x=1#top")).toBe(
+      "bbc.co.uk/news",
+    );
+    expect(normalizeDisabledUrlPattern("youtube.com/shorts/")).toBe("youtube.com/shorts");
+    expect(normalizeDisabledUrlPattern("not a site")).toBeNull();
+    expect(normalizeDisabledUrlPatterns(["youtube.com", "https://www.youtube.com/"])).toEqual([
+      "youtube.com",
+    ]);
+  });
+
+  it("finds a matching disabled pattern and prefill domain for a URL", () => {
+    expect(
+      findMatchingDisabledUrlPattern("https://www.youtube.com/shorts/abc", ["youtube.com/shorts"]),
+    ).toBe("youtube.com/shorts");
+    expect(getDisabledSitePrefillForUrl("https://www.youtube.com/shorts/abc")).toBe("youtube.com");
+    expect(getSitePolicySectionPatternForUrl("https://www.youtube.com/shorts/abc")).toBe(
+      "youtube.com/shorts",
+    );
+    expect(getDisabledSitePrefillForUrl("chrome://extensions")).toBeNull();
+  });
+
+  it("deduplicates site policies by topmost rule", () => {
+    expect(
+      normalizeSitePolicies([
+        { pattern: "youtube.com", policy: "disabled", embedsPolicy: "inherit" },
+        { pattern: "https://www.youtube.com/", policy: "enabled", embedsPolicy: "ignore" },
+      ]),
+    ).toEqual([{ pattern: "youtube.com", policy: "disabled", embedsPolicy: "inherit" }]);
   });
 });

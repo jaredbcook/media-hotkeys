@@ -71,6 +71,7 @@ export function makeInvalidVideo(): HTMLVideoElement {
 }
 
 export function resetContentTestState(): void {
+  window.history.pushState({}, "", "/");
   document.body.innerHTML = "";
   vi.restoreAllMocks();
   storageGetMock.mockImplementation(async () => ({}));

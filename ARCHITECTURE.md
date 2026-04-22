@@ -117,12 +117,12 @@ The extension is native-media first: it targets real `HTMLMediaElement` instance
 ### Quick Settings Popup (`src/quick-settings-popup.html`, `quick-settings-popup.ts`)
 
 - Stored in `chrome.storage.sync` for cross-device persistence
-- Configurable: global hotkeys enabled state and per-action key bindings
+- Configurable: global hotkeys enabled state, per-action key bindings, and current-site policy controls
 
 ### Advanced Settings Page (`src/advanced-settings-page.html`, `advanced-settings-page.ts`)
 
 - Options stored in `chrome.storage.sync` for cross-device persistence
-- Configurable: speed limits/step, seek steps, volume step, overlay display settings, debug logging
+- Configurable: speed limits/step, seek steps, volume step, overlay display settings, site policy rules, debug logging
 
 ## Key Design Patterns
 
@@ -135,6 +135,8 @@ The extension is native-media first: it targets real `HTMLMediaElement` instance
 **Cross-Frame Communication:**
 
 - Uses `postMessage` to forward keyboard commands to iframe content scripts
+- Uses `postMessage` to propagate top-level site policy into child frames
+- Embedded frames inherit a disabled top-level site policy by default; a matching top-level rule can set its embeds policy to ignore so child frames are not disabled by that parent page rule
 - Each frame runs its own content script instance independently
 - Frame isolation by design (per Manifest V3 security model)
 
@@ -150,6 +152,7 @@ The extension is native-media first: it targets real `HTMLMediaElement` instance
 - Grouped settings model:
   - `quickSettings` contains the global enabled toggle and action key bindings
   - `advancedSettings` contains playback, seek, overlay, and debugging behavior
+  - `siteSettings.sitePolicies` contains autosaved URL-ish rules with `disabled` or `enabled` page modes and an `inherit` or `ignore` embeds policy
 
 ## Tech Stack
 
@@ -184,7 +187,7 @@ Pages often contain multiple `<video>` and/or `<audio>` elements (ads, thumbnail
 
 ### Site Conflicts
 
-Sites like YouTube have their own native keyboard shortcuts. Needs `stopPropagation`/`preventDefault` logic and ability to disable plugin shortcuts per site.
+Sites like YouTube have their own native keyboard shortcuts. Media Hotkeys captures mapped keys before most page handlers by default, but users can add site policies such as `youtube.com` disabled and `youtube.com/shorts` enabled from Advanced Settings. More specific path rules override broader domain rules. Top-level disabled policy is forwarded to child frames by default so iframe handlers cannot bypass a disabled page, and each matching top-level rule can set its embeds policy to ignore when child frames should keep handling Media Hotkeys.
 
 ### Safari Conversion
 

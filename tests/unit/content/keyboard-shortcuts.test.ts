@@ -102,6 +102,64 @@ describe("keyboard shortcut routing", () => {
     expect(playSpy).not.toHaveBeenCalled();
   });
 
+  it("does not prevent mapped keys when the top-level URL matches a disabled site rule", async () => {
+    window.history.pushState({}, "", "/shorts/clip");
+    const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
+    const settings = structuredClone(DEFAULT_SETTINGS);
+    settings.siteSettings.sitePolicies = [
+      { pattern: "localhost/shorts", policy: "disabled", embedsPolicy: "inherit" },
+    ];
+    settings.siteSettings.disabledUrlPatterns = ["localhost/shorts"];
+    setSettingsForTests(settings);
+    const event = new KeyboardEvent("keydown", {
+      key: "k",
+      bubbles: true,
+      cancelable: true,
+    });
+    const preventDefaultSpy = vi.spyOn(event, "preventDefault");
+
+    document.dispatchEvent(event);
+    await Promise.resolve();
+
+    expect(playSpy).not.toHaveBeenCalled();
+    expect(preventDefaultSpy).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("handles mapped keys when the top-level URL does not match a disabled path rule", async () => {
+    window.history.pushState({}, "", "/watch/clip");
+    const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
+    const settings = structuredClone(DEFAULT_SETTINGS);
+    settings.siteSettings.sitePolicies = [
+      { pattern: "localhost/shorts", policy: "disabled", embedsPolicy: "inherit" },
+    ];
+    settings.siteSettings.disabledUrlPatterns = ["localhost/shorts"];
+    setSettingsForTests(settings);
+
+    await dispatchMappedKey("k");
+
+    expect(playSpy).toHaveBeenCalled();
+  });
+
+  it("handles mapped keys when a specific enabled rule overrides a broad disabled rule", async () => {
+    window.history.pushState({}, "", "/shorts/clip");
+    const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
+    const settings = structuredClone(DEFAULT_SETTINGS);
+    settings.siteSettings.sitePolicies = [
+      { pattern: "localhost", policy: "disabled", embedsPolicy: "inherit" },
+      { pattern: "localhost/shorts", policy: "enabled", embedsPolicy: "inherit" },
+    ];
+    settings.siteSettings.disabledUrlPatterns = ["localhost"];
+    setSettingsForTests(settings);
+
+    await dispatchMappedKey("k");
+
+    expect(playSpy).toHaveBeenCalled();
+  });
+
   it("does nothing when no media exists for a mapped key", async () => {
     await dispatchMappedKey("k");
   });
