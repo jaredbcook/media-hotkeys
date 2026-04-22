@@ -5,19 +5,13 @@ import {
   saveSettings,
   type ExtensionSettings,
 } from "./storage.js";
+import { showStatusToast } from "./status-toast.js";
 
 let currentSettings: ExtensionSettings;
 let pendingSave: Promise<void> = Promise.resolve();
 
 function showStatus(): void {
-  const status = document.getElementById("status");
-  if (!status) {
-    return;
-  }
-
-  status.textContent = "Settings saved.";
-  status.classList.add("visible");
-  window.setTimeout(() => status.classList.remove("visible"), 2000);
+  showStatusToast("Settings saved.", "success");
 }
 
 function persistSettings(): Promise<void> {

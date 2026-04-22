@@ -50,7 +50,9 @@ test("persists debug logging and applies it to content scripts", async ({ page, 
 
   await expect(page.locator("#debugLogging")).not.toBeChecked();
   await page.locator("#debugLogging").check();
-  await expect(page.locator("#status")).toHaveClass(/visible/);
+  const statusToast = page.locator("#announcements .announcement").last();
+  await expect(statusToast).toContainText("Settings saved.");
+  await expect(statusToast).toHaveClass(/announcement-visible/);
   await expect
     .poll(() =>
       page.evaluate(() => {

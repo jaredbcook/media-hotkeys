@@ -50,6 +50,9 @@ describe("advanced settings page: load and save", () => {
         volumeStep: 0.02,
       }),
     });
+    expect(document.querySelector("#announcements .announcement")?.textContent).toContain(
+      "Settings saved.",
+    );
   });
 
   it("saves checkbox changes on change", async () => {
@@ -66,6 +69,9 @@ describe("advanced settings page: load and save", () => {
         useNumberKeysToJump: false,
       }),
     });
+    expect(document.querySelector("#announcements .announcement")?.getAttribute("role")).toBe(
+      "status",
+    );
   });
 
   it("saves debug logging changes on change", async () => {

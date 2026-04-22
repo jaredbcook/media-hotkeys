@@ -50,7 +50,7 @@ export function renderAdvancedSettingsDom(): void {
     <input id="overlayFadeDuration" />
     <input id="debugLogging" type="checkbox" />
     <button id="reset"></button>
-    <span id="status"></span>
+    <div id="announcements" aria-live="polite" aria-atomic="true"></div>
   `;
 }
 

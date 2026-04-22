@@ -7,6 +7,7 @@ import {
   normalizeHotkeyKey,
   saveSettings,
 } from "./storage.js";
+import { showStatusToast, type StatusToastTone } from "./status-toast.js";
 
 const ACTION_LABELS: Record<ConfigurableMediaAction, string> = {
   togglePlayPause: "Play/Pause",
@@ -49,12 +50,8 @@ const KEY_ACCESSIBLE_LABELS: Record<string, string> = {
 let currentSettings: ExtensionSettings;
 let activeKeyCaptureCleanup: (() => void) | undefined;
 let pendingSave: Promise<void> = Promise.resolve();
-let announcementTimeoutId: number | undefined;
-let activeAnnouncement: HTMLDivElement | undefined;
 let activeBindingAnnouncement: HTMLDivElement | undefined;
 let bindingAnnouncementFrameId: number | undefined;
-
-type AnnouncementTone = "success" | "error";
 
 function displayKey(key: string): string {
   return KEY_DISPLAY[key] ?? key;
@@ -75,24 +72,6 @@ function renderKeyChipLabel(key: string): string {
   return `<span aria-hidden="true">${visibleLabel}</span><span class="screen-reader">${srLabel}</span>`;
 }
 
-function removeAnnouncement(announcement: HTMLDivElement): void {
-  if (activeAnnouncement !== announcement) {
-    return;
-  }
-
-  window.clearTimeout(announcementTimeoutId);
-  announcementTimeoutId = undefined;
-
-  announcement.classList.remove("announcement-visible");
-
-  window.setTimeout(() => {
-    if (activeAnnouncement === announcement) {
-      announcement.remove();
-      activeAnnouncement = undefined;
-    }
-  }, 240);
-}
-
 function getAnnouncementsContainer(): HTMLDivElement | null {
   const announcements = document.getElementById("announcements");
   if (!announcements) {
@@ -111,42 +90,10 @@ function getAnnouncementLiveRegion(): HTMLDivElement | null {
   return liveRegion as HTMLDivElement;
 }
 
-function showAnnouncement(message: string, tone: AnnouncementTone): void {
+function showAnnouncement(message: string, tone: StatusToastTone): void {
   const announcements = getAnnouncementsContainer();
   const liveRegion = getAnnouncementLiveRegion();
-  if (!announcements) {
-    return;
-  }
-
-  if (activeAnnouncement) {
-    activeAnnouncement.remove();
-    activeAnnouncement = undefined;
-  }
-
-  if (announcementTimeoutId !== undefined) {
-    window.clearTimeout(announcementTimeoutId);
-    announcementTimeoutId = undefined;
-  }
-
-  const announcement = document.createElement("div");
-  announcement.className = `announcement announcement-${tone}`;
-  const content = document.createElement("div");
-  content.className = "announcement-content";
-  content.textContent = message;
-  announcement.appendChild(content);
-  announcements.appendChild(announcement);
-  activeAnnouncement = announcement;
-  if (liveRegion) {
-    liveRegion.textContent = message;
-  }
-
-  window.requestAnimationFrame(() => {
-    announcement.classList.add("announcement-visible");
-  });
-
-  announcementTimeoutId = window.setTimeout(() => {
-    removeAnnouncement(announcement);
-  }, 3000);
+  showStatusToast(message, tone, { container: announcements, liveRegion });
 }
 
 function announce(message: string): void {
@@ -376,7 +323,10 @@ async function init(): Promise<void> {
   renderActionKeyBindingsTable();
 
   document.getElementById("hotkeysEnabled")?.addEventListener("change", () => {
-    void persistSettings();
+    const hotkeysEnabled = (document.getElementById("hotkeysEnabled") as HTMLInputElement).checked;
+    void persistSettings({
+      successMessage: hotkeysEnabled ? "Hotkeys enabled" : "Hotkeys disabled",
+    });
   });
   document.getElementById("reset")?.addEventListener("click", () => {
     void handleReset();

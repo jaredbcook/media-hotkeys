@@ -10,6 +10,9 @@
   --text-color-tertiary: #5f6368;
   --text-color-danger: #d93025;
   --text-color-status-success: #188038;
+  --toast-bg-color: #303134;
+  --toast-text-color: #ffffff;
+  --toast-shadow: 0 3px 6px rgba(60, 64, 67, 0.24), 0 6px 16px rgba(60, 64, 67, 0.18);
   --button-bg-color: #ffffff;
   --button-bg-color-hover: #f8f9fa;
   --button-primary-bg-color: #1a73e8;
@@ -35,6 +38,9 @@
     --text-color-tertiary: #bdc1c6;
     --text-color-danger: #f28b82;
     --text-color-status-success: #81c995;
+    --toast-bg-color: #e8eaed;
+    --toast-text-color: #202124;
+    --toast-shadow: 0 3px 8px rgba(0, 0, 0, 0.48), 0 8px 18px rgba(0, 0, 0, 0.36);
     --button-bg-color: #202020;
     --button-bg-color-hover: #303134;
     --button-primary-bg-color: #8ab4f8;
@@ -317,70 +323,64 @@ body.options-page .settings-sections {
   color: var(--text-color-danger);
 }
 
-#status {
-  color: var(--text-color-status-success);
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-
-#status.visible {
-  opacity: 1;
-}
-
-.options-page #status {
-  min-height: 1.2rem;
-}
-
 #announcements {
-  display: grid;
+  align-items: stretch;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
-  margin: 16px 0 0;
+  left: 16px;
+  margin: 0;
+  pointer-events: none;
+  position: fixed;
+  right: 16px;
+  z-index: 1000;
 }
 
 #announcements:empty {
   display: none;
-  margin: 0;
+}
+
+.options-page #announcements {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  width: min(560px, calc(100vw - 48px));
 }
 
 .announcement {
-  background: color-mix(in srgb, var(--section-bg-color) 84%, var(--page-bg-color));
-  border: 1px solid var(--border-color-primary);
-  border-radius: 8px;
-  color: var(--text-color-primary);
-  display: grid;
-  grid-template-rows: 0fr;
+  align-self: center;
+  background: var(--toast-bg-color);
+  border-radius: 4px;
+  box-shadow: var(--toast-shadow);
+  color: var(--toast-text-color);
+  max-width: 520px;
+  min-height: 48px;
   opacity: 0;
-  overflow: hidden;
-  transform: scale(0.98);
+  overflow-wrap: anywhere;
+  pointer-events: auto;
+  transform: translateY(24px);
   transition:
-    grid-template-rows 0.24s ease,
     opacity 0.24s ease,
     transform 0.24s ease;
+  width: min(100%, 520px);
 }
 
 .announcement-content {
-  min-height: 0;
-  overflow: hidden;
-  padding: 10px 12px;
+  padding: 14px 16px;
 }
 
 .announcement-visible {
-  grid-template-rows: 1fr;
   opacity: 1;
-  transform: scale(1);
+  transform: translateY(0);
 }
 
 .announcement-success {
-  border-color: color-mix(
-    in srgb,
-    var(--text-color-status-success) 45%,
-    var(--border-color-primary)
-  );
+  border-left: 4px solid var(--text-color-status-success);
 }
 
 .announcement-error {
-  border-color: color-mix(in srgb, var(--text-color-danger) 45%, var(--border-color-primary));
-  color: var(--text-color-danger);
+  border-left: 4px solid var(--text-color-danger);
 }
 
 .screen-reader {
