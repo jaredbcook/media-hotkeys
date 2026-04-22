@@ -106,6 +106,44 @@ describe("keyboard shortcut routing", () => {
     await dispatchMappedKey("k");
   });
 
+  it("does not prevent a mapped key from typing in a textarea when no media exists", async () => {
+    const textarea = document.createElement("textarea");
+    document.body.appendChild(textarea);
+    const event = new KeyboardEvent("keydown", {
+      key: "k",
+      bubbles: true,
+      cancelable: true,
+    });
+    const preventDefaultSpy = vi.spyOn(event, "preventDefault");
+
+    textarea.dispatchEvent(event);
+    await Promise.resolve();
+
+    expect(preventDefaultSpy).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("does not prevent mapped keys from shadow DOM textareas", async () => {
+    const host = document.createElement("div");
+    const shadowRoot = host.attachShadow({ mode: "open" });
+    const textarea = document.createElement("textarea");
+    shadowRoot.appendChild(textarea);
+    document.body.appendChild(host);
+    const event = new KeyboardEvent("keydown", {
+      key: "k",
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+    });
+    const preventDefaultSpy = vi.spyOn(event, "preventDefault");
+
+    textarea.dispatchEvent(event);
+    await Promise.resolve();
+
+    expect(preventDefaultSpy).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
   it("matches shifted letters against lowercase alpha bindings", async () => {
     const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
     const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);

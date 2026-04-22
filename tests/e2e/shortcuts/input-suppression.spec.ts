@@ -15,3 +15,35 @@ test("suppresses hotkeys while typing in editable elements", async ({ page }) =>
     await expect.poll(async () => (await readMediaState(page, "primary")).paused).toBe(true);
   }
 });
+
+test("allows bound keys to type in a textarea when no media exists", async ({ page }) => {
+  await createEditable(page, "textarea", "message");
+
+  const textarea = page.locator("#message");
+  await textarea.focus();
+  await page.keyboard.press("k");
+
+  await expect(textarea).toHaveValue("k");
+});
+
+test("allows bound keys to type in a shadow DOM textarea when no media exists", async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    const host = document.createElement("div");
+    host.id = "shadow-editor";
+
+    const shadowRoot = host.attachShadow({ mode: "open" });
+    const textarea = document.createElement("textarea");
+    textarea.id = "shadow-message";
+    shadowRoot.appendChild(textarea);
+
+    document.getElementById("app")?.appendChild(host);
+  });
+
+  const textarea = page.locator("#shadow-editor textarea");
+  await textarea.focus();
+  await page.keyboard.press("k");
+
+  await expect(textarea).toHaveValue("k");
+});

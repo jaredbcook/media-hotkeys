@@ -1796,15 +1796,18 @@ function handleFrameMessage(event: MessageEvent): void {
 
 // #region Key Event Handling
 
-function isEditableTarget(el: Element | null): boolean {
-  if (!el) return false;
-  const tag = el.tagName.toLowerCase();
-  return (
-    tag === "input" ||
-    tag === "textarea" ||
-    tag === "select" ||
-    (el as HTMLElement).isContentEditable
-  );
+function isEditableKeyEvent(e: KeyboardEvent): boolean {
+  if (document.activeElement && isWithinEditableElement(document.activeElement)) {
+    return true;
+  }
+
+  if (e.target instanceof Element && isWithinEditableElement(e.target)) {
+    return true;
+  }
+
+  return e.composedPath().some((target) => {
+    return target instanceof Element && isWithinEditableElement(target);
+  });
 }
 
 function getKeyString(e: KeyboardEvent): string {
@@ -1830,7 +1833,7 @@ function hasReservedModifier(e: KeyboardEvent): boolean {
 
 async function handleKeyDown(e: KeyboardEvent): Promise<void> {
   if (!settings.quickSettings.hotkeysEnabled) return;
-  if (isEditableTarget(document.activeElement)) return;
+  if (isEditableKeyEvent(e)) return;
   if (hasReservedModifier(e)) return;
 
   const key = getKeyString(e);
