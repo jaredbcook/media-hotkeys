@@ -40,22 +40,28 @@ describe("quick settings popup: status, reset, and error handling", () => {
     );
   });
 
-  it("stacks status announcements from oldest to newest", async () => {
+  it("fades out the active status announcement when a new one is shown", async () => {
     await loadQuickSettingsModule();
 
-    document.getElementById("reset")?.click();
-    document.getElementById("reset")?.click();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    const hotkeysEnabled = document.getElementById("hotkeysEnabled") as HTMLInputElement;
+
+    hotkeysEnabled.checked = false;
+    hotkeysEnabled.dispatchEvent(new Event("change", { bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    const announcements = Array.from(document.querySelectorAll("#announcements .announcement")).map(
-      (announcement) => announcement.textContent,
-    );
+    hotkeysEnabled.checked = true;
+    hotkeysEnabled.dispatchEvent(new Event("change", { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(announcements).toEqual([
-      "Quick settings reset to default values.",
-      "Quick settings reset to default values.",
-    ]);
+    const visibleAnnouncements = Array.from(
+      document.querySelectorAll("#announcements .announcement:not(.announcement-exiting)"),
+    ).map((announcement) => announcement.textContent);
+    const exitingAnnouncement = document.querySelector(
+      "#announcements .announcement-exiting",
+    ) as HTMLDivElement | null;
+
+    expect(visibleAnnouncements).toEqual(["Hotkeys enabled"]);
+    expect(exitingAnnouncement?.textContent).toBe("Hotkeys disabled");
   });
 
   it("shows status announcements when hotkeys are enabled or disabled", async () => {

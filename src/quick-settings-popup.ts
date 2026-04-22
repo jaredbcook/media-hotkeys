@@ -6,6 +6,7 @@ import {
   getSettings,
   normalizeHotkeyKey,
   saveSettings,
+  settingsEqual,
 } from "./storage.js";
 import { showStatusToast, type StatusToastTone } from "./status-toast.js";
 
@@ -150,20 +151,24 @@ function clearActiveKeyCapture(): void {
   activeKeyCaptureCleanup = undefined;
 }
 
-function persistSettings(options?: {
-  successMessage?: string;
-  failureMessage?: string;
-}): Promise<void> {
-  currentSettings.quickSettings.hotkeysEnabled = (
-    document.getElementById("hotkeysEnabled") as HTMLInputElement
-  ).checked;
+function persistSettings(
+  nextSettings: ExtensionSettings,
+  options?: {
+    successMessage?: string;
+    failureMessage?: string;
+  },
+): Promise<void> {
+  if (settingsEqual(currentSettings, nextSettings)) {
+    return pendingSave;
+  }
 
-  const nextSettings = structuredClone(currentSettings);
+  currentSettings = nextSettings;
+  const settingsToSave = structuredClone(nextSettings);
   pendingSave = pendingSave
     .catch(() => undefined)
     .then(async () => {
       try {
-        await saveSettings(nextSettings);
+        await saveSettings(settingsToSave);
         if (options?.successMessage) {
           showAnnouncement(options.successMessage, "success");
         }
@@ -232,14 +237,15 @@ function renderActionKeyBindingsTable(): void {
 }
 
 function removeKeyFromAction(action: ConfigurableMediaAction, key: string): void {
-  const config = currentSettings.quickSettings.actionKeyBindings[action];
+  const nextSettings = structuredClone(currentSettings);
+  const config = nextSettings.quickSettings.actionKeyBindings[action];
   const normalizedKey = normalizeHotkeyKey(key);
   config.keys = config.keys.filter(
     (existingKey) => normalizeHotkeyKey(existingKey) !== normalizedKey,
   );
+  void persistSettings(nextSettings);
   renderActionKeyBindingsTable();
   announceBindingUpdate(`${accessibleKeyLabel(key)} removed from ${ACTION_LABELS[action]}.`);
-  void persistSettings();
 }
 
 function startKeyCapture(action: ConfigurableMediaAction, button: HTMLButtonElement): void {
@@ -265,23 +271,25 @@ function startKeyCapture(action: ConfigurableMediaAction, button: HTMLButtonElem
 
     const key = normalizeHotkeyKey(e.key);
     const conflict = findActionForKey(key, action);
+    const nextSettings = structuredClone(currentSettings);
 
     if (conflict) {
-      const conflictConfig = currentSettings.quickSettings.actionKeyBindings[conflict];
+      const conflictConfig = nextSettings.quickSettings.actionKeyBindings[conflict];
       conflictConfig.keys = conflictConfig.keys.filter(
         (existingKey) => normalizeHotkeyKey(existingKey) !== key,
       );
     }
 
     if (
-      !currentSettings.quickSettings.actionKeyBindings[action].keys.some(
+      !nextSettings.quickSettings.actionKeyBindings[action].keys.some(
         (existingKey) => normalizeHotkeyKey(existingKey) === key,
       )
     ) {
-      currentSettings.quickSettings.actionKeyBindings[action].keys.push(key);
+      nextSettings.quickSettings.actionKeyBindings[action].keys.push(key);
     }
 
     clearActiveKeyCapture();
+    void persistSettings(nextSettings);
     renderActionKeyBindingsTable();
 
     const keyLabel = accessibleKeyLabel(key);
@@ -289,7 +297,6 @@ function startKeyCapture(action: ConfigurableMediaAction, button: HTMLButtonElem
       ? ` ${keyLabel} was removed from ${ACTION_LABELS[conflict]}.`
       : "";
     announceBindingUpdate(`${keyLabel} assigned to ${ACTION_LABELS[action]}.${conflictMessage}`);
-    void persistSettings();
   };
 
   document.addEventListener("keydown", handler, true);
@@ -300,15 +307,16 @@ function startKeyCapture(action: ConfigurableMediaAction, button: HTMLButtonElem
 }
 
 async function handleReset(): Promise<void> {
-  currentSettings.quickSettings = structuredClone(DEFAULT_QUICK_SETTINGS);
-  (document.getElementById("hotkeysEnabled") as HTMLInputElement).checked =
-    currentSettings.quickSettings.hotkeysEnabled;
-  renderActionKeyBindingsTable();
-
-  await persistSettings({
+  const nextSettings = structuredClone(currentSettings);
+  nextSettings.quickSettings = structuredClone(DEFAULT_QUICK_SETTINGS);
+  await persistSettings(nextSettings, {
     successMessage: "Quick settings reset to default values.",
     failureMessage: "Failed to reset quick settings. Try again.",
   });
+
+  (document.getElementById("hotkeysEnabled") as HTMLInputElement).checked =
+    currentSettings.quickSettings.hotkeysEnabled;
+  renderActionKeyBindingsTable();
 }
 
 async function handleAdvancedSettings(): Promise<void> {
@@ -324,7 +332,9 @@ async function init(): Promise<void> {
 
   document.getElementById("hotkeysEnabled")?.addEventListener("change", () => {
     const hotkeysEnabled = (document.getElementById("hotkeysEnabled") as HTMLInputElement).checked;
-    void persistSettings({
+    const nextSettings = structuredClone(currentSettings);
+    nextSettings.quickSettings.hotkeysEnabled = hotkeysEnabled;
+    void persistSettings(nextSettings, {
       successMessage: hotkeysEnabled ? "Hotkeys enabled" : "Hotkeys disabled",
     });
   });

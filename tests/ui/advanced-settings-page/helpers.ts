@@ -34,20 +34,20 @@ vi.mock("../../../src/storage.js", async () => {
 
 export function renderAdvancedSettingsDom(): void {
   document.body.innerHTML = `
-    <input id="volumeStep" />
-    <input id="speedMin" />
-    <input id="speedMax" />
-    <input id="speedStep" />
-    <input id="seekStepSmall" />
-    <input id="seekStepMedium" />
-    <input id="seekStepLarge" />
+    <input type="number" id="volumeStep" min="1" max="10" step="1" />
+    <input type="number" id="speedMin" min="0.1" max="1" step="0.05" />
+    <input type="number" id="speedMax" min="1" max="8" step="0.25" />
+    <input type="number" id="speedStep" min="0.05" max="1" step="0.05" />
+    <input type="number" id="seekStepSmall" min="1" max="15" step="1" />
+    <input type="number" id="seekStepMedium" min="2" max="30" step="1" />
+    <input type="number" id="seekStepLarge" min="3" max="60" step="1" />
     <input id="useNumberKeysToJump" type="checkbox" />
     <input id="sumQuickSkips" type="checkbox" />
     <input id="showOverlays" type="checkbox" />
     <select id="overlayPosition"></select>
     <select id="skipOverlayPosition"></select>
-    <input id="overlayVisibleDuration" />
-    <input id="overlayFadeDuration" />
+    <input type="number" id="overlayVisibleDuration" min="0" max="1000" step="50" />
+    <input type="number" id="overlayFadeDuration" min="0" max="2000" step="50" />
     <input id="debugLogging" type="checkbox" />
     <button id="reset"></button>
     <div id="announcements" aria-live="polite" aria-atomic="true"></div>

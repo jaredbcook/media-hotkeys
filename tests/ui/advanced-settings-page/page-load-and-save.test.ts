@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   loadAdvancedSettingsModule,
   resetAdvancedSettingsTestState,
@@ -8,6 +8,10 @@ import { DEFAULT_SETTINGS } from "../../../src/storage.js";
 
 beforeEach(() => {
   resetAdvancedSettingsTestState();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("advanced settings page: load and save", () => {
@@ -35,13 +39,19 @@ describe("advanced settings page: load and save", () => {
     );
   });
 
-  it("saves edited advanced settings on input", async () => {
+  it("debounces saves for edited text and number inputs", async () => {
     await loadAdvancedSettingsModule();
+    vi.useFakeTimers();
 
     const volumeStep = document.getElementById("volumeStep") as HTMLInputElement;
     volumeStep.value = "2";
     volumeStep.dispatchEvent(new Event("input", { bubbles: true }));
-    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    await vi.advanceTimersByTimeAsync(499);
+
+    expect(saveSettingsMock).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
 
     expect(saveSettingsMock).toHaveBeenCalledOnce();
     expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
@@ -53,6 +63,44 @@ describe("advanced settings page: load and save", () => {
     expect(document.querySelector("#announcements .announcement")?.textContent).toContain(
       "Settings saved.",
     );
+  });
+
+  it("clamps numeric inputs to their closest valid value before saving", async () => {
+    await loadAdvancedSettingsModule();
+    vi.useFakeTimers();
+
+    const volumeStep = document.getElementById("volumeStep") as HTMLInputElement;
+    volumeStep.value = "20";
+    volumeStep.dispatchEvent(new Event("input", { bubbles: true }));
+
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(volumeStep.value).toBe("10");
+    expect(saveSettingsMock).toHaveBeenCalledOnce();
+    expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
+      advancedSettings: expect.objectContaining({
+        volumeStep: 0.1,
+      }),
+    });
+  });
+
+  it("reverts empty text and number inputs to their last valid value on blur", async () => {
+    await loadAdvancedSettingsModule();
+    vi.useFakeTimers();
+
+    const volumeStep = document.getElementById("volumeStep") as HTMLInputElement;
+    volumeStep.value = "";
+    volumeStep.dispatchEvent(new Event("input", { bubbles: true }));
+
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(saveSettingsMock).not.toHaveBeenCalled();
+
+    volumeStep.dispatchEvent(new Event("blur", { bubbles: true }));
+    await Promise.resolve();
+
+    expect(volumeStep.value).toBe("5");
+    expect(saveSettingsMock).not.toHaveBeenCalled();
   });
 
   it("saves checkbox changes on change", async () => {
@@ -72,6 +120,32 @@ describe("advanced settings page: load and save", () => {
     expect(document.querySelector("#announcements .announcement")?.getAttribute("role")).toBe(
       "status",
     );
+  });
+
+  it("does not save checkbox changes when the value is unchanged", async () => {
+    await loadAdvancedSettingsModule();
+
+    const useNumberKeysToJump = document.getElementById("useNumberKeysToJump") as HTMLInputElement;
+    useNumberKeysToJump.checked = true;
+    useNumberKeysToJump.dispatchEvent(new Event("change", { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(saveSettingsMock).not.toHaveBeenCalled();
+    expect(document.querySelector("#announcements .announcement")).toBeNull();
+  });
+
+  it("does not save debounced inputs when the normalized value is unchanged", async () => {
+    await loadAdvancedSettingsModule();
+    vi.useFakeTimers();
+
+    const volumeStep = document.getElementById("volumeStep") as HTMLInputElement;
+    volumeStep.value = "5.0";
+    volumeStep.dispatchEvent(new Event("input", { bubbles: true }));
+
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(saveSettingsMock).not.toHaveBeenCalled();
+    expect(document.querySelector("#announcements .announcement")).toBeNull();
   });
 
   it("saves debug logging changes on change", async () => {

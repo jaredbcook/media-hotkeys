@@ -76,6 +76,12 @@ describe("settings storage", () => {
     expect(settings.quickSettings.hotkeysEnabled).toBe(false);
   });
 
+  it("skips storage writes when a save does not change normalized settings", async () => {
+    await saveSettings(DEFAULT_SETTINGS);
+
+    expect(browser.storage.sync.set).not.toHaveBeenCalled();
+  });
+
   it("persists grouped settings without leaking grouped objects into advanced settings", async () => {
     const modified = structuredClone(DEFAULT_SETTINGS);
     modified.advancedSettings.debugLogging = true;

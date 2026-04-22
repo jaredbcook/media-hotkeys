@@ -42,4 +42,15 @@ describe("quick settings popup: load and save", () => {
       }),
     });
   });
+
+  it("does not save the hotkeys enabled checkbox when the value is unchanged", async () => {
+    await loadQuickSettingsModule();
+
+    const hotkeysEnabled = document.getElementById("hotkeysEnabled") as HTMLInputElement;
+    hotkeysEnabled.checked = true;
+    hotkeysEnabled.dispatchEvent(new Event("change", { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(saveSettingsMock).not.toHaveBeenCalled();
+  });
 });

@@ -326,9 +326,7 @@ body.options-page .settings-sections {
 #announcements {
   align-items: stretch;
   bottom: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
   left: 16px;
   margin: 0;
   pointer-events: none;
@@ -354,6 +352,7 @@ body.options-page .settings-sections {
   border-radius: 4px;
   box-shadow: var(--toast-shadow);
   color: var(--toast-text-color);
+  grid-area: 1 / 1;
   max-width: 520px;
   min-height: 48px;
   opacity: 0;
@@ -364,6 +363,10 @@ body.options-page .settings-sections {
     opacity 0.24s ease,
     transform 0.24s ease;
   width: min(100%, 520px);
+}
+
+.announcement-exiting {
+  transform: translateY(-8px);
 }
 
 .announcement-content {
