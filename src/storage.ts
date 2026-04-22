@@ -110,6 +110,7 @@ const NON_OVERLAY_ACTIONS = new Set<MediaAction>(["toggleFullscreen", "togglePip
 export const DEFAULT_SETTINGS: ExtensionSettings = defaults as ExtensionSettings;
 export const DEFAULT_QUICK_SETTINGS: QuickSettings = DEFAULT_SETTINGS.quickSettings;
 export const DEFAULT_ADVANCED_SETTINGS: AdvancedSettings = DEFAULT_SETTINGS.advancedSettings;
+const ADVANCED_SETTING_KEYS = Object.keys(DEFAULT_ADVANCED_SETTINGS) as (keyof AdvancedSettings)[];
 
 export function actionSupportsOverlay(action: MediaAction): boolean {
   return !NON_OVERLAY_ACTIONS.has(action);
@@ -146,6 +147,14 @@ function mergeActionKeyBindings(
   return normalizedBindings;
 }
 
+function pickAdvancedSettings(settings: Partial<AdvancedSettings>): Partial<AdvancedSettings> {
+  return Object.fromEntries(
+    ADVANCED_SETTING_KEYS.filter((key) => Object.prototype.hasOwnProperty.call(settings, key)).map(
+      (key) => [key, settings[key]],
+    ),
+  ) as Partial<AdvancedSettings>;
+}
+
 function normalizeSettings(
   settings: Partial<ExtensionSettings> & SettingsUpdate,
 ): ExtensionSettings {
@@ -154,6 +163,7 @@ function normalizeSettings(
   } = settings.quickSettings ?? {};
   const nestedAdvancedSettings: Partial<AdvancedSettings> = settings.advancedSettings ?? {};
   const legacyGlobalSettings = settings.globalSettings ?? {};
+  const legacyAdvancedSettings = pickAdvancedSettings(settings);
 
   const quickSettings: QuickSettings = {
     ...DEFAULT_QUICK_SETTINGS,
@@ -170,7 +180,7 @@ function normalizeSettings(
 
   const advancedSettings: AdvancedSettings = {
     ...DEFAULT_ADVANCED_SETTINGS,
-    ...settings,
+    ...legacyAdvancedSettings,
     ...legacyGlobalSettings,
     ...nestedAdvancedSettings,
   };
@@ -185,6 +195,8 @@ function mergeSettings(
   baseSettings: ExtensionSettings,
   settingsUpdate: SettingsUpdate,
 ): ExtensionSettings {
+  const legacyAdvancedSettings = pickAdvancedSettings(settingsUpdate);
+
   return normalizeSettings({
     ...baseSettings,
     ...settingsUpdate,
@@ -202,7 +214,7 @@ function mergeSettings(
     },
     advancedSettings: {
       ...baseSettings.advancedSettings,
-      ...settingsUpdate,
+      ...legacyAdvancedSettings,
       ...settingsUpdate.globalSettings,
       ...settingsUpdate.advancedSettings,
     },
@@ -253,7 +265,7 @@ export function resolveActionOverlaySettings(
 // #region Storage
 
 export async function getSettings(): Promise<ExtensionSettings> {
-  const result = await browser.storage.sync.get({});
+  const result = await browser.storage.sync.get(null);
   return normalizeSettings(result as Partial<ExtensionSettings> & SettingsUpdate);
 }
 

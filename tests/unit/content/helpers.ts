@@ -2,16 +2,35 @@ import { vi } from "vitest";
 import defaults from "../../../src/settings/defaults.json";
 import type { ExtensionSettings } from "../../../src/storage.js";
 
-const { showActionOverlayMock, storageGetMock, storageSetMock } = vi.hoisted(() => ({
-  showActionOverlayMock: vi.fn(),
-  storageGetMock: vi.fn(async (defaults: Record<string, unknown>) => defaults),
-  storageSetMock: vi.fn(async () => undefined),
-}));
+type StorageChangeListener = (changes: Record<string, unknown>, areaName: string) => void;
+
+const {
+  showActionOverlayMock,
+  storageChangeListeners,
+  storageGetMock,
+  storageOnChangedAddListenerMock,
+  storageSetMock,
+} = vi.hoisted(() => {
+  const storageChangeListeners: StorageChangeListener[] = [];
+
+  return {
+    showActionOverlayMock: vi.fn(),
+    storageChangeListeners,
+    storageGetMock: vi.fn(async () => ({})),
+    storageOnChangedAddListenerMock: vi.fn((listener: StorageChangeListener) => {
+      storageChangeListeners.push(listener);
+    }),
+    storageSetMock: vi.fn(async () => undefined),
+  };
+});
 
 vi.mock("webextension-polyfill", () => {
   return {
     default: {
       storage: {
+        onChanged: {
+          addListener: storageOnChangedAddListenerMock,
+        },
         sync: {
           get: storageGetMock,
           set: storageSetMock,
@@ -54,6 +73,8 @@ export function makeInvalidVideo(): HTMLVideoElement {
 export function resetContentTestState(): void {
   document.body.innerHTML = "";
   vi.restoreAllMocks();
+  storageGetMock.mockImplementation(async () => ({}));
+  storageSetMock.mockReset();
   showActionOverlayMock.mockReset();
   setSettingsForTests(structuredClone(DEFAULT_SETTINGS));
 }
@@ -63,4 +84,12 @@ export async function dispatchMappedKey(key: string, init?: KeyboardEventInit): 
   await Promise.resolve();
 }
 
-export { showActionOverlayMock, storageSetMock };
+export async function emitStorageChange(areaName = "sync"): Promise<void> {
+  for (const listener of storageChangeListeners) {
+    listener({}, areaName);
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+export { showActionOverlayMock, storageGetMock, storageSetMock };

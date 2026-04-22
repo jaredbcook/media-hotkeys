@@ -67,4 +67,22 @@ describe("advanced settings page: load and save", () => {
       }),
     });
   });
+
+  it("saves debug logging changes on change", async () => {
+    const settings = structuredClone(DEFAULT_SETTINGS);
+    settings.advancedSettings.debugLogging = false;
+    await loadAdvancedSettingsModule(settings);
+
+    const debugLogging = document.getElementById("debugLogging") as HTMLInputElement;
+    debugLogging.checked = true;
+    debugLogging.dispatchEvent(new Event("change", { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(saveSettingsMock).toHaveBeenCalledOnce();
+    expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
+      advancedSettings: expect.objectContaining({
+        debugLogging: true,
+      }),
+    });
+  });
 });

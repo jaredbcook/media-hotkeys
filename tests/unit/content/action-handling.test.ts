@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { makeVideo, resetContentTestState, showActionOverlayMock } from "./helpers.js";
+import {
+  emitStorageChange,
+  makeVideo,
+  resetContentTestState,
+  showActionOverlayMock,
+  storageGetMock,
+} from "./helpers.js";
 import { handleAction, setSettingsForTests } from "../../../src/content.js";
 import { DEFAULT_SETTINGS } from "../../../src/storage.js";
 
@@ -58,6 +64,32 @@ describe("media action handling", () => {
     handleAction("toggleMute", video);
 
     expect(consoleInfoSpy).not.toHaveBeenCalled();
+  });
+
+  it("refreshes debug logging when sync storage changes", async () => {
+    const consoleInfoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const video = makeVideo();
+    const disabledSettings = structuredClone(DEFAULT_SETTINGS);
+    disabledSettings.advancedSettings.debugLogging = false;
+    setSettingsForTests(disabledSettings);
+
+    handleAction("toggleMute", video);
+    expect(consoleInfoSpy).not.toHaveBeenCalled();
+
+    const enabledSettings = structuredClone(DEFAULT_SETTINGS);
+    enabledSettings.advancedSettings.debugLogging = true;
+    storageGetMock.mockResolvedValueOnce(enabledSettings);
+    await emitStorageChange();
+
+    handleAction("toggleMute", video);
+
+    expect(consoleInfoSpy).toHaveBeenCalledWith(
+      "[Media Hotkeys][debug] Handled media action",
+      expect.objectContaining({
+        action: "toggleMute",
+        tagName: "VIDEO",
+      }),
+    );
   });
 
   it("toggles play and pauses blocked playback without surfacing errors", async () => {

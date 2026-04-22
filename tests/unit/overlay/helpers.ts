@@ -2,7 +2,7 @@ import { afterEach, beforeEach, vi } from "vitest";
 
 vi.mock("webextension-polyfill", () => ({
   default: {
-    storage: { sync: { get: vi.fn(async (d: unknown) => d), set: vi.fn() } },
+    storage: { sync: { get: vi.fn(async () => ({})), set: vi.fn() } },
   },
 }));
 

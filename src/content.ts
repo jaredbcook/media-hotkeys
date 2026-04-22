@@ -1,3 +1,4 @@
+import browser from "webextension-polyfill";
 import {
   type AdvancedSettings,
   type ConfigurableMediaAction,
@@ -108,6 +109,14 @@ async function loadSettings(): Promise<void> {
   } catch {
     // Keep defaults on failure
   }
+}
+
+function handleStorageChanged(_changes: unknown, areaName: string): void {
+  if (areaName !== "sync") {
+    return;
+  }
+
+  void loadSettings();
 }
 
 export function setSettingsForTests(nextSettings: ExtensionSettings): void {
@@ -1855,6 +1864,7 @@ async function handleKeyDown(e: KeyboardEvent): Promise<void> {
 // #region Initialization
 
 window.addEventListener("message", handleFrameMessage);
+browser.storage.onChanged.addListener(handleStorageChanged);
 document.addEventListener("fullscreenchange", handleFullscreenChange);
 document.addEventListener("keydown", handleKeyDown, true);
 initializeDynamicMediaTracking();

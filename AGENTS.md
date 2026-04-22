@@ -9,9 +9,11 @@ For development setup and commands, see [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ```sh
 npm install
+npm run format:check
+npm run lint
 npm run typecheck
-npm run build:chrome
 npm test
+npm run build:chrome
 npm run test:e2e    # requires build:chrome first
 ```
 
@@ -31,27 +33,29 @@ npm run test:e2e    # requires build:chrome first
 - **Always use `webextension-polyfill`.** Never use raw `chrome.*` APIs — import from `webextension-polyfill` for cross-browser compatibility.
 - **Module-level state in `content.ts` is intentional.** The content script uses module-level variables (`lastInteractedMedia`, `listenersActive`, etc.) for per-frame state. Do not refactor these into classes.
 - **Manifest V3 only.** Do not add Manifest V2 fallbacks.
-- **No `host_permissions`.** The extension uses `content_scripts` with `<all_urls>` match pattern. Do not add `host_permissions` to `manifest.json`.
+- **No `host_permissions`.** The extension uses `content_scripts` with `<all_urls>` match pattern. Do not add `host_permissions` to `manifest.template.json` or generated manifests.
+- **Keep quick and advanced settings distinct.** Quick popup files are `quick-settings-popup.*`; advanced page files are `advanced-settings-page.*`, with shared advanced form helpers in `advanced-settings.ts`.
 
 ## Common Tasks
 
 ### Add a new hotkey action
 
 1. Add the action name to the `MediaAction` type in `src/storage.ts`
-2. Add a default key binding in `src/settings/defaults.json`
-3. Implement the handler in `src/content.ts` (in the action dispatch logic)
-4. Add overlay icon/label support in `src/overlay.ts` and `src/icons.ts` if visual feedback is needed
-5. Add a label in `ACTION_LABELS` in `src/options.ts`
-6. Add unit tests in `tests/content.test.ts`
-7. Add E2E test coverage in `tests/e2e/extension.spec.ts`
+2. If the action should be user-configurable, ensure it belongs in `ConfigurableMediaAction`
+3. Add a default key binding in `src/settings/defaults.json` under `quickSettings.actionKeyBindings`
+4. Implement the handler in `src/content.ts` (in the action dispatch logic)
+5. Add overlay icon/label support in `src/overlay.ts` and `src/icons.ts` if visual feedback is needed
+6. Add a label in `ACTION_LABELS` in `src/quick-settings-popup.ts` if the action is configurable
+7. Add focused unit tests under `tests/unit/content/`, `tests/unit/storage/`, or `tests/unit/overlay/` as appropriate
+8. Add E2E test coverage under `tests/e2e/shortcuts/` or `tests/e2e/settings/` when browser behavior changes
 
 ### Add a new configurable setting
 
 1. Add the setting with its default value in `src/settings/defaults.json`
-2. Add the type and storage key in `src/storage.ts`
-3. Add UI controls in `src/options.html` and `src/options.ts`
+2. Add the type and normalization support in `src/storage.ts`
+3. Add UI controls in `src/quick-settings-popup.html` / `src/quick-settings-popup.ts` or `src/advanced-settings-page.html` / `src/advanced-settings-page.ts`
 4. Wire it into the relevant behavior in `src/content.ts` or `src/overlay.ts`
-5. Add tests in `tests/options.test.ts`
+5. Add tests in `tests/unit/storage/` and the relevant `tests/ui/quick-settings-popup/` or `tests/ui/advanced-settings-page/` folder
 
 ### Build and package for release
 
@@ -63,14 +67,21 @@ npm run test:e2e    # requires build:chrome first
 
 ### Unit Tests (Vitest)
 
-- Tests are in `tests/*.test.ts`
+- Unit tests are organized by product surface:
+  - `tests/unit/content/`
+  - `tests/unit/storage/`
+  - `tests/unit/overlay/`
+  - `tests/unit/scripts/`
+- Settings UI tests live under:
+  - `tests/ui/quick-settings-popup/`
+  - `tests/ui/advanced-settings-page/`
 - Environment: `jsdom`
 - Mock browser APIs with `vi.mock`
 - Run: `npm test` or `npm run test:watch`
 
 ### E2E Tests (Playwright)
 
-- Tests are in `tests/e2e/`
+- Tests are in `tests/e2e/shortcuts/` and `tests/e2e/settings/`
 - Loads the built Chrome extension into a real Chromium instance
 - Simulates keypresses and asserts on media element state
 - Run: `npm run build:chrome && npm run test:e2e`

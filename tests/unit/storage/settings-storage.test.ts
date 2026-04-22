@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import browser from "webextension-polyfill";
 import {
   DEFAULT_ADVANCED_SETTINGS,
   DEFAULT_QUICK_SETTINGS,
@@ -31,6 +32,7 @@ describe("settings storage", () => {
   it("returns grouped defaults when storage is empty", async () => {
     const settings = await getSettings();
 
+    expect(browser.storage.sync.get).toHaveBeenCalledWith(null);
     expect(settings).toMatchObject(DEFAULT_SETTINGS);
     expect(settings.quickSettings).toEqual(DEFAULT_QUICK_SETTINGS);
     expect(settings.advancedSettings).toEqual(DEFAULT_ADVANCED_SETTINGS);
@@ -72,6 +74,18 @@ describe("settings storage", () => {
     expect(settings.advancedSettings.sumQuickSkips).toBe(false);
     expect(settings.advancedSettings.debugLogging).toBe(false);
     expect(settings.quickSettings.hotkeysEnabled).toBe(false);
+  });
+
+  it("persists grouped settings without leaking grouped objects into advanced settings", async () => {
+    const modified = structuredClone(DEFAULT_SETTINGS);
+    modified.advancedSettings.debugLogging = true;
+
+    await saveSettings(modified);
+
+    expect(store.advancedSettings).toEqual({
+      ...DEFAULT_ADVANCED_SETTINGS,
+      debugLogging: true,
+    });
   });
 
   it("persists quick action binding changes", async () => {
