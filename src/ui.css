@@ -24,6 +24,10 @@
   --chip-bg-color: #f1f3f4;
   --chip-bg-color-danger: #fce8e6;
   --chip-text-color: #202124;
+  --font-size-base: 0.75rem; /* 12px */
+  --font-size-lg: 0.875rem; /* 14px */
+  --font-size-xl: 1rem; /* 16px */
+  --font-size-xxl: 1.125rem; /* 18px */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -70,7 +74,7 @@ body {
   background: var(--page-bg-color);
   color: var(--text-color-primary);
   font-family: system-ui, sans-serif;
-  font-size: 0.875rem; /* 14px */
+  font-size: var(--font-size-base);
   max-width: 960px;
   margin: 16px auto;
   padding: 16px;
@@ -84,13 +88,13 @@ body.popup-page {
 }
 
 h1 {
-  font-size: 1.25rem; /* 20px */
+  font-size: var(--font-size-xxl);
   font-weight: 500;
   margin: 0 0 16px;
 }
 
 h2 {
-  font-size: 1rem; /* 16px */
+  font-size: var(--font-size-xl);
   font-weight: 500;
   margin: 0 0 16px;
 }
@@ -98,6 +102,7 @@ h2 {
 p {
   color: var(--text-color-secondary);
   line-height: 1.2rem;
+  margin: 0.5rem 0;
 }
 
 input[type="text"],
@@ -123,6 +128,7 @@ button {
   border-radius: 6px;
   color: var(--text-color-primary);
   cursor: pointer;
+  font-size: var(--font-size-base);
   padding: 6px 12px;
 }
 
@@ -149,11 +155,21 @@ button.primary:hover {
   color: var(--button-primary-text-color-hover);
 }
 
+button svg {
+  fill: var(--text-color-primary);
+  height: 1rem;
+  width: 1rem;
+}
+
+button:hover svg {
+  fill: var(--text-color-danger);
+}
+
 .add-key-button {
   border: 1px dashed var(--border-color-primary);
   border-radius: 6px;
   color: var(--text-color-primary);
-  font-size: 0.875rem;
+  font-size: var(--font-size-lg);
   line-height: 1;
   padding: 4px 8px;
 }
@@ -182,6 +198,16 @@ button.primary:hover {
 
 .button-group .align-right {
   margin-left: auto;
+}
+
+.row {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+}
+
+.row--space-between {
+  justify-content: space-between;
 }
 
 .site-controls {
@@ -354,16 +380,11 @@ body.options-page .settings-sections {
   display: flex;
 }
 
-.delete-button svg {
-  width: 1rem;
-  height: 1rem;
+.options-page table {
+  margin-top: 1rem;
 }
 
-.delete-button:hover svg {
-  fill: var(--text-color-danger);
-}
-
-.site-policies-table th:nth-child(1) {
+.options-page thead th:nth-child(1) {
   width: 50%;
 }
 
