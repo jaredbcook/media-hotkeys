@@ -67,11 +67,11 @@ Uses `webextension-polyfill` to normalize `chrome.*` vs `browser.*` APIs across 
 
 ## Smart Media Selection (priority order)
 
-Muted videos without native controls are treated as ambient/background media and skipped by the selector. This is a heuristic and may need refinement for sites that use custom player controls.
+Muted videos without native controls are treated as ambient/background media and skipped by the selector. This is a heuristic and may need refinement for sites that use custom player controls. If a media element was already controlled successfully by the extension, it remains eligible for future actions even if that action changed it into a muted no-controls state.
 
 1. Active/focused element (if it's a targetable media element)
 2. Currently playing targetable media (`!paused && !ended && readyState > 2`)
-3. Last interacted targetable media (tracked via module-level variable, verified to still exist in DOM)
+3. Last interacted targetable media (tracked via module-level variable, verified to still exist in DOM; previously controlled media can still be reused after becoming muted/no-controls)
 4. First targetable media element on the page (fallback)
 
 **Edge Cases:**

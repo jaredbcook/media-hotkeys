@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { makeInvalidVideo, makeVideo, resetContentTestState } from "./helpers.js";
-import { getTargetMedia, setSettingsForTests } from "../../../src/content.js";
+import { getTargetMedia, handleAction, setSettingsForTests } from "../../../src/content.js";
 import { DEFAULT_SETTINGS } from "../../../src/storage.js";
 
 beforeEach(() => {
@@ -106,6 +106,25 @@ describe("media target selection", () => {
     expect(getTargetMedia()).toBe(primaryVideo);
   });
 
+  it("retargets a muted no-controls video after a successful extension action", async () => {
+    const customPlayerVideo = makeVideo({
+      controls: false,
+      muted: false,
+      volume: 0.5,
+    } as Partial<HTMLVideoElement>);
+
+    expect(getTargetMedia()).toBe(customPlayerVideo);
+
+    handleAction("toggleMute", customPlayerVideo);
+
+    expect(customPlayerVideo.muted).toBe(true);
+
+    document.body.appendChild(document.createElement("div"));
+    await Promise.resolve();
+
+    expect(getTargetMedia()).toBe(customPlayerVideo);
+  });
+
   it("still targets muted videos when native controls are present", () => {
     const controlledMutedVideo = makeVideo({
       muted: true,
@@ -172,6 +191,26 @@ describe("media target selection", () => {
     await Promise.resolve();
 
     expect(getTargetMedia()).toBe(first);
+  });
+
+  it("does not reset the last interacted media for extension-managed overlay DOM changes", async () => {
+    const first = makeVideo();
+    const second = makeVideo();
+    await Promise.resolve();
+
+    second.dispatchEvent(new Event("pointerdown"));
+    expect(getTargetMedia()).toBe(second);
+
+    const overlay = document.createElement("div");
+    overlay.id = "media-shortcuts-overlay";
+    document.body.appendChild(overlay);
+    await Promise.resolve();
+
+    expect(getTargetMedia()).toBe(second);
+
+    first.remove();
+    second.remove();
+    overlay.remove();
   });
 
   it("tracks media added inside a shadow root after initialization", async () => {

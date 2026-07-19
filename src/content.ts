@@ -82,6 +82,8 @@ let keyToActionMap: Map<string, MediaAction> = buildKeyToActionMap(
   settings.quickSettings.actionKeyBindings,
 );
 let lastInteractedMedia: HTMLMediaElement | null = null;
+let lastActionedMedia: HTMLMediaElement | null = null;
+const actionedMedia = new WeakSet<HTMLMediaElement>();
 const MESSAGE_SOURCE = "media-shortcuts-extension";
 const ACTION_REQUEST_TYPE = "MEDIA_SHORTCUTS_HANDLE_ACTION";
 const ACTION_RESPONSE_TYPE = "MEDIA_SHORTCUTS_ACTION_RESULT";
@@ -99,6 +101,9 @@ let topLevelSitePolicyDisabled = false;
 let topLevelSitePolicyDisabledForEmbeds = false;
 
 const FULLSCREEN_WRAPPER_ATTR = "data-media-hotkeys-fullscreen-wrapper";
+const FULLSCREEN_STYLE_ATTR = "data-media-hotkeys-fullscreen";
+const OVERLAY_STYLE_ATTR = "data-media-shortcuts-overlay";
+const OVERLAY_ID = "media-shortcuts-overlay";
 const CLICKABLE_PLACEHOLDER_SELECTOR =
   'button, a[href], [role="button"], [role="link"], [tabindex], [onclick]';
 const PLACEHOLDER_ACTIVATION_MEDIA_WAIT_MS = 900;
@@ -145,14 +150,16 @@ function hasNonEmptyAttribute(element: Element, name: string): boolean {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function isTargetableMediaElement(media: HTMLMediaElement): boolean {
+function isAmbientMediaElement(media: HTMLMediaElement): boolean {
   // If a video doesn't have controls and is muted (or defaults to muted),
   // then it may be an ambient video rather than primary content.
   // TODO: Test with custom video players to ensure this doesn't cause false negatives
-  if (media instanceof HTMLVideoElement && !media.controls && (media.muted || media.defaultMuted)) {
-    return false;
-  }
+  return (
+    media instanceof HTMLVideoElement && !media.controls && (media.muted || media.defaultMuted)
+  );
+}
 
+function hasValidMediaSource(media: HTMLMediaElement): boolean {
   if (typeof media.currentSrc === "string" && media.currentSrc.trim().length > 0) {
     return true;
   }
@@ -168,6 +175,22 @@ function isTargetableMediaElement(media: HTMLMediaElement): boolean {
   return Array.from(media.querySelectorAll("source")).some((source) =>
     hasNonEmptyAttribute(source, "src"),
   );
+}
+
+function isTargetableMediaElement(media: HTMLMediaElement): boolean {
+  if (isAmbientMediaElement(media)) {
+    return false;
+  }
+
+  return hasValidMediaSource(media);
+}
+
+function canRetargetMediaElement(media: HTMLMediaElement): boolean {
+  if (!hasValidMediaSource(media)) {
+    return false;
+  }
+
+  return !isAmbientMediaElement(media) || actionedMedia.has(media);
 }
 
 function isElementVisible(element: Element, rect: DOMRect): boolean {
@@ -813,10 +836,6 @@ export function getTargetMedia(): HTMLMediaElement | null {
   }
 
   const mediaList = findMedia(document).filter(isTargetableMediaElement);
-  if (mediaList.length === 0) {
-    return null;
-  }
-
   // 2. Currently playing media
   // playing is !paused && !ended && readyState > 2
   const playingMedia = mediaList.find((m) => !m.paused && !m.ended && m.readyState > 2);
@@ -825,13 +844,26 @@ export function getTargetMedia(): HTMLMediaElement | null {
   }
 
   // 3. Most recently interacted media
-  // Verify it's still in the document
+  // Verify it's still in the document. Media that became ambient-looking only
+  // after a successful extension action stays eligible for future actions.
   if (
     lastInteractedMedia &&
     lastInteractedMedia.isConnected &&
-    isTargetableMediaElement(lastInteractedMedia)
+    canRetargetMediaElement(lastInteractedMedia)
   ) {
     return lastInteractedMedia;
+  }
+
+  if (
+    lastActionedMedia &&
+    lastActionedMedia.isConnected &&
+    canRetargetMediaElement(lastActionedMedia)
+  ) {
+    return lastActionedMedia;
+  }
+
+  if (mediaList.length === 0) {
+    return null;
   }
 
   // 4. First supported media element
@@ -915,11 +947,40 @@ function scanNode(node: Node): void {
   }
 }
 
+function isExtensionManagedNode(node: Node): boolean {
+  const directElement = node.nodeType === 1 ? (node as Element) : null;
+  const parentElement =
+    node.parentElement ?? (node.parentNode?.nodeType === 1 ? (node.parentNode as Element) : null);
+  const element = directElement ?? parentElement;
+
+  if (!element) {
+    return false;
+  }
+
+  return Boolean(
+    element.closest(
+      [
+        `#${OVERLAY_ID}`,
+        `style[${OVERLAY_STYLE_ATTR}="true"]`,
+        `style[${FULLSCREEN_STYLE_ATTR}="true"]`,
+        `[${FULLSCREEN_WRAPPER_ATTR}]`,
+      ].join(", "),
+    ),
+  );
+}
+
 function handleRootMutations(mutations: MutationRecord[]): void {
   let hasDomChanges = false;
 
   for (const mutation of mutations) {
-    if (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0) {
+    const hasNonExtensionAddedNodes = Array.from(mutation.addedNodes).some(
+      (node) => !isExtensionManagedNode(node),
+    );
+    const hasNonExtensionRemovedNodes = Array.from(mutation.removedNodes).some(
+      (node) => !isExtensionManagedNode(node),
+    );
+
+    if (hasNonExtensionAddedNodes || hasNonExtensionRemovedNodes) {
       hasDomChanges = true;
     }
 
@@ -1531,6 +1592,8 @@ function getOverlayDisplayOptions(
 export function handleAction(action: MediaAction, media: HTMLMediaElement): void {
   const advancedSettings = settings.advancedSettings;
   const previousTime = media.currentTime;
+  actionedMedia.add(media);
+  lastActionedMedia = media;
   trackInteraction(media, `action:${action}`);
 
   switch (action) {

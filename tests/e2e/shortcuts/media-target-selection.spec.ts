@@ -98,6 +98,33 @@ test("ignores muted videos without controls when selecting a target", async ({ p
   await expect.poll(async () => (await readMediaState(page, "ambient")).volume).toBeCloseTo(0.5, 5);
 });
 
+test("keeps targeting a no-controls video after muting it with a shortcut", async ({ page }) => {
+  await createMedia(
+    page,
+    "custom-player-video",
+    {
+      muted: false,
+      controls: false,
+      volume: 0.5,
+      paused: false,
+      ended: false,
+      readyState: 4,
+    },
+    "video",
+  );
+  await page.locator("#custom-player-video").focus();
+
+  await page.keyboard.press("m");
+  await waitForMediaState(page, "custom-player-video", (state) => state.muted);
+
+  await page.keyboard.press("ArrowUp");
+  await waitForMediaState(
+    page,
+    "custom-player-video",
+    (state) => !state.muted && Math.abs(state.volume - 0.05) < 0.0001,
+  );
+});
+
 test("delegates actions from the top window into a child iframe", async ({ page, server }) => {
   await page.goto(server.getUrl("/page-with-iframe"));
 
