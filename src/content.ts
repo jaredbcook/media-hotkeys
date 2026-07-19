@@ -23,6 +23,7 @@ type FrameActionRequestMessage = {
   type: "MEDIA_SHORTCUTS_HANDLE_ACTION";
   action: MediaAction;
   requestId: string;
+  allowPlaceholder?: boolean;
 };
 
 type FrameActionResponseMessage = {
@@ -32,13 +33,45 @@ type FrameActionResponseMessage = {
   handled: boolean;
 };
 
+type FrameScoreRequestMessage = {
+  source: "media-shortcuts-extension";
+  type: "MEDIA_SHORTCUTS_SCORE_REQUEST";
+  requestId: string;
+  budgetMs: number;
+};
+
+type FrameScoreResponseMessage = {
+  source: "media-shortcuts-extension";
+  type: "MEDIA_SHORTCUTS_SCORE_RESPONSE";
+  requestId: string;
+  bestScore: number | null;
+};
+
 type FrameSitePolicyMessage = {
   source: "media-shortcuts-extension";
   type: "MEDIA_HOTKEYS_SITE_POLICY";
   disabled: boolean;
 };
 
-type FrameMessage = FrameActionRequestMessage | FrameActionResponseMessage | FrameSitePolicyMessage;
+type FrameMessage =
+  | FrameActionRequestMessage
+  | FrameActionResponseMessage
+  | FrameScoreRequestMessage
+  | FrameScoreResponseMessage
+  | FrameSitePolicyMessage;
+
+type ScoredMedia = {
+  media: HTMLMediaElement;
+  score: number;
+};
+
+type ChildFrameBestScore = {
+  frameWindow: Window;
+  requestId: string;
+  score: number;
+};
+
+type ExecuteRoute = "local" | { frameWindow: Window; requestId: string };
 
 type SeekDirection = "forward" | "backward";
 
@@ -87,9 +120,24 @@ const actionedMedia = new WeakSet<HTMLMediaElement>();
 const MESSAGE_SOURCE = "media-shortcuts-extension";
 const ACTION_REQUEST_TYPE = "MEDIA_SHORTCUTS_HANDLE_ACTION";
 const ACTION_RESPONSE_TYPE = "MEDIA_SHORTCUTS_ACTION_RESULT";
+const SCORE_REQUEST_TYPE = "MEDIA_SHORTCUTS_SCORE_REQUEST";
+const SCORE_RESPONSE_TYPE = "MEDIA_SHORTCUTS_SCORE_RESPONSE";
 const SITE_POLICY_TYPE = "MEDIA_HOTKEYS_SITE_POLICY";
 const FRAME_ACTION_TIMEOUT_MS = 150;
+// Total time budget for the cross-frame scoring phase; nested frames receive a
+// smaller budget so their responses can still arrive within the parent's window.
+const SCORE_BUDGET_MS = 150;
+const SCORE_CHILD_BUDGET_MARGIN_MS = 50;
+const SCORE_MIN_CHILD_BUDGET_MS = 40;
+const EXECUTE_TIMEOUT_MS = 250;
+const EXECUTE_PLACEHOLDER_TIMEOUT_MS = 1400;
+const EXECUTE_ROUTE_TTL_MS = 2000;
 const pendingFrameActionRequests = new Map<string, (handled: boolean) => void>();
+const pendingScoreRequests = new Map<
+  string,
+  (bestScore: number | null, frameWindow: Window) => void
+>();
+const executeRoutesByRequestId = new Map<string, ExecuteRoute>();
 const trackedMedia = new WeakSet<HTMLMediaElement>();
 const observedRoots = new WeakSet<Document | ShadowRoot>();
 let rootObserver: MutationObserver | null = null;
@@ -185,14 +233,6 @@ function isTargetableMediaElement(media: HTMLMediaElement): boolean {
   return hasValidMediaSource(media);
 }
 
-function canRetargetMediaElement(media: HTMLMediaElement): boolean {
-  if (!hasValidMediaSource(media)) {
-    return false;
-  }
-
-  return !isAmbientMediaElement(media) || actionedMedia.has(media);
-}
-
 function isElementVisible(element: Element, rect: DOMRect): boolean {
   if (rect.width <= 1 || rect.height <= 1) {
     return false;
@@ -239,7 +279,7 @@ function findMedia(root: Document | ShadowRoot | Element): HTMLMediaElement[] {
   while (node) {
     if (
       (node instanceof HTMLVideoElement || node instanceof HTMLAudioElement) &&
-      isTargetableMediaElement(node)
+      hasValidMediaSource(node)
     ) {
       results.push(node);
     } else if (node instanceof Element && node.shadowRoot) {
@@ -817,57 +857,116 @@ function handleFullscreenChange(): void {
 
 // #region Media Targeting and Tracking
 
+// Weighted-scoring signal values. The exact numbers matter less than their
+// relative ordering: user intent (fullscreen/PiP/focus) > audible playback >
+// recent interaction > muted playback > visual prominence > weak hints.
+const SCORE_FULLSCREEN_OR_PIP = 1000;
+const SCORE_FOCUSED = 800;
+const SCORE_PLAYING_AUDIBLE = 500;
+const SCORE_PLAYING_MUTED = 150;
+const SCORE_LAST_INTERACTED = 300;
+const SCORE_LAST_ACTIONED = 200;
+const SCORE_MAX_VISIBLE_AREA = 200;
+const SCORE_HAS_CONTROLS = 30;
+const SCORE_AUDIO_BASE = 20;
+const SCORE_NON_AMBIENT_BASE = 10;
+const SCORE_AMBIENT_PENALTY = -250;
+// At or above this local score (focus, fullscreen, or PiP), skip cross-frame
+// arbitration entirely — the user's intent is unambiguous.
+const STRONG_LOCAL_TARGET_SCORE = 800;
+
+function isMediaPlaying(media: HTMLMediaElement): boolean {
+  return !media.paused && !media.ended && media.readyState > 2;
+}
+
+function isMediaAudible(media: HTMLMediaElement): boolean {
+  return isMediaPlaying(media) && !media.muted && media.volume > 0;
+}
+
+function scoreMediaCandidate(media: HTMLMediaElement): number {
+  let score = 0;
+
+  const fullscreenElement = document.fullscreenElement;
+  if (fullscreenElement && (fullscreenElement === media || fullscreenElement.contains(media))) {
+    score += SCORE_FULLSCREEN_OR_PIP;
+  }
+
+  if ("pictureInPictureElement" in document && document.pictureInPictureElement === media) {
+    score += SCORE_FULLSCREEN_OR_PIP;
+  }
+
+  if (document.activeElement === media) {
+    score += SCORE_FOCUSED;
+  }
+
+  if (isMediaPlaying(media)) {
+    score += isMediaAudible(media) ? SCORE_PLAYING_AUDIBLE : SCORE_PLAYING_MUTED;
+  }
+
+  if (media === lastInteractedMedia) {
+    score += SCORE_LAST_INTERACTED;
+  }
+
+  if (media === lastActionedMedia) {
+    score += SCORE_LAST_ACTIONED;
+  }
+
+  if (media instanceof HTMLVideoElement) {
+    const rect = media.getBoundingClientRect();
+    if (isElementVisible(media, rect)) {
+      const viewportArea = window.innerWidth * window.innerHeight;
+      if (viewportArea > 0) {
+        const visibleFraction = Math.min(1, getVisibleViewportArea(rect) / viewportArea);
+        score += Math.round(SCORE_MAX_VISIBLE_AREA * visibleFraction);
+      }
+    }
+  } else {
+    // Audio has no visual footprint, so give it a modest stand-in for area.
+    score += SCORE_AUDIO_BASE;
+  }
+
+  if (media.controls) {
+    score += SCORE_HAS_CONTROLS;
+  }
+
+  // Ambient-looking media (muted video without controls) is penalized rather
+  // than excluded: strong signals such as playback, interaction history, or a
+  // large visible area can still lift it above the targetability threshold.
+  // Media the extension already acted on keeps its standing.
+  if (isAmbientMediaElement(media) && !actionedMedia.has(media)) {
+    score += SCORE_AMBIENT_PENALTY;
+  } else {
+    score += SCORE_NON_AMBIENT_BASE;
+  }
+
+  return score;
+}
+
 /**
- * Determines which media element to control based on priority:
- * 1. Active element (if it's a supported, non-ambient media type)
- * 2. Currently playing non-ambient media
- * 3. Most recently interacted non-ambient media
- * 4. First supported non-ambient media on page
- * @returns {HTMLMediaElement|null}
+ * Scores every valid-source media element in this frame and returns the
+ * highest-scoring one. Candidates must score above zero to be targetable, so
+ * an idle ambient background video is never selected on its own.
+ * Ties resolve to the earliest element in DOM order.
  */
+export function getBestLocalCandidate(): ScoredMedia | null {
+  let best: ScoredMedia | null = null;
+
+  for (const media of findMedia(document)) {
+    const score = scoreMediaCandidate(media);
+    if (score <= 0) {
+      continue;
+    }
+
+    if (!best || score > best.score) {
+      best = { media, score };
+    }
+  }
+
+  return best;
+}
+
 export function getTargetMedia(): HTMLMediaElement | null {
-  // 1. Active element
-  const focused = document.activeElement;
-  if (
-    (focused instanceof HTMLVideoElement || focused instanceof HTMLAudioElement) &&
-    isTargetableMediaElement(focused)
-  ) {
-    return focused as HTMLMediaElement;
-  }
-
-  const mediaList = findMedia(document).filter(isTargetableMediaElement);
-  // 2. Currently playing media
-  // playing is !paused && !ended && readyState > 2
-  const playingMedia = mediaList.find((m) => !m.paused && !m.ended && m.readyState > 2);
-  if (playingMedia) {
-    return playingMedia;
-  }
-
-  // 3. Most recently interacted media
-  // Verify it's still in the document. Media that became ambient-looking only
-  // after a successful extension action stays eligible for future actions.
-  if (
-    lastInteractedMedia &&
-    lastInteractedMedia.isConnected &&
-    canRetargetMediaElement(lastInteractedMedia)
-  ) {
-    return lastInteractedMedia;
-  }
-
-  if (
-    lastActionedMedia &&
-    lastActionedMedia.isConnected &&
-    canRetargetMediaElement(lastActionedMedia)
-  ) {
-    return lastActionedMedia;
-  }
-
-  if (mediaList.length === 0) {
-    return null;
-  }
-
-  // 4. First supported media element
-  return mediaList[0] ?? null;
+  return getBestLocalCandidate()?.media ?? null;
 }
 
 function trackInteraction(media: HTMLMediaElement, event: string): void {
@@ -902,7 +1001,7 @@ function collectMediaAndShadowRoots(root: Document | ShadowRoot | Element): {
   while (node) {
     if (
       (node instanceof HTMLVideoElement || node instanceof HTMLAudioElement) &&
-      isTargetableMediaElement(node)
+      hasValidMediaSource(node)
     ) {
       media.push(node);
     } else if (node instanceof Element && node.shadowRoot) {
@@ -1341,12 +1440,42 @@ function handleLocalTargetMediaAction(action: MediaAction): boolean {
   return false;
 }
 
-async function handleLocalMediaAction(action: MediaAction): Promise<boolean> {
-  if (handleLocalTargetMediaAction(action)) {
+/**
+ * Entry point for a media action initiated in this frame. Arbitrates across
+ * this frame and its descendant frames: local candidates and child-frame
+ * candidates are scored with the same weighted model, and the action is
+ * executed by exactly one frame — the one owning the highest-scoring media.
+ * Local candidates win ties. Placeholder activation is the final fallback
+ * when no frame in the subtree has scorable media.
+ */
+async function dispatchMediaAction(action: MediaAction): Promise<boolean> {
+  const localBest = getBestLocalCandidate();
+
+  // Unambiguous local intent (focus/fullscreen/PiP): act immediately without
+  // paying the cross-frame scoring round-trip.
+  if (localBest && localBest.score >= STRONG_LOCAL_TARGET_SCORE) {
+    handleAction(action, localBest.media);
     return true;
   }
 
-  return activatePlayablePlaceholder(action);
+  const childBest = await collectChildFrameScores(SCORE_BUDGET_MS);
+  if (childBest && (!localBest || childBest.score > localBest.score)) {
+    const handled = await sendExecuteToFrame(childBest.frameWindow, action, childBest.requestId);
+    if (handled) {
+      return true;
+    }
+  }
+
+  if (localBest) {
+    handleAction(action, localBest.media);
+    return true;
+  }
+
+  if (await activatePlayablePlaceholder(action)) {
+    return true;
+  }
+
+  return broadcastPlaceholderExecute(action);
 }
 
 function pauseMedia(media: HTMLMediaElement): void {
@@ -1792,7 +1921,24 @@ function isFrameActionMessage(data: unknown): data is FrameMessage {
     return typeof (message as Partial<FrameSitePolicyMessage>).disabled === "boolean";
   }
 
+  if (message.type === SCORE_REQUEST_TYPE) {
+    const scoreRequest = message as Partial<FrameScoreRequestMessage>;
+    return typeof scoreRequest.requestId === "string" && typeof scoreRequest.budgetMs === "number";
+  }
+
+  if (message.type === SCORE_RESPONSE_TYPE) {
+    const scoreResponse = message as Partial<FrameScoreResponseMessage>;
+    return (
+      typeof scoreResponse.requestId === "string" &&
+      (scoreResponse.bestScore === null || typeof scoreResponse.bestScore === "number")
+    );
+  }
+
   return typeof (message as Partial<FrameActionRequestMessage>).requestId === "string";
+}
+
+function createRequestId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function createFrameActionRequest(action: MediaAction): FrameActionRequestMessage {
@@ -1800,7 +1946,7 @@ function createFrameActionRequest(action: MediaAction): FrameActionRequestMessag
     source: MESSAGE_SOURCE,
     type: ACTION_REQUEST_TYPE,
     action,
-    requestId: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    requestId: createRequestId(),
   };
 }
 
@@ -1812,10 +1958,7 @@ function getChildFrameWindows(): Window[] {
   return findIframeWindows(document);
 }
 
-function postMessageToFrames(
-  frameWindows: Window[],
-  message: FrameActionRequestMessage | FrameSitePolicyMessage,
-): boolean {
+function postMessageToFrames(frameWindows: Window[], message: FrameMessage): boolean {
   let posted = false;
 
   for (const frameWindow of frameWindows) {
@@ -1858,7 +2001,188 @@ export function delegateActionToChildFrames(action: MediaAction): Promise<boolea
   });
 }
 
-async function handleIncomingFrameAction(action: MediaAction): Promise<boolean> {
+/**
+ * Scoring phase (top-frame arbitration, step 1 of 2). Asks every child frame
+ * for the best media score in its subtree and returns the winning frame with
+ * the requestId that frame can later route an execute request under.
+ */
+function collectChildFrameScores(budgetMs: number): Promise<ChildFrameBestScore | null> {
+  const childFrames = getChildFrameWindows();
+  if (childFrames.length === 0 || budgetMs <= 0) {
+    return Promise.resolve(null);
+  }
+
+  const requestId = createRequestId();
+  const request: FrameScoreRequestMessage = {
+    source: MESSAGE_SOURCE,
+    type: SCORE_REQUEST_TYPE,
+    requestId,
+    budgetMs: Math.max(0, budgetMs - SCORE_CHILD_BUDGET_MARGIN_MS),
+  };
+
+  return new Promise((resolve) => {
+    let best: ChildFrameBestScore | null = null;
+    let responseCount = 0;
+
+    const finish = (): void => {
+      window.clearTimeout(timeoutId);
+      pendingScoreRequests.delete(requestId);
+      resolve(best);
+    };
+
+    const timeoutId = window.setTimeout(finish, budgetMs);
+
+    pendingScoreRequests.set(requestId, (bestScore, frameWindow) => {
+      responseCount += 1;
+      if (typeof bestScore === "number" && (!best || bestScore > best.score)) {
+        best = { frameWindow, requestId, score: bestScore };
+      }
+
+      if (responseCount >= childFrames.length) {
+        finish();
+      }
+    });
+
+    if (!postMessageToFrames(childFrames, request)) {
+      finish();
+    }
+  });
+}
+
+/**
+ * Scoring phase, child side. Reports the best score across this frame and its
+ * own descendants, remembering which frame owned it so a follow-up execute
+ * request with the same requestId can be routed straight to the winner.
+ */
+async function handleIncomingScoreRequest(
+  requestId: string,
+  budgetMs: number,
+  sourceWindow: Window,
+): Promise<void> {
+  let bestScore: number | null = null;
+
+  if (settings.quickSettings.hotkeysEnabled && !isSiteDisabledByPolicy()) {
+    const localBest = getBestLocalCandidate();
+    let route: ExecuteRoute = "local";
+    bestScore = localBest?.score ?? null;
+
+    if (budgetMs >= SCORE_MIN_CHILD_BUDGET_MS) {
+      const childBest = await collectChildFrameScores(budgetMs);
+      if (childBest && (bestScore === null || childBest.score > bestScore)) {
+        bestScore = childBest.score;
+        route = { frameWindow: childBest.frameWindow, requestId: childBest.requestId };
+      }
+    }
+
+    if (bestScore !== null) {
+      executeRoutesByRequestId.set(requestId, route);
+      window.setTimeout(() => executeRoutesByRequestId.delete(requestId), EXECUTE_ROUTE_TTL_MS);
+    }
+  }
+
+  const response: FrameScoreResponseMessage = {
+    source: MESSAGE_SOURCE,
+    type: SCORE_RESPONSE_TYPE,
+    requestId,
+    bestScore,
+  };
+
+  sourceWindow.postMessage(response, "*");
+}
+
+/**
+ * Execute phase (top-frame arbitration, step 2 of 2). Sends the action to the
+ * single frame that won the scoring phase.
+ */
+function sendExecuteToFrame(
+  frameWindow: Window,
+  action: MediaAction,
+  requestId: string,
+  allowPlaceholder = false,
+): Promise<boolean> {
+  const request: FrameActionRequestMessage = {
+    source: MESSAGE_SOURCE,
+    type: ACTION_REQUEST_TYPE,
+    action,
+    requestId,
+    allowPlaceholder,
+  };
+
+  return new Promise((resolve) => {
+    const timeoutMs = allowPlaceholder ? EXECUTE_PLACEHOLDER_TIMEOUT_MS : EXECUTE_TIMEOUT_MS;
+    const settle = (handled: boolean): void => {
+      window.clearTimeout(timeoutId);
+      pendingFrameActionRequests.delete(requestId);
+      resolve(handled);
+    };
+
+    const timeoutId = window.setTimeout(() => settle(false), timeoutMs);
+    pendingFrameActionRequests.set(requestId, settle);
+
+    try {
+      frameWindow.postMessage(request, "*");
+    } catch {
+      settle(false);
+    }
+  });
+}
+
+/**
+ * Last-resort fallback when no frame in the subtree has scorable media: offer
+ * placeholder activation to every child frame. Broadcast (rather than routed)
+ * because placeholders are not part of the scoring phase; resolves true on the
+ * first frame that reports success.
+ */
+function broadcastPlaceholderExecute(action: MediaAction): Promise<boolean> {
+  const childFrames = getChildFrameWindows();
+  if (childFrames.length === 0) {
+    return Promise.resolve(false);
+  }
+
+  const requestId = createRequestId();
+  const request: FrameActionRequestMessage = {
+    source: MESSAGE_SOURCE,
+    type: ACTION_REQUEST_TYPE,
+    action,
+    requestId,
+    allowPlaceholder: true,
+  };
+
+  return new Promise((resolve) => {
+    let responseCount = 0;
+
+    const finish = (handled: boolean): void => {
+      window.clearTimeout(timeoutId);
+      pendingFrameActionRequests.delete(requestId);
+      resolve(handled);
+    };
+
+    const timeoutId = window.setTimeout(() => finish(false), EXECUTE_PLACEHOLDER_TIMEOUT_MS);
+
+    pendingFrameActionRequests.set(requestId, (handled) => {
+      responseCount += 1;
+      if (handled || responseCount >= childFrames.length) {
+        finish(handled);
+      }
+    });
+
+    if (!postMessageToFrames(childFrames, request)) {
+      finish(false);
+    }
+  });
+}
+
+/**
+ * Execute phase, receiving side. Global actions keep their broadcast cascade.
+ * Media actions follow the route recorded during the scoring phase; if the
+ * routed descendant fails (or no route exists), fall back to the best local
+ * candidate, then to placeholder activation when permitted.
+ */
+async function handleIncomingFrameAction(
+  action: MediaAction,
+  requestId: string,
+  allowPlaceholder: boolean,
+): Promise<boolean> {
   if (!settings.quickSettings.hotkeysEnabled || isSiteDisabledByPolicy()) {
     return false;
   }
@@ -1867,15 +2191,33 @@ async function handleIncomingFrameAction(action: MediaAction): Promise<boolean> 
     return handleGlobalAction(action);
   }
 
+  const route = executeRoutesByRequestId.get(requestId);
+  executeRoutesByRequestId.delete(requestId);
+  if (route && route !== "local") {
+    const handled = await sendExecuteToFrame(
+      route.frameWindow,
+      action,
+      route.requestId,
+      allowPlaceholder,
+    );
+    if (handled) {
+      return true;
+    }
+  }
+
   if (handleLocalTargetMediaAction(action)) {
     return true;
   }
 
-  if (await delegateActionToChildFrames(action)) {
-    return true;
+  if (allowPlaceholder) {
+    if (await activatePlayablePlaceholder(action)) {
+      return true;
+    }
+
+    return broadcastPlaceholderExecute(action);
   }
 
-  return activatePlayablePlaceholder(action);
+  return false;
 }
 
 function respondToFrameAction(sourceWindow: Window, requestId: string, handled: boolean): void {
@@ -1914,12 +2256,38 @@ function handleFrameMessage(event: MessageEvent): void {
     return;
   }
 
+  if (event.data.type === SCORE_RESPONSE_TYPE) {
+    if (event.source) {
+      pendingScoreRequests.get(event.data.requestId)?.(
+        event.data.bestScore,
+        event.source as Window,
+      );
+    }
+    return;
+  }
+
+  if (event.data.type === SCORE_REQUEST_TYPE) {
+    if (event.source) {
+      void handleIncomingScoreRequest(
+        event.data.requestId,
+        event.data.budgetMs,
+        event.source as Window,
+      );
+    }
+    return;
+  }
+
   if (!event.source || event.data.type !== ACTION_REQUEST_TYPE) {
     return;
   }
 
-  void handleIncomingFrameAction(event.data.action).then((handled) => {
-    respondToFrameAction(event.source as Window, event.data.requestId, handled);
+  const actionRequest = event.data;
+  void handleIncomingFrameAction(
+    actionRequest.action,
+    actionRequest.requestId,
+    actionRequest.allowPlaceholder === true,
+  ).then((handled) => {
+    respondToFrameAction(event.source as Window, actionRequest.requestId, handled);
   });
 }
 
@@ -1982,14 +2350,7 @@ async function handleKeyDown(e: KeyboardEvent): Promise<void> {
     return;
   }
 
-  if (isTopWindow()) {
-    const handledByChildFrame = await delegateActionToChildFrames(action);
-    if (handledByChildFrame) {
-      return;
-    }
-  }
-
-  if (!(await handleLocalMediaAction(action))) {
+  if (!(await dispatchMediaAction(action))) {
     debugLog("No media element found for action", undefined, { action, key });
   }
 }
