@@ -1,0 +1,79 @@
+import { type MediaAction, normalizeHotkeyKey } from "../storage.js";
+import { isGlobalAction } from "./actions.js";
+import { dispatchMediaAction, handleGlobalAction } from "./dispatch.js";
+import { debugLog, isWithinEditableElement } from "./dom-utils.js";
+import { isSiteDisabledByPolicy } from "./frame-messaging.js";
+import { state } from "./state.js";
+
+const NUMBER_KEY_ACTIONS: Record<string, MediaAction> = {
+  "0": "seekToPercent0",
+  "1": "seekToPercent10",
+  "2": "seekToPercent20",
+  "3": "seekToPercent30",
+  "4": "seekToPercent40",
+  "5": "seekToPercent50",
+  "6": "seekToPercent60",
+  "7": "seekToPercent70",
+  "8": "seekToPercent80",
+  "9": "seekToPercent90",
+};
+
+function isEditableKeyEvent(e: KeyboardEvent): boolean {
+  if (document.activeElement && isWithinEditableElement(document.activeElement)) {
+    return true;
+  }
+
+  if (e.target instanceof Element && isWithinEditableElement(e.target)) {
+    return true;
+  }
+
+  return e.composedPath().some((target) => {
+    return target instanceof Element && isWithinEditableElement(target);
+  });
+}
+
+function getKeyString(e: KeyboardEvent): string {
+  return normalizeHotkeyKey(e.key);
+}
+
+function getActionForKey(key: string): MediaAction | undefined {
+  const action = state.keyToActionMap.get(key);
+  if (action) {
+    return action;
+  }
+
+  if (state.settings.advancedSettings.useNumberKeysToJump) {
+    return NUMBER_KEY_ACTIONS[key];
+  }
+
+  return undefined;
+}
+
+function hasReservedModifier(e: KeyboardEvent): boolean {
+  return e.metaKey || e.altKey || e.ctrlKey;
+}
+
+export async function handleKeyDown(e: KeyboardEvent): Promise<void> {
+  if (!state.settings.quickSettings.hotkeysEnabled) return;
+  if (isSiteDisabledByPolicy()) return;
+  if (isEditableKeyEvent(e)) return;
+  if (hasReservedModifier(e)) return;
+
+  const key = getKeyString(e);
+  const action = getActionForKey(key);
+  if (!action) return;
+
+  debugLog("Matched keydown to action", undefined, { action, key });
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  if (isGlobalAction(action)) {
+    await handleGlobalAction(action);
+    return;
+  }
+
+  if (!(await dispatchMediaAction(action))) {
+    debugLog("No media element found for action", undefined, { action, key });
+  }
+}
