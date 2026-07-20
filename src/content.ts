@@ -1089,7 +1089,13 @@ function handleRootMutations(mutations: MutationRecord[]): void {
   }
 
   if (hasDomChanges) {
-    lastInteractedMedia = null;
+    // Only forget the interaction memory when the tracked element actually
+    // left the document. Clearing on every unrelated mutation would erase the
+    // recency scoring signal on dynamic pages moments after it is earned.
+    if (lastInteractedMedia && !lastInteractedMedia.isConnected) {
+      lastInteractedMedia = null;
+    }
+
     broadcastTopLevelSitePolicy();
   }
 }

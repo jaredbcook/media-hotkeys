@@ -65,20 +65,41 @@ Uses `webextension-polyfill` to normalize `chrome.*` vs `browser.*` APIs across 
 - Tracks "last interacted media" to intelligently select which media element to control
 - Ignores input if focused element is an `<input>`, `<textarea>`, `<select>`, or is `contenteditable`
 
-## Smart Media Selection (priority order)
+## Smart Media Selection (weighted scoring)
 
-Muted videos without native controls are treated as ambient/background media and skipped by the selector. This is a heuristic and may need refinement for sites that use custom player controls. If a media element was already controlled successfully by the extension, it remains eligible for future actions even if that action changed it into a muted no-controls state.
+Every valid-source media element in the frame is scored, and the highest-scoring element above zero becomes the target (ties resolve to earliest DOM order). Signal weights are ordered by strength of user intent:
 
-1. Active/focused element (if it's a targetable media element)
-2. Currently playing targetable media (`!paused && !ended && readyState > 2`)
-3. Last interacted targetable media (tracked via module-level variable, verified to still exist in DOM; previously controlled media can still be reused after becoming muted/no-controls)
-4. First targetable media element on the page (fallback)
+| Signal                                      | Weight     |
+| ------------------------------------------- | ---------- |
+| Fullscreen or Picture-in-Picture element    | +1000      |
+| Focused element                             | +800       |
+| Playing and audible (unmuted, volume > 0)   | +500       |
+| Last interacted media (click/play/focus)    | +300       |
+| Last media actioned by the extension        | +200       |
+| Playing but muted                           | +150       |
+| Visible viewport area (proportional, video) | up to +200 |
+| Audio element base (no visual footprint)    | +20        |
+| Native controls present                     | +30        |
+| Non-ambient base                            | +10        |
+| Ambient-looking (muted video, no controls)  | −250       |
+
+The ambient heuristic is a penalty, not an exclusion: a muted no-controls video can still be targeted when stronger signals apply — the user focuses or clicks it, it occupies a large visible area (the autoplay-muted primary-content pattern), or the extension already acted on it (`actionedMedia` retains its standing). An idle background loop scores below zero and is never selected.
 
 **Edge Cases:**
 
-- Multiple playing media: first found is selected
-- Iframe media: content script runs independently per frame
+- Multiple playing media: audible beats muted; among equals, recency and visible area decide, then DOM order
+- Iframe media: resolved via cross-frame score arbitration (see Cross-Frame Communication)
 - Shadow DOM: recursively searched via `findMedia()`
+- Interaction memory persists through unrelated DOM mutations and is dropped only when the tracked element leaves the document
+
+## Cross-Frame Target Arbitration
+
+Media actions are executed by exactly one frame, chosen by a two-phase protocol:
+
+1. **Scoring phase** — the initiating frame scores its local candidates and sends a `SCORE_REQUEST` to child frames. Each child recursively reports the best score in its subtree (within a shrinking time budget) and records which descendant owned it, keyed by request id.
+2. **Execute phase** — the initiator compares local vs. child scores (local wins ties) and sends the action to the single winning frame, which routes it hop-by-hop to the recorded winner. On failure or timeout the initiator falls back to its best local candidate.
+
+A fast path skips the cross-frame round-trip when local intent is unambiguous (focus, fullscreen, or PiP). When no frame has scorable media, placeholder activation is offered locally first, then broadcast to child frames as a last resort. Global actions (e.g. overlay toggle) intentionally keep broadcast cascade semantics.
 
 ## Third-Party Player Compatibility
 
@@ -134,7 +155,7 @@ The extension is native-media first: it targets real `HTMLMediaElement` instance
 
 **Cross-Frame Communication:**
 
-- Uses `postMessage` to forward keyboard commands to iframe content scripts
+- Uses `postMessage` for the two-phase score/execute arbitration protocol (see Cross-Frame Target Arbitration)
 - Uses `postMessage` to propagate top-level site policy into child frames
 - Embedded frames inherit a disabled top-level site policy by default; a matching top-level rule can set its embeds policy to ignore so child frames are not disabled by that parent page rule
 - Each frame runs its own content script instance independently
@@ -148,7 +169,9 @@ The extension is native-media first: it targets real `HTMLMediaElement` instance
 
 **State Management:**
 
-- `lastInteractedMedia` — tracks the most recently controlled media element
+- `lastInteractedMedia` — most recently interacted media (click/play/focus); a weighted-scoring signal, cleared only when the element leaves the DOM
+- `lastActionedMedia` / `actionedMedia` — media the extension itself acted on; scoring signal and ambient-penalty exemption
+- `executeRoutesByRequestId` — short-lived routes recorded in the scoring phase so execute requests reach the winning frame
 - Grouped settings model:
   - `quickSettings` contains the global enabled toggle and action key bindings
   - `advancedSettings` contains playback, seek, overlay, and debugging behavior

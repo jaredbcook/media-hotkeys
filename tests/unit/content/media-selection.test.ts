@@ -69,18 +69,19 @@ describe("media target selection", () => {
     expect(getTargetMedia()).toBe(validVideo);
   });
 
-  it("ignores an ambient focused media element", () => {
+  it("targets an ambient video when the user focuses it", () => {
+    // Direct user intent (focus) outweighs the ambient-media penalty.
     const ambientVideo = makeVideo({
       muted: true,
       controls: false,
     } as Partial<HTMLVideoElement>);
-    const primaryVideo = makeVideo();
+    makeVideo();
 
     ambientVideo.tabIndex = 0;
     ambientVideo.focus();
 
     expect(document.activeElement).toBe(ambientVideo);
-    expect(getTargetMedia()).toBe(primaryVideo);
+    expect(getTargetMedia()).toBe(ambientVideo);
   });
 
   it("ignores an invalid last interacted media element", async () => {
@@ -93,8 +94,9 @@ describe("media target selection", () => {
     expect(getTargetMedia()).toBe(validVideo);
   });
 
-  it("ignores an ambient last interacted media element", async () => {
-    const primaryVideo = makeVideo();
+  it("targets an ambient video after the user interacts with it", async () => {
+    // Interaction recency outweighs the ambient-media penalty.
+    makeVideo();
     const ambientVideo = makeVideo({
       muted: true,
       controls: false,
@@ -103,7 +105,7 @@ describe("media target selection", () => {
 
     ambientVideo.dispatchEvent(new Event("pointerdown"));
 
-    expect(getTargetMedia()).toBe(primaryVideo);
+    expect(getTargetMedia()).toBe(ambientVideo);
   });
 
   it("retargets a muted no-controls video after a successful extension action", async () => {
@@ -179,7 +181,7 @@ describe("media target selection", () => {
     );
   });
 
-  it("resets the last interacted media when the DOM changes", async () => {
+  it("keeps the last interacted media through unrelated DOM changes", async () => {
     const first = makeVideo();
     const second = makeVideo();
     await Promise.resolve();
@@ -188,6 +190,23 @@ describe("media target selection", () => {
     expect(getTargetMedia()).toBe(second);
 
     document.body.appendChild(document.createElement("div"));
+    await Promise.resolve();
+
+    expect(getTargetMedia()).toBe(second);
+
+    first.remove();
+    second.remove();
+  });
+
+  it("forgets the last interacted media once it is removed from the DOM", async () => {
+    const first = makeVideo();
+    const second = makeVideo();
+    await Promise.resolve();
+
+    second.dispatchEvent(new Event("pointerdown"));
+    expect(getTargetMedia()).toBe(second);
+
+    second.remove();
     await Promise.resolve();
 
     expect(getTargetMedia()).toBe(first);
@@ -211,6 +230,79 @@ describe("media target selection", () => {
     first.remove();
     second.remove();
     overlay.remove();
+  });
+
+  it("prefers audible playing media over muted playing media", () => {
+    makeVideo({
+      paused: false,
+      ended: false,
+      readyState: 4,
+      muted: true,
+      controls: true,
+    } as Partial<HTMLVideoElement>);
+    const audible = makeVideo({
+      paused: false,
+      ended: false,
+      readyState: 4,
+    } as Partial<HTMLVideoElement>);
+
+    expect(getTargetMedia()).toBe(audible);
+  });
+
+  it("prefers recently interacted media over muted playing media", async () => {
+    // The "ad starts playing elsewhere" scenario: the user's paused video
+    // should stay targeted over an unrelated muted autoplaying element.
+    const interacted = makeVideo();
+    const mutedPlaying = makeVideo({
+      paused: false,
+      ended: false,
+      readyState: 4,
+      muted: true,
+      controls: true,
+    } as Partial<HTMLVideoElement>);
+    await Promise.resolve();
+
+    interacted.dispatchEvent(new Event("pointerdown"));
+
+    expect(getTargetMedia()).toBe(interacted);
+
+    interacted.remove();
+    mutedPlaying.remove();
+  });
+
+  it("prefers audible playing media over recently interacted media", async () => {
+    const interacted = makeVideo();
+    const audible = makeVideo({
+      paused: false,
+      ended: false,
+      readyState: 4,
+    } as Partial<HTMLVideoElement>);
+    await Promise.resolve();
+
+    interacted.dispatchEvent(new Event("pointerdown"));
+
+    expect(getTargetMedia()).toBe(audible);
+
+    interacted.remove();
+    audible.remove();
+  });
+
+  it("prefers focused media over audible playing media", () => {
+    const audible = makeVideo({
+      paused: false,
+      ended: false,
+      readyState: 4,
+    } as Partial<HTMLVideoElement>);
+    const focused = makeVideo();
+
+    focused.tabIndex = 0;
+    focused.focus();
+
+    expect(document.activeElement).toBe(focused);
+    expect(getTargetMedia()).toBe(focused);
+
+    audible.remove();
+    focused.remove();
   });
 
   it("tracks media added inside a shadow root after initialization", async () => {

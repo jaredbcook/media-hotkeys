@@ -327,6 +327,106 @@ describe("frame message handling", () => {
     );
   });
 
+  it("responds to a score request with null when no media exists", async () => {
+    const mockSource = { postMessage: vi.fn() } as unknown as Window;
+
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: {
+          source: "media-shortcuts-extension",
+          type: "MEDIA_SHORTCUTS_SCORE_REQUEST",
+          requestId: "score-req-empty",
+          budgetMs: 0,
+        },
+        source: mockSource,
+      }),
+    );
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(mockSource.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "MEDIA_SHORTCUTS_SCORE_RESPONSE",
+        requestId: "score-req-empty",
+        bestScore: null,
+      }),
+      "*",
+    );
+  });
+
+  it("responds to a score request with the best local candidate score", async () => {
+    makeVideo();
+    const mockSource = { postMessage: vi.fn() } as unknown as Window;
+
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: {
+          source: "media-shortcuts-extension",
+          type: "MEDIA_SHORTCUTS_SCORE_REQUEST",
+          requestId: "score-req-media",
+          budgetMs: 0,
+        },
+        source: mockSource,
+      }),
+    );
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(mockSource.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "MEDIA_SHORTCUTS_SCORE_RESPONSE",
+        requestId: "score-req-media",
+        bestScore: expect.any(Number),
+      }),
+      "*",
+    );
+  });
+
+  it("executes an action routed under a previously scored requestId", async () => {
+    const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
+    const mockSource = { postMessage: vi.fn() } as unknown as Window;
+    const requestId = "score-then-execute";
+
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: {
+          source: "media-shortcuts-extension",
+          type: "MEDIA_SHORTCUTS_SCORE_REQUEST",
+          requestId,
+          budgetMs: 0,
+        },
+        source: mockSource,
+      }),
+    );
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: {
+          source: "media-shortcuts-extension",
+          type: "MEDIA_SHORTCUTS_HANDLE_ACTION",
+          action: "togglePlayPause",
+          requestId,
+        },
+        source: mockSource,
+      }),
+    );
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(playSpy).toHaveBeenCalled();
+    expect(mockSource.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ requestId, handled: true }),
+      "*",
+    );
+  });
+
   it("does not apply URL-matched site policies directly inside embedded frames", async () => {
     window.history.pushState({}, "", "/embed/1");
     const parentSource = { postMessage: vi.fn() } as unknown as Window;

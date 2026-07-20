@@ -82,20 +82,40 @@ test("ignores muted videos without controls when selecting a target", async ({ p
     {
       muted: true,
       controls: false,
-      paused: false,
-      ended: false,
-      readyState: 4,
+    },
+    "video",
+  );
+  await createMedia(page, "primary", { volume: 0.5 });
+
+  await page.keyboard.press("ArrowDown");
+
+  await waitForMediaState(page, "primary", (state) => Math.abs(state.volume - 0.45) < 0.0001);
+  await expect.poll(async () => (await readMediaState(page, "ambient")).muted).toBe(true);
+  await expect.poll(async () => (await readMediaState(page, "ambient")).volume).toBeCloseTo(0.5, 5);
+});
+
+test("targets a muted no-controls video when the user focuses it", async ({ page }) => {
+  // Direct user intent (focus) outweighs the ambient-media penalty.
+  await createMedia(
+    page,
+    "ambient",
+    {
+      muted: true,
+      controls: false,
     },
     "video",
   );
   await createMedia(page, "primary", { volume: 0.5 });
 
   await page.locator("#ambient").focus();
-  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowUp");
 
-  await waitForMediaState(page, "primary", (state) => Math.abs(state.volume - 0.45) < 0.0001);
-  await expect.poll(async () => (await readMediaState(page, "ambient")).muted).toBe(true);
-  await expect.poll(async () => (await readMediaState(page, "ambient")).volume).toBeCloseTo(0.5, 5);
+  await waitForMediaState(
+    page,
+    "ambient",
+    (state) => !state.muted && Math.abs(state.volume - 0.05) < 0.0001,
+  );
+  await expect.poll(async () => (await readMediaState(page, "primary")).volume).toBeCloseTo(0.5, 5);
 });
 
 test("keeps targeting a no-controls video after muting it with a shortcut", async ({ page }) => {
@@ -152,6 +172,36 @@ test("delegates actions from the top window into a child iframe", async ({ page,
   await expect
     .poll(async () => (await readFrameMediaState(frame!, "frame-media")).paused)
     .toBe(false);
+});
+
+test("executes an action in exactly one frame when multiple iframes have media", async ({
+  page,
+  server,
+}) => {
+  await page.goto(server.getUrl("/page-with-two-iframes"));
+
+  const frameA = await (await page.locator("#child-frame-a").elementHandle())?.contentFrame();
+  const frameB = await (await page.locator("#child-frame-b").elementHandle())?.contentFrame();
+  expect(frameA).not.toBeNull();
+  expect(frameB).not.toBeNull();
+
+  await expect(page.frameLocator("#child-frame-a").locator("#frame-media")).toHaveCount(1);
+  await expect(page.frameLocator("#child-frame-b").locator("#frame-media")).toHaveCount(1);
+
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+  await page.keyboard.press("k");
+
+  const countPlaying = async (): Promise<number> => {
+    const stateA = await readFrameMediaState(frameA!, "frame-media");
+    const stateB = await readFrameMediaState(frameB!, "frame-media");
+    return Number(!stateA.paused) + Number(!stateB.paused);
+  };
+
+  await expect.poll(countPlaying).toBe(1);
+
+  // Guard against the losing frame starting late.
+  await page.waitForTimeout(400);
+  expect(await countPlaying()).toBe(1);
 });
 
 test("controls media added in a shadow root after initialization", async ({ page }) => {

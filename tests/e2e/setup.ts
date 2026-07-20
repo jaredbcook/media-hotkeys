@@ -292,6 +292,13 @@ export const test = base.extend<Fixtures>({
           `<iframe id="child-frame" src="/iframe-media"></iframe>`,
         ),
       },
+      "/page-with-two-iframes": {
+        body: createFixturePage(
+          "Page With Two Iframes",
+          `<iframe id="child-frame-a" src="/iframe-media"></iframe>
+           <iframe id="child-frame-b" src="/iframe-media"></iframe>`,
+        ),
+      },
     });
 
     await use({
