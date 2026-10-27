@@ -20,7 +20,10 @@ There is no background service worker. All state that crosses contexts goes thro
 A keypress flows through the content script like this:
 
 ```
-keydown (capture) ─► keyboard.ts ─► dispatch.ts ─┬─► media-scoring.ts      (local candidates)
+keydown (capture) ─► keyboard.ts ─► media-presence.ts: any reachable media?  no ─► key stays with the page
+                                    │ yes: preventDefault
+                                    ▼
+                                dispatch.ts ─────┬─► media-scoring.ts      (local candidates)
                                                  ├─► frame-messaging.ts    (child-frame scores)
                                                  └─► winner frame ─► actions.ts ─► player-control.ts
                                                                                  └► overlay.ts
@@ -33,24 +36,25 @@ Every file under `src/` is listed here; `tests/unit/docs/docs-consistency.test.t
 
 ### Content script (`src/content/`)
 
-| File                             | Responsibility                                                                                         |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `src/content.ts`                 | Entry point. Registers document listeners and re-exports a small API used by tests.                    |
-| `src/content/state.ts`           | The only shared mutable state: settings, key map, last-interacted and last-actioned media.             |
-| `src/content/constants.ts`       | `postMessage` types, cross-frame timeouts and budgets, extension-owned DOM attribute names.            |
-| `src/content/keyboard.ts`        | `keydown` handling: theater `Esc`, enabled/site-policy/editable/modifier guards, key-to-action lookup. |
-| `src/content/dispatch.ts`        | Chooses which frame executes an action; handles all incoming frame messages.                           |
-| `src/content/frame-messaging.ts` | The cross-frame protocol: score requests, execute routing, site-policy propagation, theater grants.    |
-| `src/content/media-discovery.ts` | Finds media and iframes, including inside open shadow roots; ambient-media heuristic.                  |
-| `src/content/media-scoring.ts`   | Weighted scoring of local candidates (weights are the `SCORE_*` constants).                            |
-| `src/content/media-tracking.ts`  | `MutationObserver` on the document and every shadow root; interaction and pointer tracking.            |
-| `src/content/actions.ts`         | Executes an action on the chosen media and builds overlay display options (including skip streaks).    |
-| `src/content/player-control.ts`  | Reads and writes media state, preferring custom-player host APIs, falling back to `HTMLMediaElement`.  |
-| `src/content/placeholder.ts`     | Detects and clicks thumbnail "facades" when there is no real media yet.                                |
-| `src/content/fullscreen.ts`      | Wraps media in a managed container for fullscreen so the overlay can render on top.                    |
-| `src/content/theater.ts`         | Theater mode: top-layer popover promotion of the video and of hosting iframes.                         |
-| `src/content/settings-sync.ts`   | Loads settings and reloads on `storage.onChanged`.                                                     |
-| `src/content/dom-utils.ts`       | Visibility, viewport area, deep active element, editable detection, `debugLog`.                        |
+| File                             | Responsibility                                                                                          |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `src/content.ts`                 | Entry point. Registers document listeners and re-exports a small API used by tests.                     |
+| `src/content/state.ts`           | The only shared mutable state: settings, key map, last-interacted and last-actioned media.              |
+| `src/content/constants.ts`       | `postMessage` types, cross-frame timeouts and budgets, extension-owned DOM attribute names.             |
+| `src/content/keyboard.ts`        | `keydown` handling: theater `Esc`, enabled/site-policy/editable/modifier guards, key-to-action lookup.  |
+| `src/content/dispatch.ts`        | Chooses which frame executes an action; handles all incoming frame messages.                            |
+| `src/content/frame-messaging.ts` | The cross-frame protocol: score requests, execute routing, site-policy propagation, theater grants.     |
+| `src/content/media-discovery.ts` | Finds media and iframes, including inside open shadow roots; ambient-media heuristic.                   |
+| `src/content/media-scoring.ts`   | Weighted scoring of local candidates (weights are the `SCORE_*` constants).                             |
+| `src/content/media-presence.ts`  | Tracks which child frames report media; decides synchronously whether a key may be taken from the page. |
+| `src/content/media-tracking.ts`  | `MutationObserver` on the document and every shadow root; interaction and pointer tracking.             |
+| `src/content/actions.ts`         | Executes an action on the chosen media and builds overlay display options (including skip streaks).     |
+| `src/content/player-control.ts`  | Reads and writes media state, preferring custom-player host APIs, falling back to `HTMLMediaElement`.   |
+| `src/content/placeholder.ts`     | Detects and clicks thumbnail "facades" when there is no real media yet.                                 |
+| `src/content/fullscreen.ts`      | Wraps media in a managed container for fullscreen so the overlay can render on top.                     |
+| `src/content/theater.ts`         | Theater mode: top-layer popover promotion of the video and of hosting iframes.                          |
+| `src/content/settings-sync.ts`   | Loads settings and reloads on `storage.onChanged`.                                                      |
+| `src/content/dom-utils.ts`       | Visibility, viewport area, deep active element, editable detection, `debugLog`.                         |
 
 ### Shared and UI (`src/`)
 
@@ -96,6 +100,16 @@ Design rules behind the signals:
 - **Clicks on custom controls count.** Players such as YouTube, Vimeo, Video.js, and Plyr layer controls over the `<video>`. A capture-phase `pointerdown` on the document credits the innermost visible media under the pointer.
 - **Ambient is a penalty, not an exclusion.** A muted autoplay loop can still win if the user focuses or clicks it, it dominates the viewport, or the extension already acted on it (`actionedMedia`). An idle background loop scores below zero and is never chosen.
 - **Interaction memory survives DOM churn.** `lastInteractedMedia` is cleared only when that element leaves the document, not on unrelated mutations.
+
+## Taking keys from the page
+
+A matched key is only taken from the page (`preventDefault` and `stopPropagation`) when it can reach media. Otherwise pages without media would lose arrow-key scrolling and their own shortcuts (`j`, `k`, `o`, and others) to the extension. The decision must be synchronous, before any cross-frame round trip, so `media-presence.ts` keeps it answerable from local state:
+
+- **This frame:** a local candidate scores above zero, or theater mode is active.
+- **Child frames:** each frame posts `MEDIA_HOTKEYS_MEDIA_PRESENCE` to its parent with whether its subtree has controllable media. It reports when it loads, and after DOM mutations, `loadstart`, `emptied`, and `volumechange`, debounced and only on change. A frame that starts listening asks its children to report again, because reports sent before its content script loaded are lost. Ambient loops don't count, so a muted video ad in an iframe doesn't capture keys.
+- **Play key only:** a click-to-play placeholder in this frame, or a visible iframe big enough to hold one. Placeholder scans are too expensive to run on every mutation, so placeholders aren't reported across frames.
+
+When nothing qualifies, the key passes through untouched and no arbitration runs. The overlay toggle follows the same rule. Accepted gaps: a key pressed in the first moments after an iframe loads, or ambient media inside an iframe, stays with the page until the user clicks into the frame.
 
 ## Cross-frame arbitration
 
@@ -154,6 +168,7 @@ Breaking one of these is a bug even if tests pass:
 - Use `webextension-polyfill`, never `chrome.*` (`tsconfig.app.json` omits Chrome globals so `tsc` rejects it).
 - No `host_permissions`, no background script, Manifest V3 only.
 - Hotkeys never fire while focus is in an editable element (`input`, `textarea`, `select`, `contenteditable`, including inside shadow roots) or with Ctrl, Alt, or Meta held.
+- A key is only taken from the page when `hasPotentialTarget` says media may be reachable.
 - Exactly one frame executes a media action.
 - Theater promotion of an iframe requires a route grant or iframe focus.
 - Pressing play on a placeholder never navigates the page.

@@ -3,6 +3,7 @@ import { isGlobalAction } from "./actions.js";
 import { dispatchMediaAction, handleGlobalAction } from "./dispatch.js";
 import { debugLog, isWithinEditableElement } from "./dom-utils.js";
 import { isSiteDisabledByPolicy } from "./frame-messaging.js";
+import { hasPotentialTarget } from "./media-presence.js";
 import { state } from "./state.js";
 import { exitTheater } from "./theater.js";
 
@@ -71,6 +72,13 @@ export async function handleKeyDown(e: KeyboardEvent): Promise<void> {
   const key = getKeyString(e);
   const action = getActionForKey(key);
   if (!action) return;
+
+  // Only take the key from the page when it can do something. Otherwise pages
+  // without media would lose scrolling and their own shortcuts to our bindings.
+  if (!hasPotentialTarget(action)) {
+    debugLog("No media for action; leaving the key to the page", undefined, { action, key });
+    return;
+  }
 
   debugLog("Matched keydown to action", undefined, { action, key });
 

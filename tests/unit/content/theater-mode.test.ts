@@ -225,6 +225,17 @@ describe("theater mode across frames", () => {
     const received: unknown[] = [];
     // Let jsdom fire the initial about:blank load before any promotion.
     await new Promise((resolve) => setTimeout(resolve, 0));
+    // The child's content script reports its video, so the parent takes the key.
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        source: childWindow,
+        data: {
+          source: "media-shortcuts-extension",
+          type: "MEDIA_HOTKEYS_MEDIA_PRESENCE",
+          hasMedia: true,
+        },
+      }),
+    );
 
     vi.spyOn(childWindow, "postMessage").mockImplementation((message: unknown) => {
       received.push(message);

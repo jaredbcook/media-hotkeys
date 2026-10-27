@@ -6,6 +6,8 @@ import {
   EXECUTE_ROUTE_TTL_MS,
   EXECUTE_TIMEOUT_MS,
   FRAME_ACTION_TIMEOUT_MS,
+  MEDIA_PRESENCE_REQUEST_TYPE,
+  MEDIA_PRESENCE_TYPE,
   MESSAGE_SOURCE,
   SCORE_CHILD_BUDGET_MARGIN_MS,
   SCORE_MIN_CHILD_BUDGET_MS,
@@ -57,12 +59,28 @@ export type FrameSitePolicyMessage = {
   disabled: boolean;
 };
 
+// Child to parent: whether the child's frame subtree has controllable media.
+export type FrameMediaPresenceMessage = {
+  source: "media-shortcuts-extension";
+  type: "MEDIA_HOTKEYS_MEDIA_PRESENCE";
+  hasMedia: boolean;
+};
+
+// Parent to child: asks for a presence report, for children whose initial
+// report arrived before the parent's content script was listening.
+export type FrameMediaPresenceRequestMessage = {
+  source: "media-shortcuts-extension";
+  type: "MEDIA_HOTKEYS_MEDIA_PRESENCE_REQUEST";
+};
+
 export type FrameMessage =
   | FrameActionRequestMessage
   | FrameActionResponseMessage
   | FrameScoreRequestMessage
   | FrameScoreResponseMessage
   | FrameSitePolicyMessage
+  | FrameMediaPresenceMessage
+  | FrameMediaPresenceRequestMessage
   | FrameTheaterMessage;
 
 type ChildFrameBestScore = {
@@ -148,6 +166,14 @@ export function isFrameActionMessage(data: unknown): data is FrameMessage {
 
   if (message.type === SITE_POLICY_TYPE) {
     return typeof (message as Partial<FrameSitePolicyMessage>).disabled === "boolean";
+  }
+
+  if (message.type === MEDIA_PRESENCE_TYPE) {
+    return typeof (message as Partial<FrameMediaPresenceMessage>).hasMedia === "boolean";
+  }
+
+  if (message.type === MEDIA_PRESENCE_REQUEST_TYPE) {
+    return true;
   }
 
   if (message.type === THEATER_TYPE) {

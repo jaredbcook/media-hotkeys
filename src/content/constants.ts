@@ -5,6 +5,8 @@ export const SCORE_REQUEST_TYPE = "MEDIA_SHORTCUTS_SCORE_REQUEST";
 export const SCORE_RESPONSE_TYPE = "MEDIA_SHORTCUTS_SCORE_RESPONSE";
 export const SITE_POLICY_TYPE = "MEDIA_HOTKEYS_SITE_POLICY";
 export const THEATER_TYPE = "MEDIA_HOTKEYS_THEATER";
+export const MEDIA_PRESENCE_TYPE = "MEDIA_HOTKEYS_MEDIA_PRESENCE";
+export const MEDIA_PRESENCE_REQUEST_TYPE = "MEDIA_HOTKEYS_MEDIA_PRESENCE_REQUEST";
 
 export const FRAME_ACTION_TIMEOUT_MS = 150;
 // Total time budget for the cross-frame scoring phase; nested frames receive a
@@ -15,6 +17,8 @@ export const SCORE_MIN_CHILD_BUDGET_MS = 40;
 export const EXECUTE_TIMEOUT_MS = 250;
 export const EXECUTE_PLACEHOLDER_TIMEOUT_MS = 1400;
 export const EXECUTE_ROUTE_TTL_MS = 2000;
+// Coalesces bursts of DOM and media changes into one presence report upward.
+export const MEDIA_PRESENCE_REPORT_DELAY_MS = 100;
 
 export const FULLSCREEN_WRAPPER_ATTR = "data-media-hotkeys-fullscreen-wrapper";
 export const FULLSCREEN_STYLE_ATTR = "data-media-hotkeys-fullscreen";

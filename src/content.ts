@@ -9,6 +9,7 @@ import {
   handleDocumentPointerMove,
   initializeDynamicMediaTracking,
 } from "./content/media-tracking.js";
+import { initializeMediaPresence } from "./content/media-presence.js";
 import { handleStorageChanged, loadSettings } from "./content/settings-sync.js";
 
 export type { MediaAction };
@@ -31,4 +32,5 @@ document.addEventListener("pointermove", handleDocumentPointerMove, {
 });
 document.addEventListener("mouseout", handleDocumentMouseOut, { capture: true, passive: true });
 initializeDynamicMediaTracking();
+initializeMediaPresence();
 void loadSettings();

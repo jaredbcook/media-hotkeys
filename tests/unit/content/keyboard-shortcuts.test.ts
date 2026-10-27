@@ -204,7 +204,7 @@ describe("keyboard shortcut routing", () => {
     expect(video.playbackRate).toBeCloseTo(1.25);
   });
 
-  it("toggles overlays off even when no media is present", async () => {
+  it("leaves the overlay toggle key to the page when no media is present", async () => {
     await dispatchMappedKey("o");
     await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -214,12 +214,8 @@ describe("keyboard shortcut routing", () => {
     await dispatchMappedKey("k");
 
     expect(playSpy).toHaveBeenCalled();
-    expect(showActionOverlayMock).not.toHaveBeenCalled();
-    expect(storageSetMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        advancedSettings: expect.objectContaining({ showOverlays: false }),
-      }),
-    );
+    expect(showActionOverlayMock).toHaveBeenCalled();
+    expect(storageSetMock).not.toHaveBeenCalled();
   });
 
   it("shows the overlays toggle confirmation when media is present", async () => {

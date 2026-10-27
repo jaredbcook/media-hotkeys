@@ -7,10 +7,12 @@ import {
 import { debugLog, isElementVisible } from "./dom-utils.js";
 import { collectMediaAndShadowRoots, findMedia, hasValidMediaSource } from "./media-discovery.js";
 import { broadcastTopLevelSitePolicy } from "./frame-messaging.js";
+import { scheduleMediaPresenceReport } from "./media-presence.js";
 import { state } from "./state.js";
 
 const trackedMedia = new WeakSet<HTMLMediaElement>();
 const observedRoots = new WeakSet<Document | ShadowRoot>();
+const PRESENCE_MEDIA_EVENTS = ["loadstart", "emptied", "volumechange"] as const;
 let rootObserver: MutationObserver | null = null;
 let shadowObserverPatched = false;
 // Last known pointer position in viewport coordinates, or null when the
@@ -186,6 +188,7 @@ function handleRootMutations(mutations: MutationRecord[]): void {
     }
 
     broadcastTopLevelSitePolicy();
+    scheduleMediaPresenceReport();
   }
 }
 
@@ -195,6 +198,12 @@ function observeRoot(root: Document | ShadowRoot): void {
   }
 
   observedRoots.add(root);
+  // A source attached by script (hls.js, MSE) or a mute toggle can change
+  // whether this frame has controllable media without any DOM mutation.
+  // Media events don't bubble, so listen in the capture phase.
+  for (const eventName of PRESENCE_MEDIA_EVENTS) {
+    root.addEventListener(eventName, scheduleMediaPresenceReport, { capture: true, passive: true });
+  }
   rootObserver ??= new MutationObserver(handleRootMutations);
   rootObserver.observe(root, {
     childList: true,

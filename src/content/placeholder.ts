@@ -208,6 +208,19 @@ function findPlayLikeControl(element: HTMLElement, containerRect: DOMRect): Play
   return null;
 }
 
+/** Whether an element is visible and big enough on screen to be a player thumbnail. */
+export function isPlaceholderSized(
+  element: Element,
+  rect: DOMRect = element.getBoundingClientRect(),
+): boolean {
+  return (
+    isElementVisible(element, rect) &&
+    rect.width >= PLACEHOLDER_MIN_WIDTH_PX &&
+    rect.height >= PLACEHOLDER_MIN_HEIGHT_PX &&
+    getVisibleViewportArea(rect) >= PLACEHOLDER_MIN_VISIBLE_AREA_PX
+  );
+}
+
 function hasThumbnailAspect(rect: DOMRect): boolean {
   const ratio = rect.width / rect.height;
   return ratio >= 1.2 && ratio <= 2.4;
@@ -458,18 +471,11 @@ function getPlayablePlaceholderCandidate(
   }
 
   const rect = element.getBoundingClientRect();
-  if (!isElementVisible(element, rect)) {
-    return null;
-  }
-
-  if (rect.width < PLACEHOLDER_MIN_WIDTH_PX || rect.height < PLACEHOLDER_MIN_HEIGHT_PX) {
+  if (!isPlaceholderSized(element, rect)) {
     return null;
   }
 
   const visibleArea = getVisibleViewportArea(rect);
-  if (visibleArea < PLACEHOLDER_MIN_VISIBLE_AREA_PX) {
-    return null;
-  }
 
   if (findMedia(element).some(isTargetableMediaElement)) {
     return null;
@@ -580,6 +586,10 @@ function findBestPlayablePlaceholder(): PlayablePlaceholderCandidate | null {
   });
 
   return candidates[0] ?? null;
+}
+
+export function hasPlayablePlaceholder(): boolean {
+  return findBestPlayablePlaceholder() !== null;
 }
 
 function waitForTargetMedia(timeoutMs: number): Promise<HTMLMediaElement | null> {

@@ -8,6 +8,8 @@ import {
 import {
   ACTION_REQUEST_TYPE,
   ACTION_RESPONSE_TYPE,
+  MEDIA_PRESENCE_REQUEST_TYPE,
+  MEDIA_PRESENCE_TYPE,
   SCORE_BUDGET_MS,
   SCORE_REQUEST_TYPE,
   SCORE_RESPONSE_TYPE,
@@ -38,6 +40,7 @@ import {
   getBestLocalCandidate,
   getTargetMedia,
 } from "./media-scoring.js";
+import { handleMediaPresenceMessage } from "./media-presence.js";
 import { activatePlayablePlaceholder } from "./placeholder.js";
 import { state } from "./state.js";
 import {
@@ -221,6 +224,13 @@ export function handleFrameMessage(event: MessageEvent): void {
     }
 
     applyParentSitePolicy(event.data.disabled);
+    return;
+  }
+
+  if (event.data.type === MEDIA_PRESENCE_TYPE || event.data.type === MEDIA_PRESENCE_REQUEST_TYPE) {
+    if (event.source && event.source !== window) {
+      handleMediaPresenceMessage(event.data, event.source as Window);
+    }
     return;
   }
 
