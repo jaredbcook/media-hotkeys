@@ -10,7 +10,7 @@
     "noImplicitReturns": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["chrome", "vitest/globals"]
+    "types": ["vitest/globals"]
   },
-  "include": ["src/**/*.ts", "tests/*.test.ts"]
+  "include": ["src/**/*.ts", "tests/unit/**/*.ts", "tests/ui/**/*.ts"]
 }

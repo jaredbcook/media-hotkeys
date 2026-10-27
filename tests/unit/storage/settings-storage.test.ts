@@ -215,8 +215,12 @@ describe("settings storage", () => {
   it("matches disabled URL patterns against top-level URLs", () => {
     const siteSettings = {
       sitePolicies: [
-        { pattern: "youtube.com/shorts", policy: "disabled" as const, embedsPolicy: "inherit" },
-        { pattern: "vimeo.com", policy: "disabled" as const, embedsPolicy: "inherit" },
+        {
+          pattern: "youtube.com/shorts",
+          policy: "disabled" as const,
+          embedsPolicy: "inherit" as const,
+        },
+        { pattern: "vimeo.com", policy: "disabled" as const, embedsPolicy: "inherit" as const },
       ],
       disabledUrlPatterns: ["youtube.com/shorts", "vimeo.com"],
     };
@@ -235,8 +239,12 @@ describe("settings storage", () => {
   it("uses more specific enabled site policies over broader disabled policies", () => {
     const siteSettings = {
       sitePolicies: [
-        { pattern: "youtube.com", policy: "disabled" as const, embedsPolicy: "inherit" },
-        { pattern: "youtube.com/shorts", policy: "enabled" as const, embedsPolicy: "inherit" },
+        { pattern: "youtube.com", policy: "disabled" as const, embedsPolicy: "inherit" as const },
+        {
+          pattern: "youtube.com/shorts",
+          policy: "enabled" as const,
+          embedsPolicy: "inherit" as const,
+        },
       ],
       disabledUrlPatterns: ["youtube.com"],
     };
