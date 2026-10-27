@@ -4,6 +4,7 @@ export const ACTION_RESPONSE_TYPE = "MEDIA_SHORTCUTS_ACTION_RESULT";
 export const SCORE_REQUEST_TYPE = "MEDIA_SHORTCUTS_SCORE_REQUEST";
 export const SCORE_RESPONSE_TYPE = "MEDIA_SHORTCUTS_SCORE_RESPONSE";
 export const SITE_POLICY_TYPE = "MEDIA_HOTKEYS_SITE_POLICY";
+export const THEATER_TYPE = "MEDIA_HOTKEYS_THEATER";
 
 export const FRAME_ACTION_TIMEOUT_MS = 150;
 // Total time budget for the cross-frame scoring phase; nested frames receive a
@@ -17,5 +18,7 @@ export const EXECUTE_ROUTE_TTL_MS = 2000;
 
 export const FULLSCREEN_WRAPPER_ATTR = "data-media-hotkeys-fullscreen-wrapper";
 export const FULLSCREEN_STYLE_ATTR = "data-media-hotkeys-fullscreen";
+export const THEATER_ATTR = "data-media-hotkeys-theater";
+export const THEATER_STYLE_ATTR = "data-media-hotkeys-theater-style";
 export const OVERLAY_STYLE_ATTR = "data-media-shortcuts-overlay";
 export const OVERLAY_ID = "media-shortcuts-overlay";

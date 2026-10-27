@@ -11,7 +11,7 @@ Browser extension that adds hotkeys to control HTML video or audio on any websit
 
 ## Features
 
-- **Hotkeys for common media actions**: Play/pause, mute, playback speed, skip forward/backward, restart, jump-to-percent, volume, fullscreen, picture-in-picture, and overlay toggling.
+- **Hotkeys for common media actions**: Play/pause, mute, playback speed, skip forward/backward, restart, jump-to-percent, volume, fullscreen, picture-in-picture, theater mode, and overlay toggling.
 - **Visual feedback**: If enabled, shows a temporary overlay for most actions.
 - **Smart selection**: Automatically selects the best media element to control even if it doesn't have focus, while skipping muted videos without native controls as likely ambient/background media.
 - **Cross-origin support**: Works with media embedded in iframes or in the shadow DOM.
@@ -29,6 +29,7 @@ Hotkeys are also ignored on pages whose effective site policy is disabled.
 | Mute/Unmute            | `m`                 |                                                  |
 | Fullscreen             | `f`                 | `Esc` exits fullscreen                           |
 | Picture in Picture     | `i`                 |                                                  |
+| Theater mode           | `t`                 | Fills the window without fullscreen; `Esc` exits |
 | Speed up               | `>`                 | Default maximum is 4x. Default step is 0.25x.    |
 | Slow down              | `<`                 | Default minimum is 0.25x. Default step is 0.25x. |
 | Volume up              | `ArrowUp`, `+`, `=` | `ArrowUp` only works when media has focus\*      |

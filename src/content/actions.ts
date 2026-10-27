@@ -26,6 +26,7 @@ import {
   setPlayerVolume,
 } from "./player-control.js";
 import { actionedMedia, state } from "./state.js";
+import { exitTheater, toggleTheater } from "./theater.js";
 
 export type SeekDirection = "forward" | "backward";
 
@@ -220,6 +221,9 @@ export function handleAction(action: MediaAction, media: HTMLMediaElement): void
         if (document.fullscreenElement) {
           document.exitFullscreen();
         } else {
+          // The fullscreen wrapper reparents the video, which would drop it out
+          // of the top layer anyway; leave theater mode cleanly first.
+          exitTheater();
           if (requestCustomPlayerFullscreen(media)) {
             break;
           }
@@ -246,6 +250,12 @@ export function handleAction(action: MediaAction, media: HTMLMediaElement): void
         } else {
           media.requestPictureInPicture();
         }
+      }
+      break;
+
+    case "toggleTheater":
+      if (media instanceof HTMLVideoElement) {
+        toggleTheater(media);
       }
       break;
 

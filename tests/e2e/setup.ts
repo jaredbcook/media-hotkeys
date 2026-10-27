@@ -348,6 +348,28 @@ export const test = base.extend<Fixtures>({
           `<iframe id="child-frame" src="/iframe-media"></iframe>`,
         ),
       },
+      "/iframe-video": {
+        body: createFixturePage(
+          "Iframe Video",
+          `<script>
+            window.addEventListener("DOMContentLoaded", () => {
+              window.__mediaFixtures.createMedia("frame-video", "video");
+            });
+          </script>`,
+        ),
+      },
+      "/page-with-video-iframe": {
+        body: createFixturePage(
+          "Page With Video Iframe",
+          `<iframe id="video-frame" src="/iframe-video" style="width: 480px; height: 270px; border: 0;"></iframe>`,
+        ),
+      },
+      "/page-with-nested-video-iframe": {
+        body: createFixturePage(
+          "Page With Nested Video Iframe",
+          `<iframe id="outer-frame" src="/page-with-video-iframe" style="width: 640px; height: 400px; border: 0;"></iframe>`,
+        ),
+      },
       "/page-with-two-iframes": {
         body: createFixturePage(
           "Page With Two Iframes",

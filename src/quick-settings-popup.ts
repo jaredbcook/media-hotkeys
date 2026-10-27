@@ -21,6 +21,7 @@ const ACTION_LABELS: Record<ConfigurableMediaAction, string> = {
   toggleMute: "Mute/Unmute",
   toggleFullscreen: "Fullscreen",
   togglePip: "Picture-in-Picture",
+  toggleTheater: "Theater Mode",
   speedUp: "Speed Up",
   slowDown: "Slow Down",
   volumeUp: "Volume Up",

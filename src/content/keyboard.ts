@@ -4,6 +4,7 @@ import { dispatchMediaAction, handleGlobalAction } from "./dispatch.js";
 import { debugLog, isWithinEditableElement } from "./dom-utils.js";
 import { isSiteDisabledByPolicy } from "./frame-messaging.js";
 import { state } from "./state.js";
+import { exitTheater } from "./theater.js";
 
 const NUMBER_KEY_ACTIONS: Record<string, MediaAction> = {
   "0": "seekToPercent0",
@@ -54,6 +55,14 @@ function hasReservedModifier(e: KeyboardEvent): boolean {
 }
 
 export async function handleKeyDown(e: KeyboardEvent): Promise<void> {
+  // Leaving theater mode must keep working even if hotkeys were disabled or
+  // focus landed in an editable element after the video was promoted.
+  if (e.key === "Escape" && !hasReservedModifier(e) && exitTheater()) {
+    e.preventDefault();
+    e.stopPropagation();
+    return;
+  }
+
   if (!state.settings.quickSettings.hotkeysEnabled) return;
   if (isSiteDisabledByPolicy()) return;
   if (isEditableKeyEvent(e)) return;

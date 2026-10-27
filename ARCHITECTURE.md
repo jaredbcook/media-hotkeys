@@ -32,6 +32,7 @@ Uses `webextension-polyfill` to normalize `chrome.*` vs `browser.*` APIs across 
       placeholder.ts    # playable-placeholder (thumbnail) detection/activation
       player-control.ts # native + custom-player (web component) control
       settings-sync.ts  # settings loading and storage-change handling
+      theater.ts        # theater mode (top-layer popover promotion)
       state.ts          # mutable state shared across content modules
     /settings
       defaults.json     # default quick and advanced settings
@@ -94,7 +95,7 @@ Every valid-source media element in the frame is scored, and the highest-scoring
 
 | Signal                                      | Weight     |
 | ------------------------------------------- | ---------- |
-| Fullscreen or Picture-in-Picture element    | +1000      |
+| Fullscreen, PiP, or theater-mode element    | +1000      |
 | Focused element                             | +800       |
 | Playing and audible (unmuted, volume > 0)   | +500       |
 | Last interacted media (click/play/focus)    | +300       |
@@ -128,7 +129,7 @@ Media actions are executed by exactly one frame, chosen by a two-phase protocol:
    Each response also carries the visible-area component of the score. Because a child measures area against its own viewport, the receiving frame rescales that component by the fraction of its viewport the iframe visibly covers, so a video filling a small ad iframe (or an iframe scrolled out of view) cannot claim the full area score.
 2. **Execute phase** — the initiator compares local vs. child scores (local wins ties) and sends the action to the single winning frame, which routes it hop-by-hop to the recorded winner. On failure or timeout the initiator falls back to its best local candidate.
 
-A fast path skips the cross-frame round-trip when local intent is unambiguous (focus, fullscreen, or PiP). When no frame has scorable media, placeholder activation is offered locally first, then broadcast to child frames as a last resort. Global actions (e.g. overlay toggle) intentionally keep broadcast cascade semantics.
+A fast path skips the cross-frame round-trip when local intent is unambiguous (focus, fullscreen, PiP, or theater mode). When no frame has scorable media, placeholder activation is offered locally first, then broadcast to child frames as a last resort. Global actions (e.g. overlay toggle) intentionally keep broadcast cascade semantics.
 
 ## Playable Placeholders
 
@@ -250,6 +251,12 @@ Pages often contain multiple `<video>` and/or `<audio>` elements (ads, thumbnail
 ### Site Conflicts
 
 Sites like YouTube have their own native keyboard shortcuts. Media Hotkeys captures mapped keys before most page handlers by default, but users can add site policies such as `youtube.com` disabled and `youtube.com/shorts` enabled from Advanced Settings. More specific path rules override broader domain rules. Top-level disabled policy is forwarded to child frames by default so iframe handlers cannot bypass a disabled page, and each matching top-level rule can set its embeds policy to ignore when child frames should keep handling Media Hotkeys.
+
+### Theater Mode
+
+Theater mode promotes the target `<video>` into the browser's top layer as a manual popover rather than moving it into a dialog. The element never changes DOM position, so player scripts, framework reconcilers, and wrapper CSS that reference it keep working, and the top layer escapes ancestor transforms, `overflow` clipping, and stacking contexts. Sizing rules are `!important` inside a cascade layer so they beat both unlayered `!important` site styles and inline sizes that player scripts rewrite on resize. Site-drawn controls and caption layers stay behind in the page, so native `controls` are enabled for the duration and the action overlay is promoted into the top layer too. `Esc` or the hotkey exits and restores the original scroll position.
+
+For a video inside an iframe, each ancestor frame promotes the `<iframe>` hosting it the same way, so the video can fill the top-level viewport. A child asks its parent with a `MEDIA_HOTKEYS_THEATER` message, and the parent enlarges the iframe only when it has a reason to trust the request: either it routed `toggleTheater` to that exact frame under the `requestId` the message carries (within the route TTL), or that iframe is the focused element in the parent (following focus into open shadow roots), which is the case when the user clicked into an embed and pressed the hotkey there. The parent then repeats the request to its own parent, passing along its own routed `requestId` when it has one and otherwise relying on the same focus check one level up. Without these checks, any embedded frame (an ad, for example) could post the message to cover the page; the remaining exposure is an iframe that holds focus, which in current browsers generally requires the user to have interacted with it. Exits need no trust: a frame that leaves theater mode notifies its parent and its promoted child, and each side ignores notices that don't match its state.
 
 ### Safari Conversion
 

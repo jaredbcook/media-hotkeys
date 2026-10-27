@@ -10,6 +10,7 @@ export type MediaAction =
   | "toggleOverlays"
   | "toggleFullscreen"
   | "togglePip"
+  | "toggleTheater"
   | "speedUp"
   | "slowDown"
   | "volumeUp"
@@ -119,7 +120,11 @@ export interface SettingsUpdate extends Partial<AdvancedSettings> {
   globalSettings?: Partial<AdvancedSettings>;
 }
 
-const NON_OVERLAY_ACTIONS = new Set<MediaAction>(["toggleFullscreen", "togglePip"]);
+const NON_OVERLAY_ACTIONS = new Set<MediaAction>([
+  "toggleFullscreen",
+  "togglePip",
+  "toggleTheater",
+]);
 
 // #endregion
 
@@ -152,12 +157,24 @@ function mergeActionKeyBindings(
   legacyBindings?: Partial<Record<ConfigurableMediaAction, Partial<ActionConfig>>>,
 ): Record<ConfigurableMediaAction, ActionConfig> {
   const normalizedBindings = {} as Record<ConfigurableMediaAction, ActionConfig>;
+  const userKeys = new Set(
+    [...Object.values(legacyBindings ?? {}), ...Object.values(storedBindings ?? {})]
+      .flatMap((binding) => binding?.keys ?? [])
+      .map(normalizeHotkeyKey),
+  );
 
   for (const action of Object.keys(
     DEFAULT_QUICK_SETTINGS.actionKeyBindings,
   ) as ConfigurableMediaAction[]) {
+    const defaultBinding = DEFAULT_QUICK_SETTINGS.actionKeyBindings[action];
+    const hasUserKeys = Boolean(legacyBindings?.[action]?.keys || storedBindings?.[action]?.keys);
     normalizedBindings[action] = {
-      ...DEFAULT_QUICK_SETTINGS.actionKeyBindings[action],
+      ...defaultBinding,
+      // An action added after the user saved bindings must not take over a key
+      // they already assigned to something else.
+      keys: hasUserKeys
+        ? defaultBinding.keys
+        : defaultBinding.keys.filter((key) => !userKeys.has(normalizeHotkeyKey(key))),
       ...legacyBindings?.[action],
       ...storedBindings?.[action],
     };

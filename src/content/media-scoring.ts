@@ -2,6 +2,7 @@ import { getVisibleViewportArea, isElementVisible } from "./dom-utils.js";
 import { findMedia, isAmbientMediaElement } from "./media-discovery.js";
 import { isPointerOverRect } from "./media-tracking.js";
 import { actionedMedia, state } from "./state.js";
+import { isTheaterMedia } from "./theater.js";
 
 export type ScoredMedia = {
   media: HTMLMediaElement;
@@ -12,7 +13,7 @@ export type ScoredMedia = {
 };
 
 // Weighted-scoring signal values. The exact numbers matter less than their
-// relative ordering: user intent (fullscreen/PiP/focus) > audible playback >
+// relative ordering: user intent (fullscreen/PiP/theater/focus) > audible playback >
 // recent interaction > muted playback > visual prominence > weak hints.
 const SCORE_FULLSCREEN_OR_PIP = 1000;
 const SCORE_FOCUSED = 800;
@@ -26,7 +27,7 @@ const SCORE_HAS_CONTROLS = 30;
 const SCORE_AUDIO_BASE = 20;
 const SCORE_NON_AMBIENT_BASE = 10;
 const SCORE_AMBIENT_PENALTY = -250;
-// At or above this local score (focus, fullscreen, or PiP), skip cross-frame
+// At or above this local score (focus, fullscreen, PiP, or theater), skip cross-frame
 // arbitration entirely — the user's intent is unambiguous.
 export const STRONG_LOCAL_TARGET_SCORE = 800;
 
@@ -52,6 +53,10 @@ function scoreMediaCandidate(media: HTMLMediaElement): { score: number; areaScor
   }
 
   if ("pictureInPictureElement" in document && document.pictureInPictureElement === media) {
+    score += SCORE_FULLSCREEN_OR_PIP;
+  }
+
+  if (isTheaterMedia(media)) {
     score += SCORE_FULLSCREEN_OR_PIP;
   }
 

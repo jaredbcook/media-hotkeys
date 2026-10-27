@@ -7,6 +7,7 @@
       "toggleOverlays": { "keys": ["o"] },
       "toggleFullscreen": { "keys": ["f"] },
       "togglePip": { "keys": ["i"] },
+      "toggleTheater": { "keys": ["t"] },
       "speedUp": { "keys": [">"] },
       "slowDown": { "keys": ["<"] },
       "volumeUp": { "keys": ["ArrowUp", "+", "="] },

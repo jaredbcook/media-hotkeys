@@ -12,11 +12,13 @@ import {
   SCORE_REQUEST_TYPE,
   SCORE_RESPONSE_TYPE,
   SITE_POLICY_TYPE,
+  THEATER_TYPE,
 } from "./constants.js";
 import { getVisibleViewportArea, isElementVisible } from "./dom-utils.js";
 import { findIframeWindows, findIframes } from "./media-discovery.js";
 import { getBestLocalCandidate } from "./media-scoring.js";
 import { state } from "./state.js";
+import type { FrameTheaterMessage } from "./theater.js";
 
 export type FrameActionRequestMessage = {
   source: "media-shortcuts-extension";
@@ -60,7 +62,8 @@ export type FrameMessage =
   | FrameActionResponseMessage
   | FrameScoreRequestMessage
   | FrameScoreResponseMessage
-  | FrameSitePolicyMessage;
+  | FrameSitePolicyMessage
+  | FrameTheaterMessage;
 
 type ChildFrameBestScore = {
   frameWindow: Window;
@@ -71,12 +74,20 @@ type ChildFrameBestScore = {
 
 export type ExecuteRoute = "local" | { frameWindow: Window; requestId: string };
 
+type TheaterGrant = {
+  frameWindow: Window;
+  // The requestId this frame's own parent routed the action under, used to
+  // pass the promotion request one level further up.
+  parentRequestId?: string;
+};
+
 const pendingFrameActionRequests = new Map<string, (handled: boolean) => void>();
 const pendingScoreRequests = new Map<
   string,
   (bestScore: number | null, areaScore: number, frameWindow: Window) => void
 >();
 const executeRoutesByRequestId = new Map<string, ExecuteRoute>();
+const theaterGrantsByRequestId = new Map<string, TheaterGrant>();
 
 let topLevelSitePolicyDisabled = false;
 let topLevelSitePolicyDisabledForEmbeds = false;
@@ -137,6 +148,14 @@ export function isFrameActionMessage(data: unknown): data is FrameMessage {
 
   if (message.type === SITE_POLICY_TYPE) {
     return typeof (message as Partial<FrameSitePolicyMessage>).disabled === "boolean";
+  }
+
+  if (message.type === THEATER_TYPE) {
+    const theaterMessage = message as Partial<FrameTheaterMessage>;
+    return (
+      typeof theaterMessage.active === "boolean" &&
+      (theaterMessage.requestId === undefined || typeof theaterMessage.requestId === "string")
+    );
   }
 
   if (message.type === SCORE_REQUEST_TYPE) {
@@ -220,6 +239,10 @@ export function delegateActionToChildFrames(action: MediaAction): Promise<boolea
   });
 }
 
+export function findIframeForWindow(frameWindow: Window): HTMLIFrameElement | undefined {
+  return findIframes(document).find((element) => element.contentWindow === frameWindow);
+}
+
 /**
  * Fraction of this frame's viewport covered by the visible part of the iframe
  * hosting `frameWindow`. A child frame measures media area against its own
@@ -227,7 +250,7 @@ export function delegateActionToChildFrames(action: MediaAction): Promise<boolea
  * otherwise claim the full visible-area score.
  */
 function getFrameViewportShare(frameWindow: Window): number {
-  const iframe = findIframes(document).find((element) => element.contentWindow === frameWindow);
+  const iframe = findIframeForWindow(frameWindow);
   if (!iframe) {
     return 1;
   }
@@ -418,6 +441,31 @@ export function broadcastPlaceholderExecute(action: MediaAction): Promise<boolea
       finish(false);
     }
   });
+}
+
+/**
+ * Records that this frame routed toggleTheater to `frameWindow`. Only a child
+ * holding a grant may ask this frame to enlarge its iframe; any other frame
+ * (an ad, say) could otherwise post the same message to cover the page.
+ */
+export function grantTheaterPromotion(
+  frameWindow: Window,
+  requestId: string,
+  parentRequestId?: string,
+): void {
+  theaterGrantsByRequestId.set(requestId, { frameWindow, parentRequestId });
+  window.setTimeout(() => theaterGrantsByRequestId.delete(requestId), EXECUTE_ROUTE_TTL_MS);
+}
+
+/** Consumes a theater grant if it was issued to `frameWindow`. */
+export function takeTheaterGrant(requestId: string, frameWindow: Window): TheaterGrant | undefined {
+  const grant = theaterGrantsByRequestId.get(requestId);
+  if (!grant || grant.frameWindow !== frameWindow) {
+    return undefined;
+  }
+
+  theaterGrantsByRequestId.delete(requestId);
+  return grant;
 }
 
 /** Routes an action-result message back to the awaiting request, if any. */

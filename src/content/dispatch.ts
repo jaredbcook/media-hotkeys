@@ -12,12 +12,16 @@ import {
   SCORE_REQUEST_TYPE,
   SCORE_RESPONSE_TYPE,
   SITE_POLICY_TYPE,
+  THEATER_TYPE,
 } from "./constants.js";
+import { getDeepActiveElement } from "./dom-utils.js";
 import {
   applyParentSitePolicy,
   broadcastPlaceholderExecute,
   collectChildFrameScores,
   delegateActionToChildFrames,
+  findIframeForWindow,
+  grantTheaterPromotion,
   handleIncomingScoreRequest,
   isFrameActionMessage,
   isSiteDisabledByPolicy,
@@ -27,6 +31,7 @@ import {
   respondToFrameAction,
   sendExecuteToFrame,
   takeExecuteRoute,
+  takeTheaterGrant,
 } from "./frame-messaging.js";
 import {
   STRONG_LOCAL_TARGET_SCORE,
@@ -35,6 +40,13 @@ import {
 } from "./media-scoring.js";
 import { activatePlayablePlaceholder } from "./placeholder.js";
 import { state } from "./state.js";
+import {
+  enterFrameTheater,
+  exitTheater,
+  isTheaterActive,
+  isTheaterChildFrame,
+  requestParentTheater,
+} from "./theater.js";
 
 /**
  * Entry point for a media action initiated in this frame. Arbitrates across
@@ -50,12 +62,15 @@ export async function dispatchMediaAction(action: MediaAction): Promise<boolean>
   // Unambiguous local intent (focus/fullscreen/PiP): act immediately without
   // paying the cross-frame scoring round-trip.
   if (localBest && localBest.score >= STRONG_LOCAL_TARGET_SCORE) {
-    handleAction(action, localBest.media);
+    handleLocalDispatchedAction(action, localBest.media);
     return true;
   }
 
   const childBest = await collectChildFrameScores(SCORE_BUDGET_MS);
   if (childBest && (!localBest || childBest.score > localBest.score)) {
+    if (action === "toggleTheater") {
+      grantTheaterPromotion(childBest.frameWindow, childBest.requestId);
+    }
     const handled = await sendExecuteToFrame(childBest.frameWindow, action, childBest.requestId);
     if (handled) {
       return true;
@@ -63,7 +78,7 @@ export async function dispatchMediaAction(action: MediaAction): Promise<boolean>
   }
 
   if (localBest) {
-    handleAction(action, localBest.media);
+    handleLocalDispatchedAction(action, localBest.media);
     return true;
   }
 
@@ -72,6 +87,18 @@ export async function dispatchMediaAction(action: MediaAction): Promise<boolean>
   }
 
   return broadcastPlaceholderExecute(action);
+}
+
+/**
+ * Runs an action this frame initiated on its own media. In an embedded frame,
+ * entering theater mode then asks the parent to enlarge the iframe, which it
+ * allows because the keypress left focus inside this frame.
+ */
+function handleLocalDispatchedAction(action: MediaAction, media: HTMLMediaElement): void {
+  handleAction(action, media);
+  if (action === "toggleTheater" && !isTopWindow() && isTheaterActive()) {
+    requestParentTheater();
+  }
 }
 
 export async function handleGlobalAction(action: "toggleOverlays"): Promise<boolean> {
@@ -107,6 +134,9 @@ async function handleIncomingFrameAction(
 
   const route = takeExecuteRoute(requestId);
   if (route && route !== "local") {
+    if (action === "toggleTheater") {
+      grantTheaterPromotion(route.frameWindow, route.requestId, requestId);
+    }
     const handled = await sendExecuteToFrame(
       route.frameWindow,
       action,
@@ -119,6 +149,9 @@ async function handleIncomingFrameAction(
   }
 
   if (handleLocalTargetMediaAction(action)) {
+    if (action === "toggleTheater" && isTheaterActive()) {
+      requestParentTheater(requestId);
+    }
     return true;
   }
 
@@ -131,6 +164,46 @@ async function handleIncomingFrameAction(
   }
 
   return false;
+}
+
+/**
+ * From the parent, a theater message is always an exit order. From a child it
+ * reports that child's state: exits shrink the iframe if it is the promoted
+ * one, and entries enlarge it only against a grant this frame issued when it
+ * routed toggleTheater there, or when that iframe holds focus here. The
+ * request is then passed up the same way.
+ */
+function handleTheaterMessage(
+  active: boolean,
+  requestId: string | undefined,
+  source: Window,
+): void {
+  if (!isTopWindow() && source === window.parent) {
+    if (!active) {
+      exitTheater();
+    }
+    return;
+  }
+
+  if (!active) {
+    if (isTheaterChildFrame(source)) {
+      exitTheater();
+    }
+    return;
+  }
+
+  const grant = requestId ? takeTheaterGrant(requestId, source) : undefined;
+  const iframe = findIframeForWindow(source);
+  // Focus inside the iframe is the user's own pointer at it (they clicked into
+  // the embed), which the parent never saw as a routed keypress.
+  const isTrusted = Boolean(grant) || (iframe !== undefined && getDeepActiveElement() === iframe);
+  if (!isTrusted || !iframe || !enterFrameTheater(iframe)) {
+    return;
+  }
+
+  if (!isTopWindow()) {
+    requestParentTheater(grant?.parentRequestId);
+  }
 }
 
 export function handleFrameMessage(event: MessageEvent): void {
@@ -148,6 +221,13 @@ export function handleFrameMessage(event: MessageEvent): void {
     }
 
     applyParentSitePolicy(event.data.disabled);
+    return;
+  }
+
+  if (event.data.type === THEATER_TYPE) {
+    if (event.source && event.source !== window) {
+      handleTheaterMessage(event.data.active, event.data.requestId, event.source as Window);
+    }
     return;
   }
 

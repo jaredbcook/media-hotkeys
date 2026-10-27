@@ -1,5 +1,6 @@
 import type { MediaAction, OverlayPosition, AdvancedSettings } from "./storage.js";
 import * as icons from "./icons.js";
+import { isTheaterMedia } from "./content/theater.js";
 
 const OVERLAY_ID = "media-shortcuts-overlay";
 const INSET_PX = 16;
@@ -21,6 +22,7 @@ interface OverlayAnchor {
   host: HTMLElement;
   position: "absolute" | "fixed";
   rect: DOMRect;
+  topLayer?: boolean;
 }
 
 function getFullscreenOverlayHost(media: HTMLMediaElement | null): HTMLElement | null {
@@ -87,6 +89,13 @@ function getOrCreateOverlay(media?: HTMLMediaElement): HTMLElement {
     fontWeight: "bold",
     lineHeight: "1.2",
     boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+    // Neutralize the UA popover box when the overlay is promoted to the top
+    // layer above a theater-mode video.
+    border: "none",
+    margin: "0",
+    right: "auto",
+    bottom: "auto",
+    overflow: "visible",
   });
   parent.appendChild(el);
   return el;
@@ -131,6 +140,16 @@ function getViewportAnchorRect(): DOMRect {
 }
 
 function resolveOverlayAnchor(media: HTMLMediaElement): OverlayAnchor {
+  if (isTheaterMedia(media)) {
+    return {
+      kind: "media",
+      host: document.body,
+      position: "fixed",
+      rect: media.getBoundingClientRect(),
+      topLayer: true,
+    };
+  }
+
   const fullscreenHost = getFullscreenOverlayHost(media);
   if (fullscreenHost) {
     return {
@@ -157,6 +176,31 @@ function resolveOverlayAnchor(media: HTMLMediaElement): OverlayAnchor {
     position: "fixed",
     rect: getViewportAnchorRect(),
   };
+}
+
+/**
+ * A theater-mode video lives in the top layer, above anything in the page, so
+ * the overlay has to join it there. Re-showing on every update keeps the
+ * overlay above a video that was promoted after the overlay was.
+ */
+function syncOverlayTopLayer(el: HTMLElement, topLayer: boolean): void {
+  if (typeof el.showPopover !== "function") {
+    return;
+  }
+
+  if (el.hasAttribute("popover")) {
+    try {
+      el.hidePopover();
+    } catch {
+      // Already hidden (e.g. it was just moved to a new parent).
+    }
+    el.removeAttribute("popover");
+  }
+
+  if (topLayer) {
+    el.setAttribute("popover", "manual");
+    el.showPopover();
+  }
 }
 
 function clampCoordinate(value: number, minimum: number, maximum: number): number {
@@ -286,6 +330,7 @@ function buildContent(
 
     case "toggleFullscreen":
     case "togglePip":
+    case "toggleTheater":
       return null;
 
     case "volumeUp":
@@ -380,6 +425,7 @@ export function showActionOverlay(
   if (el.parentElement !== anchor.host) {
     anchor.host.appendChild(el);
   }
+  syncOverlayTopLayer(el, anchor.topLayer === true);
 
   if (hideTimeout) clearTimeout(hideTimeout);
   if (fadeTimeout) clearTimeout(fadeTimeout);

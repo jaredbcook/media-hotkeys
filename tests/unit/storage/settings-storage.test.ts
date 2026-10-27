@@ -132,6 +132,21 @@ describe("settings storage", () => {
     expect(settings.advancedSettings.showOverlays).toBe(true);
   });
 
+  it("does not give a newly added default key to an action when the user already bound it", async () => {
+    Object.assign(store, {
+      quickSettings: {
+        actionKeyBindings: {
+          restart: { keys: ["T"] },
+        },
+      },
+    });
+
+    const settings = await getSettings();
+    expect(settings.quickSettings.actionKeyBindings.restart.keys).toEqual(["T"]);
+    expect(settings.quickSettings.actionKeyBindings.toggleTheater.keys).toEqual([]);
+    expect(settings.quickSettings.actionKeyBindings.togglePip.keys).toEqual(["i"]);
+  });
+
   it("writes grouped settings when saving legacy flat updates", async () => {
     await saveSettings({
       hotkeysEnabled: false,

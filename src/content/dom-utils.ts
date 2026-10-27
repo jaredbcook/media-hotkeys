@@ -34,6 +34,15 @@ export function getVisibleViewportArea(rect: DOMRect): number {
   return (right - left) * (bottom - top);
 }
 
+/** The focused element, following focus into open shadow roots. */
+export function getDeepActiveElement(): Element | null {
+  let active = document.activeElement;
+  while (active?.shadowRoot?.activeElement) {
+    active = active.shadowRoot.activeElement;
+  }
+  return active;
+}
+
 export function isWithinEditableElement(element: Element): boolean {
   let current: Element | null = element;
 
