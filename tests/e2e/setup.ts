@@ -286,6 +286,62 @@ export const test = base.extend<Fixtures>({
           </script>`,
         ),
       },
+      "/cued-embed-frame": {
+        body: createFixturePage(
+          "Cued Embed Frame",
+          `<div id="cued-player" style="position: fixed; inset: 0; background-image: url('/thumb.png'); background-size: cover;">
+            <button id="cued-play" aria-label="Play video" title="Play video"
+              style="position: absolute; left: 50%; top: 50%; width: 68px; height: 48px; transform: translate(-50%, -50%);"></button>
+          </div>
+          <script>
+            document.getElementById("cued-play").addEventListener("click", () => {
+              window.__mediaFixtures.createMedia("cued-media");
+            });
+          </script>`,
+        ),
+      },
+      "/thumb.png": {
+        contentType: "image/png",
+        body: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+          "base64",
+        ),
+      },
+      "/lite-facade": {
+        body: createFixturePage(
+          "Lite Facade",
+          `<lite-facade id="facade" style="display: block; position: relative; width: 640px; height: 360px; background-image: url('/thumb.png'); background-size: cover; cursor: pointer;">
+            <button id="facade-play" type="button"
+              style="position: absolute; left: 50%; top: 50%; width: 68px; height: 48px; transform: translate(-50%, -50%);">
+              <span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);">Play</span>
+            </button>
+          </lite-facade>
+          <script>
+            document.getElementById("facade").addEventListener("click", () => {
+              window.__mediaFixtures.createMedia("facade-media", "video");
+            });
+          </script>`,
+        ),
+      },
+      "/link-card-grid": {
+        body: createFixturePage(
+          "Link Card Grid",
+          `<a id="card" href="/other-video"
+            style="display: block; position: relative; width: 480px; height: 270px; background-image: url('/thumb.png'); background-size: cover;">
+            <span style="position: absolute; right: 8px; bottom: 8px;">10:35</span>
+            <svg width="64" height="64" style="position: absolute; left: 208px; top: 103px;"><circle cx="32" cy="32" r="30" /></svg>
+          </a>`,
+        ),
+      },
+      "/other-video": {
+        body: createFixturePage("Other Video", `<p id="other-page">Another page</p>`),
+      },
+      "/page-with-cued-embed": {
+        body: createFixturePage(
+          "Page With Cued Embed",
+          `<iframe id="embed-frame" src="/cued-embed-frame" style="width: 640px; height: 360px; border: 0;"></iframe>`,
+        ),
+      },
       "/page-with-iframe": {
         body: createFixturePage(
           "Page With Iframe",

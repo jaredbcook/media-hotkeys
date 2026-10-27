@@ -130,6 +130,15 @@ Media actions are executed by exactly one frame, chosen by a two-phase protocol:
 
 A fast path skips the cross-frame round-trip when local intent is unambiguous (focus, fullscreen, or PiP). When no frame has scorable media, placeholder activation is offered locally first, then broadcast to child frames as a last resort. Global actions (e.g. overlay toggle) intentionally keep broadcast cascade semantics.
 
+## Playable Placeholders
+
+Many pages show a thumbnail "facade" and only create the real player on click (YouTube's cued embed, `lite-youtube`, WP Rocket's lazy YouTube, Skool-style attachments). When no frame has scorable media, `placeholder.ts` scans for the best placeholder and clicks it, then plays the media that appears.
+
+- A candidate needs a visible, thumbnail-sized box with duration text plus a play control or thumbnail. With no duration text, it needs both a thumbnail and an unambiguous play control: a button whose accessible name says "play" (aria-label, aria-labelledby, title, or short visually hidden text, in several languages), or a centered overlay following the play-button class-name convention (`vjs-big-play-button`, `lty-playbtn`, `.play`).
+- "Watch" is not a play label; on real pages it marks navigation ("Watch on YouTube", "Watch later").
+- The innermost qualifying candidate wins over wrappers that inherit its signals.
+- Pressing play never navigates away. Cards whose click target sits inside a link to another page on the same site (search results, talk grids, "more videos" rails) are skipped, because SPA routers intercept those clicks. For links to other origins (facades that link to the provider as a no-JS fallback), the click goes through but any navigation the page itself did not claim with `preventDefault` is cancelled.
+
 ## Third-Party Player Compatibility
 
 The extension is native-media first: it targets real `HTMLMediaElement` instances whenever possible, then uses narrow custom-player host APIs only when the media is inside an open Shadow DOM custom element. Provider iframe players and closed shadow roots remain best-effort.
