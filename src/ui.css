@@ -210,6 +210,24 @@ button:hover svg {
   justify-content: space-between;
 }
 
+.row > h1 {
+  margin: 0;
+}
+
+.popup-page > .row {
+  margin: 0 0 16px;
+}
+
+.row > button {
+  align-items: center;
+  display: inline-flex;
+  gap: 4px;
+}
+
+.row > button .icon {
+  display: inline-flex;
+}
+
 .site-controls {
   display: grid;
   gap: 10px;
