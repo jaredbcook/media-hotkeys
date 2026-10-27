@@ -62,8 +62,8 @@ export function findMedia(root: Document | ShadowRoot | Element): HTMLMediaEleme
   return results;
 }
 
-export function findIframeWindows(root: Document | ShadowRoot | Element): Window[] {
-  const results: Window[] = [];
+export function findIframes(root: Document | ShadowRoot | Element): HTMLIFrameElement[] {
+  const results: HTMLIFrameElement[] = [];
   const walker = document.createTreeWalker(
     root instanceof Document ? root.documentElement : root,
     NodeFilter.SHOW_ELEMENT,
@@ -71,15 +71,21 @@ export function findIframeWindows(root: Document | ShadowRoot | Element): Window
 
   let node: Node | null = walker.currentNode;
   while (node) {
-    if (node instanceof HTMLIFrameElement && node.contentWindow) {
-      results.push(node.contentWindow);
+    if (node instanceof HTMLIFrameElement) {
+      results.push(node);
     } else if (node instanceof Element && node.shadowRoot) {
-      results.push(...findIframeWindows(node.shadowRoot));
+      results.push(...findIframes(node.shadowRoot));
     }
     node = walker.nextNode();
   }
 
   return results;
+}
+
+export function findIframeWindows(root: Document | ShadowRoot | Element): Window[] {
+  return findIframes(root)
+    .map((iframe) => iframe.contentWindow)
+    .filter((frameWindow): frameWindow is Window => frameWindow !== null);
 }
 
 export function collectMediaAndShadowRoots(root: Document | ShadowRoot | Element): {

@@ -4,8 +4,8 @@ import {
   OVERLAY_ID,
   OVERLAY_STYLE_ATTR,
 } from "./constants.js";
-import { debugLog } from "./dom-utils.js";
-import { collectMediaAndShadowRoots } from "./media-discovery.js";
+import { debugLog, isElementVisible } from "./dom-utils.js";
+import { collectMediaAndShadowRoots, findMedia, hasValidMediaSource } from "./media-discovery.js";
 import { broadcastTopLevelSitePolicy } from "./frame-messaging.js";
 import { state } from "./state.js";
 
@@ -13,6 +13,9 @@ const trackedMedia = new WeakSet<HTMLMediaElement>();
 const observedRoots = new WeakSet<Document | ShadowRoot>();
 let rootObserver: MutationObserver | null = null;
 let shadowObserverPatched = false;
+// Last known pointer position in viewport coordinates, or null when the
+// pointer has left this frame's document.
+let pointerPosition: { x: number; y: number } | null = null;
 
 export function trackInteraction(media: HTMLMediaElement, event: string): void {
   state.lastInteractedMedia = media;
@@ -25,9 +28,81 @@ function attachMediaTracking(media: HTMLMediaElement): void {
   }
 
   trackedMedia.add(media);
-  media.addEventListener("pointerdown", () => trackInteraction(media, "pointerdown"));
+  // Pointer interactions are tracked at the document level (see
+  // handleDocumentPointerDown) so clicks on custom player chrome count too.
   media.addEventListener("play", () => trackInteraction(media, "play"));
   media.addEventListener("focus", () => trackInteraction(media, "focus"));
+}
+
+function rectContainsPoint(rect: DOMRect, point: { x: number; y: number }): boolean {
+  return (
+    point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom
+  );
+}
+
+/**
+ * The visible media whose box contains the point, preferring the smallest
+ * (innermost) one when boxes overlap, e.g. a picture-in-picture inset.
+ */
+function findMediaAtPoint(point: { x: number; y: number }): HTMLMediaElement | null {
+  let best: { media: HTMLMediaElement; area: number } | null = null;
+
+  for (const media of findMedia(document)) {
+    const rect = media.getBoundingClientRect();
+    if (!rectContainsPoint(rect, point) || !isElementVisible(media, rect)) {
+      continue;
+    }
+
+    const area = rect.width * rect.height;
+    if (!best || area < best.area) {
+      best = { media, area };
+    }
+  }
+
+  return best?.media ?? null;
+}
+
+/** Whether the pointer currently rests over the given box. */
+export function isPointerOverRect(rect: DOMRect): boolean {
+  return pointerPosition !== null && rectContainsPoint(rect, pointerPosition);
+}
+
+export function handleDocumentPointerMove(event: PointerEvent): void {
+  pointerPosition = { x: event.clientX, y: event.clientY };
+}
+
+export function handleDocumentMouseOut(event: MouseEvent): void {
+  if (!event.relatedTarget) {
+    pointerPosition = null;
+  }
+}
+
+/**
+ * Custom players (YouTube, Vimeo, Video.js, Plyr, MediaElement) lay their
+ * controls over the <video>, so clicks on play/mute/seek land on overlay
+ * elements and never reach the media element itself. Attribute any press
+ * inside a media element's box to that media.
+ */
+export function handleDocumentPointerDown(event: PointerEvent): void {
+  const directMedia = event
+    .composedPath()
+    .find((node): node is HTMLMediaElement => node instanceof HTMLMediaElement);
+  if (directMedia && hasValidMediaSource(directMedia)) {
+    trackInteraction(directMedia, "pointerdown");
+    return;
+  }
+
+  if (typeof event.clientX !== "number" || typeof event.clientY !== "number") {
+    return;
+  }
+
+  const point = { x: event.clientX, y: event.clientY };
+  pointerPosition = point;
+
+  const media = findMediaAtPoint(point);
+  if (media) {
+    trackInteraction(media, "pointerdown:player");
+  }
 }
 
 /**

@@ -158,7 +158,12 @@ export function handleFrameMessage(event: MessageEvent): void {
 
   if (event.data.type === SCORE_RESPONSE_TYPE) {
     if (event.source) {
-      resolveFrameScoreResponse(event.data.requestId, event.data.bestScore, event.source as Window);
+      resolveFrameScoreResponse(
+        event.data.requestId,
+        event.data.bestScore,
+        event.data.areaScore ?? 0,
+        event.source as Window,
+      );
     }
     return;
   }

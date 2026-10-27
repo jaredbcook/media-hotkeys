@@ -229,3 +229,35 @@ test("controls media added dynamically after page load", async ({ page }) => {
   await page.keyboard.press("k");
   await waitForMediaState(page, "late-media", (state) => !state.paused);
 });
+
+test("targets the video whose custom player controls the user clicked", async ({ page }) => {
+  await createMedia(page, "first", { volume: 0.5 }, "video");
+  await createMedia(page, "second", { volume: 0.5 }, "video");
+
+  // Custom players overlay their controls on the video, so clicks land on
+  // the overlay rather than on the <video> element itself.
+  await page.evaluate(() => {
+    const second = document.getElementById("second");
+    const box = second?.getBoundingClientRect();
+    if (!box) {
+      throw new Error("Missing second video");
+    }
+    const overlay = document.createElement("div");
+    overlay.id = "second-controls";
+    Object.assign(overlay.style, {
+      position: "absolute",
+      left: `${box.left + window.scrollX}px`,
+      top: `${box.top + window.scrollY}px`,
+      width: `${box.width}px`,
+      height: `${box.height}px`,
+    });
+    document.body.appendChild(overlay);
+  });
+
+  await page.locator("#second-controls").click();
+  await page.mouse.move(1, 1);
+  await page.keyboard.press("ArrowDown");
+
+  await waitForMediaState(page, "second", (state) => Math.abs(state.volume - 0.45) < 0.0001);
+  await expect.poll(async () => (await readMediaState(page, "first")).volume).toBeCloseTo(0.5, 5);
+});

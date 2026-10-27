@@ -13,7 +13,8 @@ import {
   SCORE_RESPONSE_TYPE,
   SITE_POLICY_TYPE,
 } from "./constants.js";
-import { findIframeWindows } from "./media-discovery.js";
+import { getVisibleViewportArea, isElementVisible } from "./dom-utils.js";
+import { findIframeWindows, findIframes } from "./media-discovery.js";
 import { getBestLocalCandidate } from "./media-scoring.js";
 import { state } from "./state.js";
 
@@ -44,6 +45,8 @@ export type FrameScoreResponseMessage = {
   type: "MEDIA_SHORTCUTS_SCORE_RESPONSE";
   requestId: string;
   bestScore: number | null;
+  // Visible-area component of bestScore, in the responding frame's viewport.
+  areaScore?: number;
 };
 
 export type FrameSitePolicyMessage = {
@@ -63,6 +66,7 @@ type ChildFrameBestScore = {
   frameWindow: Window;
   requestId: string;
   score: number;
+  areaScore: number;
 };
 
 export type ExecuteRoute = "local" | { frameWindow: Window; requestId: string };
@@ -70,7 +74,7 @@ export type ExecuteRoute = "local" | { frameWindow: Window; requestId: string };
 const pendingFrameActionRequests = new Map<string, (handled: boolean) => void>();
 const pendingScoreRequests = new Map<
   string,
-  (bestScore: number | null, frameWindow: Window) => void
+  (bestScore: number | null, areaScore: number, frameWindow: Window) => void
 >();
 const executeRoutesByRequestId = new Map<string, ExecuteRoute>();
 
@@ -144,7 +148,8 @@ export function isFrameActionMessage(data: unknown): data is FrameMessage {
     const scoreResponse = message as Partial<FrameScoreResponseMessage>;
     return (
       typeof scoreResponse.requestId === "string" &&
-      (scoreResponse.bestScore === null || typeof scoreResponse.bestScore === "number")
+      (scoreResponse.bestScore === null || typeof scoreResponse.bestScore === "number") &&
+      (scoreResponse.areaScore === undefined || typeof scoreResponse.areaScore === "number")
     );
   }
 
@@ -216,6 +221,27 @@ export function delegateActionToChildFrames(action: MediaAction): Promise<boolea
 }
 
 /**
+ * Fraction of this frame's viewport covered by the visible part of the iframe
+ * hosting `frameWindow`. A child frame measures media area against its own
+ * viewport, so a video filling a small (or scrolled-away) iframe would
+ * otherwise claim the full visible-area score.
+ */
+function getFrameViewportShare(frameWindow: Window): number {
+  const iframe = findIframes(document).find((element) => element.contentWindow === frameWindow);
+  if (!iframe) {
+    return 1;
+  }
+
+  const rect = iframe.getBoundingClientRect();
+  const viewportArea = window.innerWidth * window.innerHeight;
+  if (viewportArea <= 0 || !isElementVisible(iframe, rect)) {
+    return 0;
+  }
+
+  return Math.min(1, getVisibleViewportArea(rect) / viewportArea);
+}
+
+/**
  * Scoring phase (top-frame arbitration, step 1 of 2). Asks every child frame
  * for the best media score in its subtree and returns the winning frame with
  * the requestId that frame can later route an execute request under.
@@ -246,10 +272,14 @@ export function collectChildFrameScores(budgetMs: number): Promise<ChildFrameBes
 
     const timeoutId = window.setTimeout(finish, budgetMs);
 
-    pendingScoreRequests.set(requestId, (bestScore, frameWindow) => {
+    pendingScoreRequests.set(requestId, (bestScore, areaScore, frameWindow) => {
       responseCount += 1;
-      if (typeof bestScore === "number" && (!best || bestScore > best.score)) {
-        best = { frameWindow, requestId, score: bestScore };
+      if (typeof bestScore === "number") {
+        const scaledAreaScore = Math.round(areaScore * getFrameViewportShare(frameWindow));
+        const score = bestScore - areaScore + scaledAreaScore;
+        if (!best || score > best.score) {
+          best = { frameWindow, requestId, score, areaScore: scaledAreaScore };
+        }
       }
 
       if (responseCount >= childFrames.length) {
@@ -274,16 +304,19 @@ export async function handleIncomingScoreRequest(
   sourceWindow: Window,
 ): Promise<void> {
   let bestScore: number | null = null;
+  let areaScore = 0;
 
   if (state.settings.quickSettings.hotkeysEnabled && !isSiteDisabledByPolicy()) {
     const localBest = getBestLocalCandidate();
     let route: ExecuteRoute = "local";
     bestScore = localBest?.score ?? null;
+    areaScore = localBest?.areaScore ?? 0;
 
     if (budgetMs >= SCORE_MIN_CHILD_BUDGET_MS) {
       const childBest = await collectChildFrameScores(budgetMs);
       if (childBest && (bestScore === null || childBest.score > bestScore)) {
         bestScore = childBest.score;
+        areaScore = childBest.areaScore;
         route = { frameWindow: childBest.frameWindow, requestId: childBest.requestId };
       }
     }
@@ -299,6 +332,7 @@ export async function handleIncomingScoreRequest(
     type: SCORE_RESPONSE_TYPE,
     requestId,
     bestScore,
+    areaScore,
   };
 
   sourceWindow.postMessage(response, "*");
@@ -395,9 +429,10 @@ export function resolveFrameActionResponse(requestId: string, handled: boolean):
 export function resolveFrameScoreResponse(
   requestId: string,
   bestScore: number | null,
+  areaScore: number,
   frameWindow: Window,
 ): void {
-  pendingScoreRequests.get(requestId)?.(bestScore, frameWindow);
+  pendingScoreRequests.get(requestId)?.(bestScore, areaScore, frameWindow);
 }
 
 /** Consumes the execute route recorded for a scoring-phase requestId. */

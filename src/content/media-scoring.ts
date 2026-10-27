@@ -1,10 +1,14 @@
 import { getVisibleViewportArea, isElementVisible } from "./dom-utils.js";
 import { findMedia, isAmbientMediaElement } from "./media-discovery.js";
+import { isPointerOverRect } from "./media-tracking.js";
 import { actionedMedia, state } from "./state.js";
 
 export type ScoredMedia = {
   media: HTMLMediaElement;
   score: number;
+  // The visible-area component of `score`, reported separately so a parent
+  // frame can rescale it by how much of its own viewport the iframe covers.
+  areaScore: number;
 };
 
 // Weighted-scoring signal values. The exact numbers matter less than their
@@ -16,6 +20,7 @@ const SCORE_PLAYING_AUDIBLE = 500;
 const SCORE_PLAYING_MUTED = 150;
 const SCORE_LAST_INTERACTED = 300;
 const SCORE_LAST_ACTIONED = 200;
+const SCORE_POINTER_OVER = 120;
 const SCORE_MAX_VISIBLE_AREA = 200;
 const SCORE_HAS_CONTROLS = 30;
 const SCORE_AUDIO_BASE = 20;
@@ -26,15 +31,20 @@ const SCORE_AMBIENT_PENALTY = -250;
 export const STRONG_LOCAL_TARGET_SCORE = 800;
 
 function isMediaPlaying(media: HTMLMediaElement): boolean {
-  return !media.paused && !media.ended && media.readyState > 2;
+  // Stalled playback (buffering) drops readyState to HAVE_CURRENT_DATA or
+  // HAVE_METADATA while the media is still logically playing; users often
+  // press keys exactly then, so only require metadata (readyState >= 1).
+  return !media.paused && !media.ended && media.readyState >= 1;
 }
 
 function isMediaAudible(media: HTMLMediaElement): boolean {
   return isMediaPlaying(media) && !media.muted && media.volume > 0;
 }
 
-function scoreMediaCandidate(media: HTMLMediaElement): number {
+function scoreMediaCandidate(media: HTMLMediaElement): { score: number; areaScore: number } {
   let score = 0;
+  let areaScore = 0;
+  let isPointerOver = false;
 
   const fullscreenElement = document.fullscreenElement;
   if (fullscreenElement && (fullscreenElement === media || fullscreenElement.contains(media))) {
@@ -67,8 +77,11 @@ function scoreMediaCandidate(media: HTMLMediaElement): number {
       const viewportArea = window.innerWidth * window.innerHeight;
       if (viewportArea > 0) {
         const visibleFraction = Math.min(1, getVisibleViewportArea(rect) / viewportArea);
-        score += Math.round(SCORE_MAX_VISIBLE_AREA * visibleFraction);
+        areaScore = Math.round(SCORE_MAX_VISIBLE_AREA * visibleFraction);
+        score += areaScore;
       }
+
+      isPointerOver = isPointerOverRect(rect);
     }
   } else {
     // Audio has no visual footprint, so give it a modest stand-in for area.
@@ -87,9 +100,15 @@ function scoreMediaCandidate(media: HTMLMediaElement): number {
     score += SCORE_AMBIENT_PENALTY;
   } else {
     score += SCORE_NON_AMBIENT_BASE;
+    // Hovering is a weak but common way of pointing at the intended player
+    // before pressing a key. Ambient media gets no credit: resting the mouse
+    // over a background hero video says nothing about wanting to control it.
+    if (isPointerOver) {
+      score += SCORE_POINTER_OVER;
+    }
   }
 
-  return score;
+  return { score, areaScore };
 }
 
 /**
@@ -102,13 +121,13 @@ export function getBestLocalCandidate(): ScoredMedia | null {
   let best: ScoredMedia | null = null;
 
   for (const media of findMedia(document)) {
-    const score = scoreMediaCandidate(media);
+    const { score, areaScore } = scoreMediaCandidate(media);
     if (score <= 0) {
       continue;
     }
 
     if (!best || score > best.score) {
-      best = { media, score };
+      best = { media, score, areaScore };
     }
   }
 

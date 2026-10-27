@@ -100,11 +100,16 @@ Every valid-source media element in the frame is scored, and the highest-scoring
 | Last interacted media (click/play/focus)    | +300       |
 | Last media actioned by the extension        | +200       |
 | Playing but muted                           | +150       |
+| Pointer hovering over it (non-ambient only) | +120       |
 | Visible viewport area (proportional, video) | up to +200 |
 | Audio element base (no visual footprint)    | +20        |
 | Native controls present                     | +30        |
 | Non-ambient base                            | +10        |
 | Ambient-looking (muted video, no controls)  | −250       |
+
+"Playing" means not paused or ended with at least metadata loaded, so media that is momentarily buffering keeps its playing score.
+
+Clicks count as interactions whether they land on the media element or anywhere inside its box: custom players (YouTube, Vimeo, Video.js, Plyr, MediaElement) stack their controls over the `<video>`, so presses on their play/mute/seek buttons never reach the media element. A capture-phase `pointerdown` listener on the document attributes such presses to the innermost visible media under the pointer.
 
 The ambient heuristic is a penalty, not an exclusion: a muted no-controls video can still be targeted when stronger signals apply — the user focuses or clicks it, it occupies a large visible area (the autoplay-muted primary-content pattern), or the extension already acted on it (`actionedMedia` retains its standing). An idle background loop scores below zero and is never selected.
 
@@ -120,6 +125,7 @@ The ambient heuristic is a penalty, not an exclusion: a muted no-controls video 
 Media actions are executed by exactly one frame, chosen by a two-phase protocol:
 
 1. **Scoring phase** — the initiating frame scores its local candidates and sends a `SCORE_REQUEST` to child frames. Each child recursively reports the best score in its subtree (within a shrinking time budget) and records which descendant owned it, keyed by request id.
+   Each response also carries the visible-area component of the score. Because a child measures area against its own viewport, the receiving frame rescales that component by the fraction of its viewport the iframe visibly covers, so a video filling a small ad iframe (or an iframe scrolled out of view) cannot claim the full area score.
 2. **Execute phase** — the initiator compares local vs. child scores (local wins ties) and sends the action to the single winning frame, which routes it hop-by-hop to the recorded winner. On failure or timeout the initiator falls back to its best local candidate.
 
 A fast path skips the cross-frame round-trip when local intent is unambiguous (focus, fullscreen, or PiP). When no frame has scorable media, placeholder activation is offered locally first, then broadcast to child frames as a last resort. Global actions (e.g. overlay toggle) intentionally keep broadcast cascade semantics.
@@ -193,6 +199,7 @@ The extension is native-media first: it targets real `HTMLMediaElement` instance
 **State Management:**
 
 - `lastInteractedMedia` — most recently interacted media (click/play/focus); a weighted-scoring signal, cleared only when the element leaves the DOM
+- `pointerPosition` (in `media-tracking.ts`) — last pointer position in the frame, for the hover signal; cleared when the pointer leaves the document
 - `lastActionedMedia` / `actionedMedia` — media the extension itself acted on; scoring signal and ambient-penalty exemption
 - `executeRoutesByRequestId` — short-lived routes recorded in the scoring phase so execute requests reach the winning frame
 - Grouped settings model:

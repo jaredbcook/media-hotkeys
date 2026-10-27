@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { makeVideo, resetContentTestState } from "./helpers.js";
+import { dispatchMappedKey, makeVideo, mockRect, rect, resetContentTestState } from "./helpers.js";
 import { delegateActionToChildFrames, setSettingsForTests } from "../../../src/content.js";
 import { DEFAULT_SETTINGS } from "../../../src/storage.js";
 
@@ -379,6 +379,7 @@ describe("frame message handling", () => {
         type: "MEDIA_SHORTCUTS_SCORE_RESPONSE",
         requestId: "score-req-media",
         bestScore: expect.any(Number),
+        areaScore: expect.any(Number),
       }),
       "*",
     );
@@ -467,5 +468,78 @@ describe("frame message handling", () => {
     } finally {
       restoreTopWindowForTest();
     }
+  });
+});
+
+describe("cross-frame area scaling", () => {
+  /**
+   * Adds an iframe whose (simulated) content script reports a media score
+   * made almost entirely of visible area in its own viewport, and records
+   * whether the parent routes the action to it.
+   */
+  function makeScoringChildFrame(frameRect: DOMRect): { executeRequests: unknown[] } {
+    const iframe = document.createElement("iframe");
+    document.body.appendChild(iframe);
+    mockRect(iframe, frameRect);
+    const childWindow = iframe.contentWindow as Window;
+    const executeRequests: unknown[] = [];
+
+    vi.spyOn(childWindow, "postMessage").mockImplementation((message: unknown) => {
+      const request = message as { type: string; requestId: string };
+      if (request.type === "MEDIA_SHORTCUTS_SCORE_REQUEST") {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            source: childWindow,
+            data: {
+              source: "media-shortcuts-extension",
+              type: "MEDIA_SHORTCUTS_SCORE_RESPONSE",
+              requestId: request.requestId,
+              // A paused video filling the iframe: base 10 + full area 200.
+              bestScore: 210,
+              areaScore: 200,
+            },
+          }),
+        );
+      } else if (request.type === "MEDIA_SHORTCUTS_HANDLE_ACTION") {
+        executeRequests.push(request);
+      }
+    });
+
+    return { executeRequests };
+  }
+
+  async function flushArbitration(): Promise<void> {
+    for (let i = 0; i < 5; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  }
+
+  it("scales a child frame's area score by how much of the viewport the iframe covers", async () => {
+    // Local paused video covering a quarter of the viewport: 10 + 50 = 60.
+    const localVideo = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    mockRect(localVideo, rect(0, 0, 512, 384));
+    const playSpy = vi.spyOn(localVideo, "play").mockResolvedValue(undefined);
+    // A 300x250 ad-sized iframe covers ~10% of the 1024x768 viewport, so its
+    // full-frame video is worth ~10 + 19, not 210.
+    const child = makeScoringChildFrame(rect(600, 400, 300, 250));
+
+    await dispatchMappedKey("k");
+    await flushArbitration();
+
+    expect(playSpy).toHaveBeenCalledOnce();
+    expect(child.executeRequests).toHaveLength(0);
+  });
+
+  it("routes to a child frame whose iframe dominates the viewport", async () => {
+    const localVideo = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    mockRect(localVideo, rect(0, 0, 512, 384));
+    const playSpy = vi.spyOn(localVideo, "play").mockResolvedValue(undefined);
+    const child = makeScoringChildFrame(rect(0, 0, 1024, 768));
+
+    await dispatchMappedKey("k");
+    await flushArbitration();
+
+    expect(child.executeRequests).toHaveLength(1);
+    expect(playSpy).not.toHaveBeenCalled();
   });
 });

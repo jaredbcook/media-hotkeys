@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { makeInvalidVideo, makeVideo, resetContentTestState } from "./helpers.js";
+import { makeInvalidVideo, makeVideo, mockRect, rect, resetContentTestState } from "./helpers.js";
 import { getTargetMedia, handleAction, setSettingsForTests } from "../../../src/content.js";
 import { DEFAULT_SETTINGS } from "../../../src/storage.js";
 
@@ -319,5 +319,82 @@ describe("media target selection", () => {
     await Promise.resolve();
 
     expect(getTargetMedia()).toBe(shadowVideo);
+  });
+});
+
+describe("pointer intent signals", () => {
+  function pointerAt(
+    type: string,
+    x: number,
+    y: number,
+    target: EventTarget = document.body,
+  ): void {
+    target.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX: x, clientY: y }));
+  }
+
+  it("attributes clicks on custom player chrome over a video to that video", async () => {
+    // Custom players stack their controls above the <video>, so the press
+    // lands on an overlay element, never on the media element itself.
+    const first = makeVideo();
+    const second = makeVideo();
+    mockRect(first, rect(0, 0, 400, 225));
+    mockRect(second, rect(0, 300, 400, 225));
+    const controlsOverlay = document.createElement("button");
+    controlsOverlay.setAttribute("aria-label", "Mute (m)");
+    document.body.appendChild(controlsOverlay);
+    await Promise.resolve();
+
+    expect(getTargetMedia()).toBe(first);
+
+    pointerAt("pointerdown", 30, 500, controlsOverlay);
+    // Moving away afterwards must not drop the remembered interaction.
+    document.dispatchEvent(new MouseEvent("mouseout", { relatedTarget: null }));
+
+    expect(getTargetMedia()).toBe(second);
+  });
+
+  it("ignores pointer presses outside every video box", async () => {
+    const first = makeVideo();
+    const second = makeVideo();
+    mockRect(first, rect(0, 0, 400, 225));
+    mockRect(second, rect(0, 300, 400, 225));
+    await Promise.resolve();
+
+    pointerAt("pointerdown", 700, 700);
+
+    expect(getTargetMedia()).toBe(first);
+  });
+
+  it("prefers the hovered video between otherwise equal candidates", () => {
+    const first = makeVideo();
+    const second = makeVideo();
+    mockRect(first, rect(0, 0, 400, 225));
+    mockRect(second, rect(0, 300, 400, 225));
+
+    pointerAt("pointermove", 200, 400);
+    expect(getTargetMedia()).toBe(second);
+
+    document.dispatchEvent(new MouseEvent("mouseout", { relatedTarget: null }));
+    expect(getTargetMedia()).toBe(first);
+  });
+
+  it("does not let hover alone make a background video targetable", () => {
+    const ambient = makeVideo({ muted: true, controls: false } as Partial<HTMLVideoElement>);
+    mockRect(ambient, rect(0, 0, 1024, 768));
+
+    pointerAt("pointermove", 500, 400);
+
+    expect(getTargetMedia()).toBeNull();
+  });
+
+  it("still treats media as playing while it is buffering", () => {
+    makeVideo();
+    const buffering = makeVideo({
+      paused: false,
+      ended: false,
+      readyState: 2,
+    } as Partial<HTMLVideoElement>);
+
+    expect(getTargetMedia()).toBe(buffering);
   });
 });
