@@ -60,6 +60,11 @@ function formatTimestamp(seconds: number, includeHours: boolean): string {
   return `${totalMinutes}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
+// Pages set rates too, so round for display: 1.1500000000000001 shows as 1.15.
+function formatPlaybackRate(playbackRate: number): string {
+  return String(Math.round(playbackRate * 100) / 100);
+}
+
 function getOrCreateOverlay(media?: HTMLMediaElement): HTMLElement {
   const parent = getFullscreenOverlayHost(media ?? null) ?? document.body;
   let el = document.getElementById(OVERLAY_ID);
@@ -346,10 +351,10 @@ function buildContent(
     }
 
     case "speedUp":
-      return `${icons.SPEED_UP}<span>${media.playbackRate}x</span>`;
+      return `${icons.SPEED_UP}<span>${formatPlaybackRate(media.playbackRate)}x</span>`;
 
     case "slowDown":
-      return `${icons.SPEED_DOWN}<span>${media.playbackRate}x</span>`;
+      return `${icons.SPEED_DOWN}<span>${formatPlaybackRate(media.playbackRate)}x</span>`;
 
     case "seekForwardLarge":
       return `${icons.SEEK_FWD_LARGE}<span>+${options.seekSeconds ?? advancedSettings.seekStepLarge}s</span>`;
