@@ -52,7 +52,7 @@
   },
   "dependencies": {
     "tldts": "^7.4.19",
-    "webextension-polyfill": "^0.10.0"
+    "webextension-polyfill": "^0.12.0"
   },
   "bugs": {
     "url": "https://github.com/jaredbcook/media-hotkeys/issues"
