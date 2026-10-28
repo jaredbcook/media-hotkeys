@@ -4,7 +4,7 @@ Setup, workflow, and conventions for working on Media Hotkeys. Read [ARCHITECTUR
 
 ## Setup
 
-Requires Node.js 20+ and npm.
+Requires Node.js 24+ and npm.
 
 ```sh
 npm install        # also installs the Husky pre-commit hook

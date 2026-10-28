@@ -73,7 +73,7 @@ Some sites, such as YouTube, have their own shortcuts. Add a site rule in Advanc
 
 ## Install from source
 
-The extension isn't published to browser stores yet. To build it, install [Node.js](https://nodejs.org/) 20 or newer, clone this repository, and run:
+The extension isn't published to browser stores yet. To build it, install [Node.js](https://nodejs.org/) 24 or newer, clone this repository, and run:
 
 ```sh
 npm install
