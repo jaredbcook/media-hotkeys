@@ -47,3 +47,25 @@ test("allows bound keys to type in a shadow DOM textarea when no media exists", 
 
   await expect(textarea).toHaveValue("k");
 });
+
+test("keeps hotkeys working after a player's slider is clicked, minus its arrow keys", async ({
+  page,
+}) => {
+  await createMedia(page, "primary", {}, "video");
+  await page.evaluate(() => {
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.id = "seek-bar";
+    slider.value = "50";
+    document.getElementById("app")?.appendChild(slider);
+  });
+  await page.locator("#seek-bar").focus();
+  const { currentTime } = await readMediaState(page, "primary");
+
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator("#seek-bar")).toHaveValue("51");
+  expect((await readMediaState(page, "primary")).currentTime).toBe(currentTime);
+
+  await page.keyboard.press("k");
+  await expect.poll(async () => (await readMediaState(page, "primary")).paused).toBe(false);
+});

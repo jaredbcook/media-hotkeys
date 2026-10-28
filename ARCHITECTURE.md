@@ -172,7 +172,7 @@ Breaking one of these is a bug even if tests pass:
 
 - Use `webextension-polyfill`, never `chrome.*` (`tsconfig.app.json` omits Chrome globals so `tsc` rejects it).
 - No `host_permissions`, no background script, Manifest V3 only.
-- Hotkeys never fire while focus is in an editable element (`input`, `textarea`, `select`, `contenteditable`, including inside shadow roots) or with Ctrl, Alt, or Meta held.
+- Hotkeys never fire while focus is in an editable element (text-entry `input` types, `textarea`, `select`, `contenteditable`, including inside shadow roots) or with Ctrl, Alt, or Meta held.
 - A key is only taken from the page when `hasPotentialTarget` says media may be reachable.
 - Exactly one frame executes a media action.
 - Cross-frame requests are accepted only from the parent frame, and results only from child frames.

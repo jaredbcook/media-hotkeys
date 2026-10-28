@@ -302,6 +302,58 @@ describe("keyboard shortcut routing", () => {
     expect(playSpy).not.toHaveBeenCalled();
   });
 
+  it.each(["range", "checkbox", "radio", "button"])(
+    "handles hotkeys while a %s input has focus",
+    async (type) => {
+      const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+      const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
+      const input = document.createElement("input");
+      input.type = type;
+      document.body.appendChild(input);
+      input.focus();
+
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "k", bubbles: true }));
+      await Promise.resolve();
+
+      expect(playSpy).toHaveBeenCalled();
+    },
+  );
+
+  it.each(["text", "search", "number", "email"])(
+    "skips hotkeys while a %s input has focus",
+    async (type) => {
+      const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+      const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
+      const input = document.createElement("input");
+      input.type = type;
+      document.body.appendChild(input);
+      input.focus();
+
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "k", bubbles: true }));
+      await Promise.resolve();
+
+      expect(playSpy).not.toHaveBeenCalled();
+    },
+  );
+
+  it("leaves arrow keys to a focused slider", async () => {
+    makeVideo({ paused: true, currentTime: 20, duration: 100 } as Partial<HTMLVideoElement>);
+    const slider = document.createElement("input");
+    slider.type = "range";
+    document.body.appendChild(slider);
+    slider.focus();
+    const event = new KeyboardEvent("keydown", {
+      key: "ArrowRight",
+      bubbles: true,
+      cancelable: true,
+    });
+
+    slider.dispatchEvent(event);
+    await Promise.resolve();
+
+    expect(event.defaultPrevented).toBe(false);
+  });
+
   it("skips action when the active element is contenteditable", async () => {
     const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
     const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);

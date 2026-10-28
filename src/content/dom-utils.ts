@@ -244,12 +244,48 @@ export function canScrollVerticallyFrom(target: Element | null): boolean {
   return canViewportScroll();
 }
 
+// Input types that don't take typed text. Players use range inputs for their
+// seek and volume bars, which must not switch hotkeys off once clicked.
+const NON_TEXT_INPUT_TYPES = new Set([
+  "button",
+  "checkbox",
+  "color",
+  "file",
+  "hidden",
+  "image",
+  "radio",
+  "range",
+  "reset",
+  "submit",
+]);
+
+// Keys a focused slider or radio button uses to change its own value.
+const CONTROL_VALUE_KEYS = new Set([
+  "ArrowUp",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "Home",
+  "End",
+  "PageUp",
+  "PageDown",
+]);
+
+/** Whether the key changes the value of the focused slider or radio button. */
+export function isControlValueKey(target: EventTarget | undefined, key: string): boolean {
+  return (
+    target instanceof HTMLInputElement &&
+    (target.type === "range" || target.type === "radio") &&
+    CONTROL_VALUE_KEYS.has(key)
+  );
+}
+
 export function isWithinEditableElement(element: Element): boolean {
   let current: Element | null = element;
 
   while (current) {
     if (
-      current instanceof HTMLInputElement ||
+      (current instanceof HTMLInputElement && !NON_TEXT_INPUT_TYPES.has(current.type)) ||
       current instanceof HTMLTextAreaElement ||
       current instanceof HTMLSelectElement
     ) {

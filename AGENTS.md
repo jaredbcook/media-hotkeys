@@ -30,7 +30,7 @@ These aren't caught by tests unless marked. ARCHITECTURE.md#invariants explains 
 
 - Use `webextension-polyfill` for extension APIs, never `chrome.*` (enforced by `tsc`).
 - Manifest V3 only. Don't add `host_permissions`, new `permissions`, or a background script without asking first.
-- Hotkeys must stay suppressed in editable elements, including inside shadow roots, and while Ctrl, Alt, or Meta is held.
+- Hotkeys must stay suppressed in editable elements, including inside shadow roots, and while Ctrl, Alt, or Meta is held. Non-text inputs (range, checkbox, button) aren't editable: players use them, so they keep hotkeys working.
 - Never call `preventDefault` on a key unless `hasPotentialTarget` in `src/content/media-presence.ts` allows it. Pages without media keep their keys. Media that only appears asynchronously in another frame must be reported through the presence messages.
 - Exactly one frame executes a media action. New cross-frame behavior goes through the score/execute protocol in `src/content/frame-messaging.ts`, not ad-hoc broadcasts.
 - Keep the trust checks on `MEDIA_HOTKEYS_THEATER` and the no-navigation guard in `placeholder.ts`. They block security and UX regressions.
