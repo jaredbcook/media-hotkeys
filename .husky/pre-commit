@@ -1,3 +1,8 @@
+if [ "$(git symbolic-ref --short -q HEAD)" = "main" ]; then
+  echo "Commits on main aren't allowed. Create a branch for the issue and open a pull request (see CONTRIBUTING.md)." >&2
+  exit 1
+fi
+
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 
