@@ -321,7 +321,8 @@ export function handleAction(action: MediaAction, media: HTMLMediaElement): void
     default: {
       const percentMatch = action.match(/^seekToPercent(\d+)$/);
       const duration = readPlayerDuration(media);
-      if (percentMatch && duration) {
+      // Live streams report an infinite duration and have no percentages.
+      if (percentMatch && Number.isFinite(duration) && duration > 0) {
         const percent = parseInt(percentMatch[1], 10) / 100;
         setPlayerCurrentTime(media, duration * percent);
       }

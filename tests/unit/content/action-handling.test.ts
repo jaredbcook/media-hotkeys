@@ -394,6 +394,14 @@ describe("media action handling", () => {
     );
   });
 
+  it("leaves the position of a live stream alone on number keys", () => {
+    const video = makeVideo({ currentTime: 42, duration: Infinity } as Partial<HTMLVideoElement>);
+
+    expect(() => handleAction("seekToPercent0", video)).not.toThrow();
+    expect(() => handleAction("seekToPercent50", video)).not.toThrow();
+    expect(video.currentTime).toBe(42);
+  });
+
   it("uses the global overlay position for non-skip overlays", () => {
     const video = makeVideo();
     const settings = structuredClone(DEFAULT_SETTINGS);
