@@ -8,7 +8,7 @@ export default defineConfig({
   workers: 1,
   reporter: "list",
   use: {
-    trace: "on-first-retry",
+    trace: "retain-on-failure",
   },
   projects: [
     {
