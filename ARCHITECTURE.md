@@ -163,6 +163,7 @@ For a video inside an iframe, each ancestor frame promotes the hosting `<iframe>
 ## Build and manifest
 
 - One `manifest.template.json`, specialized per browser by `scripts/build.ts`. Manifest V3 everywhere. Permissions are `storage` and `activeTab`; page access comes only from `content_scripts` matching `<all_urls>` with `all_frames`.
+- `minimum_chrome_version` is 114 for Chrome and Edge: the overlay uses popovers to reach the top layer (Chrome 114), and `player-bridge.js` is a main-world content script (Chrome 111). Firefox ignores the key; its minimum is `strict_min_version`, set by `scripts/build.ts`.
 - Vite builds four bundles: `content.js` and `player-bridge.js` as IIFEs (content scripts can't be ES modules), the popup and the options page as ES modules. Output is unminified and has no source maps.
 - Safari isn't a build target. It is produced by converting the Chrome build with Xcode.
 
