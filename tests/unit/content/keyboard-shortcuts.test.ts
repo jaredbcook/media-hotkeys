@@ -715,15 +715,17 @@ describe("playable placeholder activation", () => {
     mockRect(facade, rect(0, 0, 480, 270));
     mockRect(thumbnail, rect(0, 0, 480, 270));
     mockRect(playOverlay, rect(206, 103, 68, 64));
-    facade.addEventListener("click", () => {
+    // The overlay inherits the pointer cursor, so the click may land on it and
+    // bubble to the facade's handler, as it does in a browser.
+    const facadeClickHandler = vi.fn(() => {
       facade.replaceChildren(video);
     });
-    const facadeClickSpy = vi.spyOn(facade, "click");
+    facade.addEventListener("click", facadeClickHandler);
 
     await dispatchMappedKey("k");
     await settleHotkey();
 
-    expect(facadeClickSpy).toHaveBeenCalledOnce();
+    expect(facadeClickHandler).toHaveBeenCalledOnce();
     expect(playSpy).toHaveBeenCalledOnce();
   });
 
