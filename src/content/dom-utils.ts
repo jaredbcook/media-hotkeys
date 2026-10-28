@@ -191,6 +191,11 @@ export function getVisibleViewportArea(rect: Box): number {
   return (right - left) * (bottom - top);
 }
 
+/** Firefox has no picture-in-picture API, and pages can disable it. */
+export function isPictureInPictureSupported(): boolean {
+  return "pictureInPictureEnabled" in document && document.pictureInPictureEnabled;
+}
+
 /** The focused element, following focus into open shadow roots. */
 export function getDeepActiveElement(): Element | null {
   let active = document.activeElement;

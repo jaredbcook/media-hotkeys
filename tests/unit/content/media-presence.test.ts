@@ -100,6 +100,26 @@ describe("keys on pages without media", () => {
     expect(reachedPage).toBe(true);
   });
 
+  it("leaves the picture-in-picture key to the page where the browser has no PiP API", () => {
+    makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+
+    expect(pressKey("i").event.defaultPrevented).toBe(false);
+  });
+
+  it("takes the picture-in-picture key where PiP is available", async () => {
+    Object.defineProperty(document, "pictureInPictureEnabled", { configurable: true, value: true });
+    try {
+      const requestPictureInPicture = vi.fn(() => Promise.reject(new Error("no data yet")));
+      makeVideo({ paused: true, requestPictureInPicture } as Partial<HTMLVideoElement>);
+
+      expect(pressKey("i").event.defaultPrevented).toBe(true);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(requestPictureInPicture).toHaveBeenCalled();
+    } finally {
+      delete (document as { pictureInPictureEnabled?: boolean }).pictureInPictureEnabled;
+    }
+  });
+
   it("takes the play key, and only the play key, for a click-to-play placeholder", () => {
     makePlaceholder();
 

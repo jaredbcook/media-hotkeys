@@ -13,7 +13,7 @@ import {
   isTopWindow,
   sendSitePolicyToFrame,
 } from "./frame-messaging.js";
-import { canScrollVerticallyFrom } from "./dom-utils.js";
+import { canScrollVerticallyFrom, isPictureInPictureSupported } from "./dom-utils.js";
 import { findIframes, findMedia, isTargetableMediaElement } from "./media-discovery.js";
 import { getBestLocalCandidate, hasMediaInUse } from "./media-scoring.js";
 import { hasPlayablePlaceholder, isPlaceholderSized } from "./placeholder.js";
@@ -150,6 +150,10 @@ export function hasPotentialTarget(
   key: string,
   keyTarget: Element | null,
 ): boolean {
+  if (action === "togglePip" && !isPictureInPictureSupported()) {
+    return false;
+  }
+
   if (isTheaterActive()) {
     return true;
   }

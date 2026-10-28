@@ -23,6 +23,7 @@ export interface ManifestTemplate {
     gecko?: {
       id?: string;
       strict_min_version?: string;
+      data_collection_permissions?: { required: string[]; optional?: string[] };
     };
   };
 }
