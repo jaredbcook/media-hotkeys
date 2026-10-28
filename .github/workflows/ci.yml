@@ -7,11 +7,22 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   build-test-package:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - if: startsWith(github.ref, 'refs/tags/')
+        name: Check tag matches package.json version
+        run: |
+          expected="v$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_NAME" != "$expected" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version ($expected)"
+            exit 1
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -31,3 +42,24 @@ jobs:
         with:
           name: extension-packages
           path: dist/packages/*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build-test-package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: extension-packages
+          path: packages
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" packages/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag

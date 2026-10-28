@@ -80,7 +80,11 @@ Each fact has one home. Update that file in the same change that alters the beha
 1. Bump `version` in `package.json`. Built manifests take their version from it.
 2. Run `npm run check`, then `npm run build:chrome && npm run test:e2e`.
 3. Run `npm run package` and smoke-test each archive in `dist/packages/`.
-4. Tag `vX.Y.Z` and push. CI attaches the packages to the tag's workflow run as artifacts.
+4. Commit the version bump, then tag and push it: `git tag vX.Y.Z && git push origin main vX.Y.Z`. The tag must match the `package.json` version, or CI fails.
+5. CI runs the full test suite, packages every browser, and creates a GitHub Release for the tag with the archives attached and notes generated from the commits since the last tag. Edit the notes on the release page if needed.
+6. Upload the archives from the release to each browser store. Stores reject a version they have already seen, so every upload needs a new version.
+
+The Firefox `.xpi` on the release is unsigned. Firefox only installs it permanently after Mozilla signs it through addons.mozilla.org.
 
 ### Safari
 
