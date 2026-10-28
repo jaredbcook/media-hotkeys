@@ -3,7 +3,7 @@ import defaults from "../../../src/settings/defaults.json";
 import type { ExtensionSettings } from "../../../src/storage.js";
 
 const hoistedMocks = vi.hoisted(() => ({
-  getSettingsMock: vi.fn<[], Promise<ExtensionSettings>>(),
+  getSettingsMock: vi.fn<() => Promise<ExtensionSettings>>(),
   saveSettingsMock: vi.fn(),
 }));
 

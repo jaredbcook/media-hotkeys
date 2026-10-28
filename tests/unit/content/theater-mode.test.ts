@@ -39,7 +39,7 @@ function removePopoverStub(): void {
   Element.prototype.matches = originalMatches;
 }
 
-let scrollToSpy: MockInstance<[x: number, y: number], void>;
+let scrollToSpy: MockInstance<typeof window.scrollTo>;
 
 beforeEach(() => {
   resetContentTestState();

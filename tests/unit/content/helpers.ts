@@ -1,4 +1,4 @@
-import { vi } from "vitest";
+import { afterAll, vi } from "vitest";
 import defaults from "../../../src/settings/defaults.json";
 import type { ExtensionSettings } from "../../../src/storage.js";
 
@@ -47,6 +47,14 @@ vi.mock("../../../src/overlay.js", () => ({
 import { setSettingsForTests } from "../../../src/content.js";
 
 const DEFAULT_SETTINGS = defaults as ExtensionSettings;
+
+// jsdom empties the body when Vitest tears the environment down, after the
+// window globals are gone. Empty it first so the content script's mutation
+// observer doesn't run without a window.
+afterAll(async () => {
+  document.body.replaceChildren();
+  await Promise.resolve();
+});
 
 export function makeVideo(overrides: Partial<HTMLVideoElement> = {}): HTMLVideoElement {
   const video = document.createElement("video");
