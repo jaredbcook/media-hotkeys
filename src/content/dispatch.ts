@@ -26,6 +26,8 @@ import {
   grantTheaterPromotion,
   handleIncomingScoreRequest,
   isFrameActionMessage,
+  isFromChildFrame,
+  isFromParentFrame,
   isSiteDisabledByPolicy,
   isTopWindow,
   resolveFrameActionResponse,
@@ -210,75 +212,59 @@ function handleTheaterMessage(
 }
 
 export function handleFrameMessage(event: MessageEvent): void {
-  if (event.source !== window && !event.source) {
+  if (!event.source || !isFrameActionMessage(event.data)) {
     return;
   }
 
-  if (!isFrameActionMessage(event.data)) {
-    return;
-  }
-
-  if (event.data.type === SITE_POLICY_TYPE) {
-    if (isTopWindow() || event.source !== window.parent) {
+  const { data, source } = event;
+  switch (data.type) {
+    case SITE_POLICY_TYPE:
+      if (isFromParentFrame(source)) {
+        applyParentSitePolicy(data.disabled);
+      }
       return;
-    }
 
-    applyParentSitePolicy(event.data.disabled);
-    return;
+    case MEDIA_PRESENCE_TYPE:
+    case MEDIA_PRESENCE_REQUEST_TYPE:
+      if (source !== window) {
+        handleMediaPresenceMessage(data, source as Window);
+      }
+      return;
+
+    case THEATER_TYPE:
+      if (source !== window) {
+        handleTheaterMessage(data.active, data.requestId, source as Window);
+      }
+      return;
+
+    case ACTION_RESPONSE_TYPE:
+      if (isFromChildFrame(source)) {
+        resolveFrameActionResponse(data.requestId, data.handled);
+      }
+      return;
+
+    case SCORE_RESPONSE_TYPE:
+      if (isFromChildFrame(source)) {
+        resolveFrameScoreResponse(data.requestId, data.bestScore, data.areaScore ?? 0, source);
+      }
+      return;
+
+    case SCORE_REQUEST_TYPE:
+      if (isFromParentFrame(source)) {
+        void handleIncomingScoreRequest(data.requestId, data.budgetMs, source as Window);
+      }
+      return;
+
+    case ACTION_REQUEST_TYPE:
+      if (isFromParentFrame(source)) {
+        void handleIncomingFrameAction(
+          data.action,
+          data.requestId,
+          data.allowPlaceholder === true,
+        ).then((handled) => {
+          respondToFrameAction(source as Window, data.requestId, handled);
+        });
+      }
+      return;
   }
-
-  if (event.data.type === MEDIA_PRESENCE_TYPE || event.data.type === MEDIA_PRESENCE_REQUEST_TYPE) {
-    if (event.source && event.source !== window) {
-      handleMediaPresenceMessage(event.data, event.source as Window);
-    }
-    return;
-  }
-
-  if (event.data.type === THEATER_TYPE) {
-    if (event.source && event.source !== window) {
-      handleTheaterMessage(event.data.active, event.data.requestId, event.source as Window);
-    }
-    return;
-  }
-
-  if (event.data.type === ACTION_RESPONSE_TYPE) {
-    resolveFrameActionResponse(event.data.requestId, event.data.handled);
-    return;
-  }
-
-  if (event.data.type === SCORE_RESPONSE_TYPE) {
-    if (event.source) {
-      resolveFrameScoreResponse(
-        event.data.requestId,
-        event.data.bestScore,
-        event.data.areaScore ?? 0,
-        event.source as Window,
-      );
-    }
-    return;
-  }
-
-  if (event.data.type === SCORE_REQUEST_TYPE) {
-    if (event.source) {
-      void handleIncomingScoreRequest(
-        event.data.requestId,
-        event.data.budgetMs,
-        event.source as Window,
-      );
-    }
-    return;
-  }
-
-  if (!event.source || event.data.type !== ACTION_REQUEST_TYPE) {
-    return;
-  }
-
-  const actionRequest = event.data;
-  void handleIncomingFrameAction(
-    actionRequest.action,
-    actionRequest.requestId,
-    actionRequest.allowPlaceholder === true,
-  ).then((handled) => {
-    respondToFrameAction(event.source as Window, actionRequest.requestId, handled);
-  });
 }

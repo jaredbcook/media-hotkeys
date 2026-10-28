@@ -4,34 +4,41 @@ import defaults from "./settings/defaults.json";
 
 // #region Types
 
-export type MediaAction =
-  | "togglePlayPause"
-  | "toggleMute"
-  | "toggleOverlays"
-  | "toggleFullscreen"
-  | "togglePip"
-  | "toggleTheater"
-  | "speedUp"
-  | "slowDown"
-  | "volumeUp"
-  | "volumeDown"
-  | "seekForwardSmall"
-  | "seekBackwardSmall"
-  | "seekForwardMedium"
-  | "seekBackwardMedium"
-  | "seekForwardLarge"
-  | "seekBackwardLarge"
-  | "restart"
-  | "seekToPercent0"
-  | "seekToPercent10"
-  | "seekToPercent20"
-  | "seekToPercent30"
-  | "seekToPercent40"
-  | "seekToPercent50"
-  | "seekToPercent60"
-  | "seekToPercent70"
-  | "seekToPercent80"
-  | "seekToPercent90";
+export const MEDIA_ACTIONS = [
+  "togglePlayPause",
+  "toggleMute",
+  "toggleOverlays",
+  "toggleFullscreen",
+  "togglePip",
+  "toggleTheater",
+  "speedUp",
+  "slowDown",
+  "volumeUp",
+  "volumeDown",
+  "seekForwardSmall",
+  "seekBackwardSmall",
+  "seekForwardMedium",
+  "seekBackwardMedium",
+  "seekForwardLarge",
+  "seekBackwardLarge",
+  "restart",
+  "seekToPercent0",
+  "seekToPercent10",
+  "seekToPercent20",
+  "seekToPercent30",
+  "seekToPercent40",
+  "seekToPercent50",
+  "seekToPercent60",
+  "seekToPercent70",
+  "seekToPercent80",
+  "seekToPercent90",
+] as const;
+
+export type MediaAction = (typeof MEDIA_ACTIONS)[number];
+
+export function isMediaAction(value: unknown): value is MediaAction {
+  return MEDIA_ACTIONS.includes(value as MediaAction);
+}
 
 export type ConfigurableMediaAction = Exclude<
   MediaAction,
