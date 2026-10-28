@@ -12,11 +12,23 @@ import {
   isIframeHidden,
   isTopWindow,
 } from "./frame-messaging.js";
+import { canScrollVerticallyFrom } from "./dom-utils.js";
 import { findIframes, findMedia, isTargetableMediaElement } from "./media-discovery.js";
-import { getBestLocalCandidate } from "./media-scoring.js";
+import { getBestLocalCandidate, hasMediaInUse } from "./media-scoring.js";
 import { hasPlayablePlaceholder, isPlaceholderSized } from "./placeholder.js";
 import { actionedMedia } from "./state.js";
 import { isTheaterActive } from "./theater.js";
+
+// Keys that scroll the page by default.
+const VERTICAL_SCROLL_KEYS = new Set([
+  "ArrowUp",
+  "ArrowDown",
+  "PageUp",
+  "PageDown",
+  "Home",
+  "End",
+  " ",
+]);
 
 // Whether each child frame's subtree has controllable media, as last reported
 // by that frame. Keyed by window so removed iframes drop out on their own.
@@ -128,9 +140,23 @@ export function handleMediaPresenceMessage(
  * key from the page (preventDefault) before cross-frame arbitration runs.
  * The play key also counts a click-to-play placeholder here, or an iframe
  * large enough to hold one, since placeholders aren't reported across frames.
+ * Vertical scroll keys stay with a page that can scroll unless media in this
+ * frame is in use, so reading past an idle video still scrolls.
  */
-export function hasPotentialTarget(action: MediaAction): boolean {
-  if (isTheaterActive() || getBestLocalCandidate() !== null || childFramesHaveMedia()) {
+export function hasPotentialTarget(
+  action: MediaAction,
+  key: string,
+  keyTarget: Element | null,
+): boolean {
+  if (isTheaterActive()) {
+    return true;
+  }
+
+  if (VERTICAL_SCROLL_KEYS.has(key) && canScrollVerticallyFrom(keyTarget) && !hasMediaInUse()) {
+    return false;
+  }
+
+  if (getBestLocalCandidate() !== null || childFramesHaveMedia()) {
     return true;
   }
 

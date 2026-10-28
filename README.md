@@ -16,7 +16,7 @@ Works in Chrome, Edge, and Firefox. Safari is possible by converting the Chrome 
 
 ## Default hotkeys
 
-Hotkeys only take effect when the page (or a frame inside it) has media to control. Elsewhere, keys keep their normal behavior, so arrow keys still scroll and a site's own shortcuts still work. Hotkeys are also ignored while you type in a text field or other editable element, while Ctrl, Alt, or Meta is held, and on sites disabled by a site rule.
+Hotkeys only take effect when the page (or a frame inside it) has media to control. Elsewhere, keys keep their normal behavior, so arrow keys still scroll and a site's own shortcuts still work. On a page that scrolls, keys that scroll it (`ArrowUp`, `ArrowDown`, `Space`, `PageUp`, `PageDown`, `Home`, `End`) keep scrolling until you use a video: click or focus it, control it with another hotkey, or play it with sound while it's on screen. Hotkeys are also ignored while you type in a text field or other editable element, while Ctrl, Alt, or Meta is held, and on sites disabled by a site rule.
 
 | Action                 | Key                 | Notes                                                     |
 | ---------------------- | ------------------- | --------------------------------------------------------- |

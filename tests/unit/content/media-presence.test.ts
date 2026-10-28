@@ -106,6 +106,108 @@ describe("keys on pages without media", () => {
   });
 });
 
+describe("vertical scroll keys", () => {
+  function setScrollSize(element: Element, scrollHeight: number, clientHeight: number): void {
+    Object.defineProperty(element, "scrollHeight", { configurable: true, value: scrollHeight });
+    Object.defineProperty(element, "clientHeight", { configurable: true, value: clientHeight });
+  }
+
+  function makePageScrollable(): void {
+    // jsdom has no layout, so give the viewport something to scroll.
+    Object.defineProperty(document, "scrollingElement", {
+      configurable: true,
+      value: document.documentElement,
+    });
+    setScrollSize(document.documentElement, 4000, 768);
+  }
+
+  function pressKeyAt(target: Element, key: string): KeyboardEvent {
+    const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+    target.dispatchEvent(event);
+    return event;
+  }
+
+  function interactWith(media: HTMLMediaElement): void {
+    media.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, composed: true }));
+  }
+
+  afterEach(() => {
+    delete (document as { scrollingElement?: Element }).scrollingElement;
+    delete (document.documentElement as { scrollHeight?: number }).scrollHeight;
+    delete (document.documentElement as { clientHeight?: number }).clientHeight;
+  });
+
+  it("leaves them to a scrollable page next to an idle video, but takes other keys", () => {
+    makePageScrollable();
+    mockRect(makeVideo({ paused: true } as Partial<HTMLVideoElement>), rect(0, 0, 640, 360));
+
+    expect(pressKey("ArrowDown").event.defaultPrevented).toBe(false);
+    expect(pressKey("ArrowUp").event.defaultPrevented).toBe(false);
+    expect(pressKey("ArrowRight").event.defaultPrevented).toBe(true);
+    expect(pressKey("j").event.defaultPrevented).toBe(true);
+  });
+
+  it("takes them when the page cannot scroll", () => {
+    mockRect(makeVideo({ paused: true } as Partial<HTMLVideoElement>), rect(0, 0, 640, 360));
+
+    expect(pressKey("ArrowDown").event.defaultPrevented).toBe(true);
+  });
+
+  it("takes them on a scrollable page once the user interacted with a visible video", () => {
+    makePageScrollable();
+    const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    mockRect(video, rect(0, 0, 640, 360));
+    interactWith(video);
+
+    expect(pressKey("ArrowDown").event.defaultPrevented).toBe(true);
+  });
+
+  it("takes them for a visible video playing with sound", () => {
+    makePageScrollable();
+    const video = makeVideo({
+      paused: false,
+      readyState: 4,
+      muted: false,
+      volume: 1,
+    } as Partial<HTMLVideoElement>);
+    mockRect(video, rect(0, 0, 640, 360));
+
+    expect(pressKey("ArrowDown").event.defaultPrevented).toBe(true);
+  });
+
+  it("gives them back to the page once the video scrolls out of view", () => {
+    makePageScrollable();
+    const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    mockRect(video, rect(0, 0, 640, 360));
+    interactWith(video);
+    mockRect(video, rect(0, -2000, 640, 360));
+
+    expect(pressKey("ArrowDown").event.defaultPrevented).toBe(false);
+  });
+
+  it("leaves them to a scroll container around the focused element", () => {
+    mockRect(makeVideo({ paused: true } as Partial<HTMLVideoElement>), rect(0, 0, 640, 360));
+    const container = document.createElement("div");
+    container.style.overflowY = "auto";
+    setScrollSize(container, 2000, 300);
+    const item = document.createElement("button");
+    container.appendChild(item);
+    document.body.appendChild(container);
+
+    expect(pressKeyAt(item, "ArrowDown").defaultPrevented).toBe(false);
+    expect(pressKeyAt(document.body, "ArrowDown").defaultPrevented).toBe(true);
+  });
+
+  it("takes them when a scroll lock hides the page's overflow", () => {
+    makePageScrollable();
+    document.body.style.overflowY = "hidden";
+    mockRect(makeVideo({ paused: true } as Partial<HTMLVideoElement>), rect(0, 0, 640, 360));
+
+    expect(pressKey("ArrowDown").event.defaultPrevented).toBe(true);
+    document.body.style.overflowY = "";
+  });
+});
+
 describe("keys on pages whose media may be in child frames", () => {
   it("leaves keys to the page and skips arbitration when no child frame reported media", () => {
     const child = addChildFrame();
