@@ -1,7 +1,7 @@
 import { type MediaAction, normalizeHotkeyKey } from "../storage.js";
 import { isGlobalAction } from "./actions.js";
 import { dispatchMediaAction, handleGlobalAction } from "./dispatch.js";
-import { debugLog, isWithinEditableElement } from "./dom-utils.js";
+import { debugLog, isControlValueKey, isWithinEditableElement } from "./dom-utils.js";
 import { isSiteDisabledByPolicy } from "./frame-messaging.js";
 import { hasPotentialTarget } from "./media-presence.js";
 import { state } from "./state.js";
@@ -70,12 +70,14 @@ export async function handleKeyDown(e: KeyboardEvent): Promise<void> {
   if (hasReservedModifier(e)) return;
 
   const key = getKeyString(e);
+  const keyTarget = e.composedPath()[0];
+  if (isControlValueKey(keyTarget, key)) return;
+
   const action = getActionForKey(key);
   if (!action) return;
 
   // Only take the key from the page when it can do something. Otherwise pages
   // without media would lose scrolling and their own shortcuts to our bindings.
-  const keyTarget = e.composedPath()[0];
   if (!hasPotentialTarget(action, key, keyTarget instanceof Element ? keyTarget : null)) {
     debugLog("No media for action; leaving the key to the page", undefined, { action, key });
     return;
