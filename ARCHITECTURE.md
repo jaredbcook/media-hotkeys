@@ -75,7 +75,7 @@ Every file under `src/` is listed here; `tests/unit/docs/docs-consistency.test.t
 
 ### Build and tests
 
-- `scripts/build.ts` runs the Vite configs from `vite.config.ts` once per browser and writes `dist/<browser>/manifest.json` from `manifest.template.json`, stamping `version` from `package.json` and adding a Gecko id for Firefox.
+- `scripts/build.ts` runs the Vite configs from `vite.config.ts` once per browser and writes `dist/<browser>/manifest.json` from `manifest.template.json`, stamping `version` from `package.json` and adding Gecko settings for Firefox: the add-on id, `strict_min_version` 128 (main-world content scripts), and the `data_collection_permissions` declaration that addons.mozilla.org requires.
 - `scripts/package.ts` builds, then zips each browser into `dist/packages/` (`.xpi` for Firefox).
 - `scripts/safari-convert.ts` prints the `xcrun safari-web-extension-converter` command for the Chrome build (macOS only).
 - Tests: `tests/unit/` and `tests/ui/` (Vitest + jsdom), `tests/e2e/` (Playwright against the built Chrome extension). See [CONTRIBUTING.md](CONTRIBUTING.md#testing).

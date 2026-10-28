@@ -6,7 +6,7 @@ import {
   saveSettings,
 } from "../storage.js";
 import { showActionOverlay } from "../overlay.js";
-import { debugLog } from "./dom-utils.js";
+import { debugLog, isPictureInPictureSupported } from "./dom-utils.js";
 import { getFullscreenHost, unwrapManagedFullscreenMedia } from "./fullscreen.js";
 import { getTargetMedia } from "./media-scoring.js";
 import { trackInteraction } from "./media-tracking.js";
@@ -244,11 +244,12 @@ export function handleAction(action: MediaAction, media: HTMLMediaElement): void
       break;
 
     case "togglePip":
-      if (media instanceof HTMLVideoElement) {
+      if (media instanceof HTMLVideoElement && isPictureInPictureSupported()) {
+        // Rejected when the video has no data yet or disables PiP itself.
         if (document.pictureInPictureElement) {
-          document.exitPictureInPicture();
+          void document.exitPictureInPicture().catch(() => undefined);
         } else {
-          media.requestPictureInPicture();
+          void media.requestPictureInPicture().catch(() => undefined);
         }
       }
       break;

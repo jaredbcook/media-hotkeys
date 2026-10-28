@@ -90,7 +90,10 @@ async function writeManifest(
   await writeFile(path.join(outDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
-function createManifest({
+// Content scripts in the page's main world need Firefox 128.
+const FIREFOX_MIN_VERSION = "128.0";
+
+export function createManifest({
   browser,
   packageJson,
   manifestTemplate,
@@ -113,6 +116,9 @@ function createManifest({
     manifest.browser_specific_settings = {
       gecko: {
         id: `${packageJson.name}@local`,
+        strict_min_version: FIREFOX_MIN_VERSION,
+        // addons.mozilla.org requires a declaration; the extension collects nothing.
+        data_collection_permissions: { required: ["none"] },
       },
     };
   } else {

@@ -2,7 +2,7 @@
 
 A browser extension that adds YouTube-style keyboard shortcuts to HTML `<video>` and `<audio>` on any website, including media inside iframes and shadow DOM.
 
-Works in Chrome, Edge, and Firefox. Safari is possible by converting the Chrome build with Xcode.
+Works in Chrome, Edge, and Firefox 128 or newer. Safari is possible by converting the Chrome build with Xcode.
 
 ## Features
 
@@ -18,26 +18,26 @@ Works in Chrome, Edge, and Firefox. Safari is possible by converting the Chrome 
 
 Hotkeys only take effect when the page (or a frame inside it) has media to control. Elsewhere, keys keep their normal behavior, so arrow keys still scroll and a site's own shortcuts still work. On a page that scrolls, keys that scroll it (`ArrowUp`, `ArrowDown`, `Space`, `PageUp`, `PageDown`, `Home`, `End`) keep scrolling until you use a video: click or focus it, control it with another hotkey, or play it with sound while it's on screen. Hotkeys are also ignored while you type in a text field or other editable element, while Ctrl, Alt, or Meta is held, and on sites disabled by a site rule.
 
-| Action                 | Key                 | Notes                                                     |
-| ---------------------- | ------------------- | --------------------------------------------------------- |
-| Play/Pause             | `k`                 | Activates a click-to-play thumbnail if no media is loaded |
-| Mute/Unmute            | `m`                 |                                                           |
-| Fullscreen             | `f`                 | `Esc` exits                                               |
-| Picture-in-Picture     | `i`                 |                                                           |
-| Theater Mode           | `t`                 | Fills the window without fullscreen; `Esc` exits          |
-| Speed Up               | `>`                 |                                                           |
-| Slow Down              | `<`                 |                                                           |
-| Volume Up              | `ArrowUp`, `+`, `=` |                                                           |
-| Volume Down            | `ArrowDown`, `-`    |                                                           |
-| Skip Forward (Small)   | `ArrowRight`        |                                                           |
-| Skip Backward (Small)  | `ArrowLeft`         |                                                           |
-| Skip Forward (Medium)  | `l`                 |                                                           |
-| Skip Backward (Medium) | `j`                 |                                                           |
-| Skip Forward (Large)   | `]`                 |                                                           |
-| Skip Backward (Large)  | `[`                 |                                                           |
-| Restart                | `r`                 | Jump to the beginning                                     |
-| Toggle Overlays        | `o`                 | Turns the on-screen feedback on or off                    |
-| Jump to Location       | `0`–`9`             | `0` jumps to 0%, `1` to 10%, and so on                    |
+| Action                 | Key                 | Notes                                                         |
+| ---------------------- | ------------------- | ------------------------------------------------------------- |
+| Play/Pause             | `k`                 | Activates a click-to-play thumbnail if no media is loaded     |
+| Mute/Unmute            | `m`                 |                                                               |
+| Fullscreen             | `f`                 | `Esc` exits                                                   |
+| Picture-in-Picture     | `i`                 | Not in Firefox, which has no picture-in-picture API for pages |
+| Theater Mode           | `t`                 | Fills the window without fullscreen; `Esc` exits              |
+| Speed Up               | `>`                 |                                                               |
+| Slow Down              | `<`                 |                                                               |
+| Volume Up              | `ArrowUp`, `+`, `=` |                                                               |
+| Volume Down            | `ArrowDown`, `-`    |                                                               |
+| Skip Forward (Small)   | `ArrowRight`        |                                                               |
+| Skip Backward (Small)  | `ArrowLeft`         |                                                               |
+| Skip Forward (Medium)  | `l`                 |                                                               |
+| Skip Backward (Medium) | `j`                 |                                                               |
+| Skip Forward (Large)   | `]`                 |                                                               |
+| Skip Backward (Large)  | `[`                 |                                                               |
+| Restart                | `r`                 | Jump to the beginning                                         |
+| Toggle Overlays        | `o`                 | Turns the on-screen feedback on or off                        |
+| Jump to Location       | `0`–`9`             | `0` jumps to 0%, `1` to 10%, and so on                        |
 
 ## Settings
 
