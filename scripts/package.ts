@@ -1,7 +1,7 @@
 import { createWriteStream } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
-import archiver from "archiver";
+import { ZipArchive } from "archiver";
 import { buildBrowsers } from "./build.js";
 import {
   getBrowserDistDir,
@@ -33,7 +33,7 @@ async function run(): Promise<void> {
 async function createArchive(sourceDir: string, archivePath: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const output = createWriteStream(archivePath);
-    const archive = archiver("zip", {
+    const archive = new ZipArchive({
       zlib: { level: 9 },
     });
 
