@@ -1,5 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { dispatchMappedKey, makeVideo, mockRect, rect, resetContentTestState } from "./helpers.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  dispatchMappedKey,
+  makeVideo,
+  mockRect,
+  rect,
+  resetContentTestState,
+  storageSetMock,
+} from "./helpers.js";
 import { delegateActionToChildFrames, setSettingsForTests } from "../../../src/content.js";
 import { DEFAULT_SETTINGS } from "../../../src/storage.js";
 
@@ -16,6 +23,20 @@ function setWindowParentForTest(parentWindow: Window): void {
 
 function restoreTopWindowForTest(): void {
   setWindowParentForTest(window);
+}
+
+function sendActionRequest(source: Window, action: string, requestId: string): void {
+  window.dispatchEvent(
+    new MessageEvent("message", {
+      data: {
+        source: "media-shortcuts-extension",
+        type: "MEDIA_SHORTCUTS_HANDLE_ACTION",
+        action,
+        requestId,
+      },
+      source,
+    }),
+  );
 }
 
 describe("frame action delegation", () => {
@@ -97,6 +118,10 @@ describe("frame action delegation", () => {
 });
 
 describe("frame message handling", () => {
+  afterEach(() => {
+    restoreTopWindowForTest();
+  });
+
   it("ignores messages with a null source", () => {
     window.dispatchEvent(
       new MessageEvent("message", {
@@ -120,42 +145,96 @@ describe("frame message handling", () => {
     );
   });
 
-  it("handles an incoming action request from a child frame and sends a response", async () => {
+  it("handles an action request from the parent frame and sends a response", async () => {
     const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
     const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
-    const settings = structuredClone(DEFAULT_SETTINGS);
-    setSettingsForTests(settings);
-
-    const mockSource = { postMessage: vi.fn() } as unknown as Window;
+    const parentSource = { postMessage: vi.fn() } as unknown as Window;
+    setWindowParentForTest(parentSource);
     const requestId = "frame-req-1";
 
+    try {
+      sendActionRequest(parentSource, "togglePlayPause", requestId);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(playSpy).toHaveBeenCalled();
+      expect(parentSource.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ requestId, handled: true }),
+        "*",
+      );
+    } finally {
+      restoreTopWindowForTest();
+    }
+  });
+
+  it("ignores action requests from frames other than its parent", async () => {
+    const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
+    // An embedded frame, such as an ad, posting to the page that hosts it.
+    const iframe = document.createElement("iframe");
+    document.body.appendChild(iframe);
+    const childWindow = iframe.contentWindow!;
+    const childPostMessage = vi.spyOn(childWindow, "postMessage").mockImplementation(() => {});
+
+    sendActionRequest(childWindow, "togglePlayPause", "from-child");
+    sendActionRequest(childWindow, "toggleOverlays", "from-child-overlays");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(playSpy).not.toHaveBeenCalled();
+    expect(storageSetMock).not.toHaveBeenCalled();
+    expect(childPostMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "MEDIA_SHORTCUTS_ACTION_RESULT" }),
+      "*",
+    );
+  });
+
+  it("ignores action requests for unknown actions", async () => {
+    const parentSource = { postMessage: vi.fn() } as unknown as Window;
+    setWindowParentForTest(parentSource);
+
+    try {
+      makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+      sendActionRequest(parentSource, "deleteEverything", "unknown-action");
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(parentSource.postMessage).not.toHaveBeenCalled();
+    } finally {
+      restoreTopWindowForTest();
+    }
+  });
+
+  it("ignores action results from windows that are not its child frames", async () => {
+    const iframe = document.createElement("iframe");
+    document.body.appendChild(iframe);
+    const frameWindow = iframe.contentWindow!;
+    let capturedRequestId = "";
+    vi.spyOn(frameWindow, "postMessage").mockImplementation((message: unknown) => {
+      capturedRequestId = (message as { requestId: string }).requestId;
+    });
+    const strangerWindow = { postMessage: vi.fn() } as unknown as Window;
+
+    const delegatePromise = delegateActionToChildFrames("toggleMute");
     window.dispatchEvent(
       new MessageEvent("message", {
         data: {
           source: "media-shortcuts-extension",
-          type: "MEDIA_SHORTCUTS_HANDLE_ACTION",
-          action: "togglePlayPause",
-          requestId,
+          type: "MEDIA_SHORTCUTS_ACTION_RESULT",
+          requestId: capturedRequestId,
+          handled: true,
         },
-        source: mockSource,
+        source: strangerWindow,
       }),
     );
 
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(playSpy).toHaveBeenCalled();
-    expect(mockSource.postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ requestId, handled: true }),
-      "*",
-    );
+    await expect(delegatePromise).resolves.toBe(false);
   });
 
   it("ignores site policy messages in the top frame", async () => {
     const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
     const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
     const mockSource = { postMessage: vi.fn() } as unknown as Window;
-    const requestId = "frame-req-top-policy";
 
     window.dispatchEvent(
       new MessageEvent("message", {
@@ -167,27 +246,9 @@ describe("frame message handling", () => {
         source: mockSource,
       }),
     );
-
-    window.dispatchEvent(
-      new MessageEvent("message", {
-        data: {
-          source: "media-shortcuts-extension",
-          type: "MEDIA_SHORTCUTS_HANDLE_ACTION",
-          action: "togglePlayPause",
-          requestId,
-        },
-        source: mockSource,
-      }),
-    );
-
-    await Promise.resolve();
-    await Promise.resolve();
+    await dispatchMappedKey("k");
 
     expect(playSpy).toHaveBeenCalled();
-    expect(mockSource.postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ requestId, handled: true }),
-      "*",
-    );
   });
 
   it("accepts site policy messages from the parent frame", async () => {
@@ -255,24 +316,13 @@ describe("frame message handling", () => {
           source: otherSource,
         }),
       );
-
-      window.dispatchEvent(
-        new MessageEvent("message", {
-          data: {
-            source: "media-shortcuts-extension",
-            type: "MEDIA_SHORTCUTS_HANDLE_ACTION",
-            action: "togglePlayPause",
-            requestId,
-          },
-          source: otherSource,
-        }),
-      );
+      sendActionRequest(parentSource, "togglePlayPause", requestId);
 
       await Promise.resolve();
       await Promise.resolve();
 
       expect(playSpy).toHaveBeenCalled();
-      expect(otherSource.postMessage).toHaveBeenCalledWith(
+      expect(parentSource.postMessage).toHaveBeenCalledWith(
         expect.objectContaining({ requestId, handled: true }),
         "*",
       );
@@ -354,6 +404,7 @@ describe("frame message handling", () => {
 
   it("responds to a score request with null when no media exists", async () => {
     const mockSource = { postMessage: vi.fn() } as unknown as Window;
+    setWindowParentForTest(mockSource);
 
     window.dispatchEvent(
       new MessageEvent("message", {
@@ -383,6 +434,7 @@ describe("frame message handling", () => {
   it("responds to a score request with the best local candidate score", async () => {
     makeVideo();
     const mockSource = { postMessage: vi.fn() } as unknown as Window;
+    setWindowParentForTest(mockSource);
 
     window.dispatchEvent(
       new MessageEvent("message", {
@@ -414,6 +466,7 @@ describe("frame message handling", () => {
     const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
     const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
     const mockSource = { postMessage: vi.fn() } as unknown as Window;
+    setWindowParentForTest(mockSource);
     const requestId = "score-then-execute";
 
     window.dispatchEvent(

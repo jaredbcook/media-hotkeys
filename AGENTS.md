@@ -46,7 +46,7 @@ These aren't caught by tests unless marked. ARCHITECTURE.md#invariants explains 
 
 ### Add a hotkey action
 
-1. Add it to `MediaAction` in `src/storage.ts`. If it isn't user-configurable, also exclude it from `ConfigurableMediaAction`.
+1. Add it to `MEDIA_ACTIONS` in `src/storage.ts` (`MediaAction` is derived from it). If it isn't user-configurable, also exclude it from `ConfigurableMediaAction`.
 2. Add a default binding in `src/settings/defaults.json` under `quickSettings.actionKeyBindings`.
 3. Add a case to the `switch` in `handleAction` in `src/content/actions.ts`. Read and write media through `src/content/player-control.ts` so custom players keep working. Actions not tied to a media element (like `toggleOverlays`) go through `isGlobalAction` and `handleGlobalAction` in `src/content/dispatch.ts` instead.
 4. For an overlay, add an icon in `src/icons.ts` and a case in `buildContent` in `src/overlay.ts`. If the action should show no overlay, add it to `NON_OVERLAY_ACTIONS` in `src/storage.ts`.

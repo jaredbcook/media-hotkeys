@@ -127,6 +127,7 @@ Shortcuts and exceptions:
 - When local intent is unambiguous (score at or above `STRONG_LOCAL_TARGET_SCORE`: focus, fullscreen, PiP, theater), the round trip is skipped.
 - When no frame has scorable media, placeholder activation is tried locally first, then broadcast to child frames.
 - Global actions (overlay toggle) keep broadcast semantics instead of arbitration.
+- Any page or frame can post these messages, so each is accepted only from the direction the protocol sends it (`isFromParentFrame` and `isFromChildFrame` in `frame-messaging.ts`): score and execute requests and site policies only from `window.parent`, and results only from this frame's own iframes. Execute requests must name an action in `MEDIA_ACTIONS`. Otherwise an ad iframe could make the page act on its media or flip the saved overlay setting.
 - Message type strings and timeouts are in `src/content/constants.ts`. Every frame runs the same build, so the protocol has no versioning.
 
 ## Playable placeholders
@@ -174,6 +175,7 @@ Breaking one of these is a bug even if tests pass:
 - Hotkeys never fire while focus is in an editable element (`input`, `textarea`, `select`, `contenteditable`, including inside shadow roots) or with Ctrl, Alt, or Meta held.
 - A key is only taken from the page when `hasPotentialTarget` says media may be reachable.
 - Exactly one frame executes a media action.
+- Cross-frame requests are accepted only from the parent frame, and results only from child frames.
 - Theater promotion of an iframe requires a route grant or iframe focus.
 - Pressing play on a placeholder never navigates the page.
 - `player-bridge.ts` imports nothing and only runs whitelisted operations.

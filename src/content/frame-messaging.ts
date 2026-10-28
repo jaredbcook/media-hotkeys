@@ -1,4 +1,4 @@
-import { type MediaAction, findMatchingSitePolicy } from "../storage.js";
+import { type MediaAction, findMatchingSitePolicy, isMediaAction } from "../storage.js";
 import {
   ACTION_REQUEST_TYPE,
   ACTION_RESPONSE_TYPE,
@@ -207,19 +207,47 @@ export function isFrameActionMessage(data: unknown): data is FrameMessage {
 
   if (message.type === SCORE_REQUEST_TYPE) {
     const scoreRequest = message as Partial<FrameScoreRequestMessage>;
-    return typeof scoreRequest.requestId === "string" && typeof scoreRequest.budgetMs === "number";
+    return typeof scoreRequest.requestId === "string" && Number.isFinite(scoreRequest.budgetMs);
   }
 
   if (message.type === SCORE_RESPONSE_TYPE) {
     const scoreResponse = message as Partial<FrameScoreResponseMessage>;
     return (
       typeof scoreResponse.requestId === "string" &&
-      (scoreResponse.bestScore === null || typeof scoreResponse.bestScore === "number") &&
-      (scoreResponse.areaScore === undefined || typeof scoreResponse.areaScore === "number")
+      (scoreResponse.bestScore === null || Number.isFinite(scoreResponse.bestScore)) &&
+      (scoreResponse.areaScore === undefined || Number.isFinite(scoreResponse.areaScore))
     );
   }
 
-  return typeof (message as Partial<FrameActionRequestMessage>).requestId === "string";
+  if (message.type === ACTION_REQUEST_TYPE) {
+    const actionRequest = message as Partial<FrameActionRequestMessage>;
+    return typeof actionRequest.requestId === "string" && isMediaAction(actionRequest.action);
+  }
+
+  if (message.type === ACTION_RESPONSE_TYPE) {
+    const actionResponse = message as Partial<FrameActionResponseMessage>;
+    return (
+      typeof actionResponse.requestId === "string" && typeof actionResponse.handled === "boolean"
+    );
+  }
+
+  return false;
+}
+
+/**
+ * Requests flow down the frame tree, so only this frame's parent may send
+ * them. Without this, any embedded frame, such as an ad, could make this frame
+ * act on its media or change saved settings (the overlay toggle).
+ */
+export function isFromParentFrame(source: MessageEventSource | null): boolean {
+  return !isTopWindow() && source === window.parent;
+}
+
+/** Responses and reports flow up, so they must come from one of this frame's iframes. */
+export function isFromChildFrame(source: MessageEventSource | null): source is Window {
+  return (
+    source !== null && source !== window && findIframeForWindow(source as Window) !== undefined
+  );
 }
 
 function createRequestId(): string {
