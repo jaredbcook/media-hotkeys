@@ -368,6 +368,22 @@ describe("media action handling", () => {
     expect(video.playbackRate).toBe(0.25);
   });
 
+  it("lands on exact speeds with fine speed steps", () => {
+    const settings = structuredClone(DEFAULT_SETTINGS);
+    settings.advancedSettings.speedStep = 0.05;
+    setSettingsForTests(settings);
+    const video = makeVideo();
+    video.playbackRate = 1;
+
+    for (let step = 0; step < 10; step += 1) {
+      handleAction("speedUp", video);
+    }
+    expect(video.playbackRate).toBe(1.5);
+
+    handleAction("slowDown", video);
+    expect(video.playbackRate).toBe(1.45);
+  });
+
   it("seeks to a percentage of duration and reports overlay direction", () => {
     const video = makeVideo({ currentTime: 25, duration: 100 } as Partial<HTMLVideoElement>);
 

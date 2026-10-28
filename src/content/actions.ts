@@ -74,6 +74,11 @@ function clearSeekOverlayState(): void {
   seekOverlayState = null;
 }
 
+// Steps such as 0.05 accumulate floating-point error (1.1500000000000001).
+function roundPlaybackRate(playbackRate: number): number {
+  return Math.round(playbackRate * 100) / 100;
+}
+
 export function isGlobalAction(action: MediaAction): action is "toggleOverlays" {
   return action === "toggleOverlays";
 }
@@ -303,7 +308,7 @@ export function handleAction(action: MediaAction, media: HTMLMediaElement): void
         media,
         Math.min(
           advancedSettings.speedMax,
-          readPlayerPlaybackRate(media) + advancedSettings.speedStep,
+          roundPlaybackRate(readPlayerPlaybackRate(media) + advancedSettings.speedStep),
         ),
       );
       break;
@@ -313,7 +318,7 @@ export function handleAction(action: MediaAction, media: HTMLMediaElement): void
         media,
         Math.max(
           advancedSettings.speedMin,
-          readPlayerPlaybackRate(media) - advancedSettings.speedStep,
+          roundPlaybackRate(readPlayerPlaybackRate(media) - advancedSettings.speedStep),
         ),
       );
       break;

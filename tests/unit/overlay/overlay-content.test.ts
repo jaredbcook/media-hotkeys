@@ -25,6 +25,10 @@ describe("overlay content", () => {
     showActionOverlay("speedUp", video, "center", advancedSettings);
     expect(getOverlayElement()?.innerHTML).toContain("1.5x");
 
+    video.playbackRate = 1.1500000000000001;
+    showActionOverlay("speedUp", video, "center", advancedSettings);
+    expect(getOverlayElement()?.textContent).toBe("1.15x");
+
     showActionOverlay("seekForwardLarge", video, "center-right", advancedSettings);
     expect(getOverlayElement()?.innerHTML).toContain("+30s");
 
