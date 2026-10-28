@@ -84,8 +84,9 @@ Each fact has one home. Update that file in the same change that alters the beha
 4. Commit the version bump, then tag and push it: `git tag vX.Y.Z && git push origin main vX.Y.Z`. The tag must match the `package.json` version, or CI fails.
 5. CI runs the full test suite, packages every browser, and creates a GitHub Release for the tag with the archives attached and notes generated from the commits since the last tag. Edit the notes on the release page if needed.
 6. Upload the archives from the release to each browser store. Stores reject a version they have already seen, so every upload needs a new version.
+7. addons.mozilla.org also requires the source code, because the Firefox build is bundled by Vite. Upload an archive of the tagged commit as the source code: `git archive --format=zip -o media-hotkeys-source-vX.Y.Z.zip vX.Y.Z`. In the reviewer notes, say that it builds with Node.js 24 and `npm ci && npm run build:firefox`, which writes the extension to `dist/firefox`.
 
-The Firefox `.xpi` on the release is unsigned. Firefox only installs it permanently after Mozilla signs it through addons.mozilla.org.
+The Firefox package on the release, `media-hotkeys-firefox-vX.Y.Z-unsigned.xpi`, is unsigned. Firefox only installs it permanently after Mozilla signs it through addons.mozilla.org.
 
 ### Safari
 
