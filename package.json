@@ -24,6 +24,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "lint": "eslint src/ scripts/ tests/ eslint.config.js vite.config.ts vitest.config.ts playwright.config.ts",
+    "lint:firefox": "web-ext lint --source-dir dist/firefox",
     "format": "prettier --write src/ scripts/ tests/ docs/ .github/ eslint.config.js vite.config.ts vitest.config.ts playwright.config.ts *.json *.md",
     "format:check": "prettier --check src/ scripts/ tests/ docs/ .github/ eslint.config.js vite.config.ts vitest.config.ts playwright.config.ts *.json *.md",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm test",
@@ -46,7 +47,8 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.72.1",
     "vite": "^8.3.5",
-    "vitest": "^5.0.5"
+    "vitest": "^5.0.5",
+    "web-ext": "^10.8.0"
   },
   "dependencies": {
     "tldts": "^7.4.19",

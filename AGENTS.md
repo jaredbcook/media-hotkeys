@@ -20,6 +20,7 @@ Read the relevant doc before you change code. Each fact lives in one file, so li
 | `src/content/**`, `src/content.ts`, `src/overlay.ts`, `src/player-bridge.ts`, `manifest.template.json` | `npm run build:chrome && npm run test:e2e`                          |
 | Settings UI (`src/*settings*`, `src/ui.css`)                                                           | `npm run build:chrome && npm run test:e2e` (`tests/e2e/settings/`)  |
 | `scripts/**`, `vite.config.ts`                                                                         | `npm run build`                                                     |
+| `manifest.template.json`, `scripts/build.ts`, `vite.config.ts`, dependencies                           | `npm run build:firefox && npm run lint:firefox`                     |
 | Docs only                                                                                              | `npm run format:check && npm test` (runs the docs consistency test) |
 
 E2E tests load `dist/chrome`, so always rebuild before running them. Run `npm run format` to fix formatting rather than hand-editing whitespace. Never report a check as passing without running it.
