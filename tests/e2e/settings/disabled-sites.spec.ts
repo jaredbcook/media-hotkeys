@@ -73,3 +73,30 @@ test("site policies let page shortcuts win only on matching paths", async ({ pag
   await waitForMediaState(page, "watch-media", (state) => !state.paused);
   await expect.poll(() => readNativeKeyCount(page)).toBe(0);
 });
+
+test("site policies follow in-page navigation", async ({ page, server }) => {
+  const extensionId = await getExtensionId(page);
+  await page.goto(`chrome-extension://${extensionId}/advanced-settings-page.html`);
+  await page.locator("#add-site-policy").click();
+  await page.locator(".site-policy-pattern").fill("127.0.0.1/shorts");
+  await expect(page.locator("#announcements .announcement").last()).toContainText(
+    "Settings saved.",
+  );
+
+  await page.goto(server.getUrl("/watch"));
+  await addNativeKeyCounter(page);
+  await createMedia(page, "spa-media");
+  await page.locator("#spa-media").focus();
+
+  await page.evaluate(() => history.pushState({}, "", "/shorts/clip"));
+  await page.keyboard.press("k");
+
+  await expect.poll(() => readNativeKeyCount(page)).toBe(1);
+  expect((await readMediaState(page, "spa-media")).paused).toBe(true);
+
+  await page.evaluate(() => history.pushState({}, "", "/watch/next"));
+  await page.keyboard.press("k");
+
+  await waitForMediaState(page, "spa-media", (state) => !state.paused);
+  expect(await readNativeKeyCount(page)).toBe(1);
+});

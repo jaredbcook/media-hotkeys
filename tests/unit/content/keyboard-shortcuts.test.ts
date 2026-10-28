@@ -127,6 +127,25 @@ describe("keyboard shortcut routing", () => {
     expect(playSpy).toHaveBeenCalled();
   });
 
+  it("applies path rules after the page navigates in place", async () => {
+    window.history.pushState({}, "", "/watch/clip");
+    const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
+    const settings = structuredClone(DEFAULT_SETTINGS);
+    settings.siteSettings.sitePolicies = [
+      { pattern: "localhost/shorts", policy: "disabled", embedsPolicy: "inherit" },
+    ];
+    setSettingsForTests(settings);
+
+    window.history.pushState({}, "", "/shorts/clip");
+    await dispatchMappedKey("k");
+    expect(playSpy).not.toHaveBeenCalled();
+
+    window.history.pushState({}, "", "/watch/other");
+    await dispatchMappedKey("k");
+    expect(playSpy).toHaveBeenCalled();
+  });
+
   it("handles mapped keys when a specific enabled rule overrides a broad disabled rule", async () => {
     window.history.pushState({}, "", "/shorts/clip");
     const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);

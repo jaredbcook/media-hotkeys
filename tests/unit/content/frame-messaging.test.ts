@@ -304,6 +304,31 @@ describe("frame message handling", () => {
     );
   });
 
+  it("tells child frames when an in-place navigation changes the policy", async () => {
+    window.history.pushState({}, "", "/watch");
+    const iframe = document.createElement("iframe");
+    document.body.appendChild(iframe);
+    const frameWindow = iframe.contentWindow!;
+    const postMessageSpy = vi.spyOn(frameWindow, "postMessage").mockImplementation(() => undefined);
+
+    const settings = structuredClone(DEFAULT_SETTINGS);
+    settings.siteSettings.sitePolicies = [
+      { pattern: "localhost/shorts", policy: "disabled", embedsPolicy: "inherit" },
+    ];
+    setSettingsForTests(settings);
+    postMessageSpy.mockClear();
+
+    // A single-page app navigates and swaps its content.
+    window.history.pushState({}, "", "/shorts/clip");
+    document.body.appendChild(document.createElement("main"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(postMessageSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "MEDIA_HOTKEYS_SITE_POLICY", disabled: true }),
+      "*",
+    );
+  });
+
   it("lets child frames ignore disabled top-level policy when the matching rule says to ignore embeds", () => {
     window.history.pushState({}, "", "/watch");
     const iframe = document.createElement("iframe");
