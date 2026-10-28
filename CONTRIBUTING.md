@@ -28,8 +28,9 @@ Load `dist/<browser>` in your browser as described in [README.md](README.md#inst
 | `npm run format` / `npm run format:check`    | Prettier, including Markdown docs                                    |
 | `npm run package`                            | Build and zip all browsers into `dist/packages/`                     |
 | `npm run safari:convert`                     | macOS only: print the Xcode Safari conversion command                |
+| `npm run labels:sync`                        | Create or update the GitHub issue labels (needs `gh`)                |
 
-The pre-commit hook runs `npm run check`. CI (`.github/workflows/ci.yml`) runs the same checks, builds every browser, lints the Firefox build with `web-ext lint`, and runs the E2E suite on Chromium.
+The pre-commit hook refuses commits on `main` and runs `npm run check`. CI (`.github/workflows/ci.yml`) runs the same checks, builds every browser, lints the Firefox build with `web-ext lint`, and runs the E2E suite on Chromium.
 
 ## Testing
 
@@ -50,12 +51,25 @@ The pre-commit hook runs `npm run check`. CI (`.github/workflows/ci.yml`) runs t
 - The build isn't minified, so `dist/<browser>/content.js` is readable in DevTools.
 - To debug cross-frame behavior, pick the iframe's context in the DevTools console dropdown. Each frame runs its own content script.
 
-## Commits and pull requests
+## Issues and pull requests
 
-- Use [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`, `ci:`. Write the subject in the imperative, lower case, without a trailing period.
+GitHub issues are the task list, for people and AI agents alike. Every change reaches `main` through a pull request; the pre-commit hook refuses commits on `main`.
+
+1. **Find work.** Pick an open issue labeled `ready` that isn't `in progress`. Issues labeled `needs triage` or `blocked`, or without `ready`, wait for the maintainer.
+2. **Claim it.** Add the `in progress` label. That label alone means the issue is taken. If an issue has been `in progress` for a day with no linked pull request, anyone may remove the label and claim it.
+3. **Branch.** Start from an up-to-date `main`, on a branch or a worktree named `<type>/<issue>-<slug>`, for example `fix/42-altgr-brackets`.
+4. **Open a draft pull request early** with `Closes #<issue>` in the description, so the issue shows its work is underway. Keep it to that one issue.
+5. **Finish.** Run the checks for what you changed, fill in `.github/pull_request_template.md`, and mark the pull request ready for review. Merging (squash) closes the issue.
+
+**File what you find.** A bug, risk, or recommended change outside the issue you're working on becomes a new issue rather than a fix slipped into your pull request. Search open issues first, then file it from a template in `.github/ISSUE_TEMPLATE/` (bug report or change). New issues start as `needs triage` until the maintainer marks them `ready`. Report security problems privately as described in [SECURITY.md](SECURITY.md).
+
+Labels and their meanings are defined in `scripts/sync-labels.ts`; `npm run labels:sync` creates or updates them on GitHub.
+
+### Commits
+
+- Use [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`, `ci:`, `build:`. Write the subject in the imperative, lower case, without a trailing period.
 - Keep each commit focused, and include its tests and doc updates in the same commit.
 - Don't commit `dist/`, `coverage/`, or test output.
-- PRs use the checklist in `.github/pull_request_template.md`.
 
 ## Keeping docs current
 
@@ -78,10 +92,10 @@ Each fact has one home. Update that file in the same change that alters the beha
 
 ## Releasing
 
-1. Bump `version` in `package.json`. Built manifests take their version from it.
+1. On a branch, bump `version` in `package.json`. Built manifests take their version from it.
 2. Run `npm run check`, then `npm run build:chrome && npm run test:e2e`.
 3. Run `npm run package` and smoke-test each archive in `dist/packages/`.
-4. Commit the version bump, then tag and push it: `git tag vX.Y.Z && git push origin main vX.Y.Z`. The tag must match the `package.json` version, or CI fails.
+4. Merge the version bump through a pull request, then tag the merged commit on `main` and push the tag: `git switch main && git pull && git tag vX.Y.Z && git push origin vX.Y.Z`. The tag must match the `package.json` version, or CI fails.
 5. CI runs the full test suite, packages every browser, and creates a GitHub Release for the tag with the archives attached and notes generated from the commits since the last tag. Edit the notes on the release page if needed.
 6. Upload the archives from the release to each browser store. Stores reject a version they have already seen, so every upload needs a new version.
 7. addons.mozilla.org also requires the source code, because the Firefox build is bundled by Vite. Upload an archive of the tagged commit as the source code: `git archive --format=zip -o media-hotkeys-source-vX.Y.Z.zip vX.Y.Z`. In the reviewer notes, say that it builds with Node.js 24 and `npm ci && npm run build:firefox`, which writes the extension to `dist/firefox`.
