@@ -1,5 +1,5 @@
-import { getVisibleViewportArea, isElementVisible } from "./dom-utils.js";
-import { findMedia, isAmbientMediaElement } from "./media-discovery.js";
+import { getVisibleBox, getVisibleViewportArea } from "./dom-utils.js";
+import { findMedia, isAmbientMediaElement, isDecorativeLoop } from "./media-discovery.js";
 import { isPointerOverRect } from "./media-tracking.js";
 import { actionedMedia, state } from "./state.js";
 import { isTheaterMedia } from "./theater.js";
@@ -27,6 +27,8 @@ const SCORE_HAS_CONTROLS = 30;
 const SCORE_AUDIO_BASE = 20;
 const SCORE_NON_AMBIENT_BASE = 10;
 const SCORE_AMBIENT_PENALTY = -250;
+// Also applied by a parent frame to a child frame whose iframe is hidden.
+export const SCORE_HIDDEN_PENALTY = -250;
 // At or above this local score (focus, fullscreen, PiP, or theater), skip cross-frame
 // arbitration entirely — the user's intent is unambiguous.
 export const STRONG_LOCAL_TARGET_SCORE = 800;
@@ -46,6 +48,9 @@ function scoreMediaCandidate(media: HTMLMediaElement): { score: number; areaScor
   let score = 0;
   let areaScore = 0;
   let isPointerOver = false;
+  // Decorative loops only become targets through explicit intent: focus, a
+  // press in their box, fullscreen, PiP, theater, or an extension action.
+  const isDecorative = isDecorativeLoop(media) && !actionedMedia.has(media);
 
   const fullscreenElement = document.fullscreenElement;
   if (fullscreenElement && (fullscreenElement === media || fullscreenElement.contains(media))) {
@@ -64,7 +69,7 @@ function scoreMediaCandidate(media: HTMLMediaElement): { score: number; areaScor
     score += SCORE_FOCUSED;
   }
 
-  if (isMediaPlaying(media)) {
+  if (isMediaPlaying(media) && !isDecorative) {
     score += isMediaAudible(media) ? SCORE_PLAYING_AUDIBLE : SCORE_PLAYING_MUTED;
   }
 
@@ -77,16 +82,21 @@ function scoreMediaCandidate(media: HTMLMediaElement): { score: number; areaScor
   }
 
   if (media instanceof HTMLVideoElement) {
-    const rect = media.getBoundingClientRect();
-    if (isElementVisible(media, rect)) {
+    const box = getVisibleBox(media);
+    if (box) {
       const viewportArea = window.innerWidth * window.innerHeight;
-      if (viewportArea > 0) {
-        const visibleFraction = Math.min(1, getVisibleViewportArea(rect) / viewportArea);
+      if (viewportArea > 0 && !isDecorative) {
+        const visibleFraction = Math.min(1, getVisibleViewportArea(box) / viewportArea);
         areaScore = Math.round(SCORE_MAX_VISIBLE_AREA * visibleFraction);
         score += areaScore;
       }
 
-      isPointerOver = isPointerOverRect(rect);
+      isPointerOver = isPointerOverRect(box);
+    } else if (!actionedMedia.has(media)) {
+      // A video the page hides, such as a preview in a collapsed mega menu or
+      // a closed dialog, isn't what the user is watching. Only strong signals
+      // such as audible playback or focus can still make it the target.
+      score += SCORE_HIDDEN_PENALTY;
     }
   } else {
     // Audio has no visual footprint, so give it a modest stand-in for area.
@@ -99,7 +109,8 @@ function scoreMediaCandidate(media: HTMLMediaElement): { score: number; areaScor
 
   // Ambient-looking media (muted video without controls) is penalized rather
   // than excluded: strong signals such as playback, interaction history, or a
-  // large visible area can still lift it above the targetability threshold.
+  // large visible area can still lift a non-looping one above the
+  // targetability threshold.
   // Media the extension already acted on keeps its standing.
   if (isAmbientMediaElement(media) && !actionedMedia.has(media)) {
     score += SCORE_AMBIENT_PENALTY;

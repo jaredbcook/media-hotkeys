@@ -4,8 +4,13 @@ import {
   OVERLAY_ID,
   OVERLAY_STYLE_ATTR,
 } from "./constants.js";
-import { debugLog, isElementVisible } from "./dom-utils.js";
-import { collectMediaAndShadowRoots, findMedia, hasValidMediaSource } from "./media-discovery.js";
+import { type Box, debugLog, getVisibleBox, isEmptyBox } from "./dom-utils.js";
+import {
+  collectMediaAndShadowRoots,
+  findMedia,
+  hasValidMediaSource,
+  isAmbientMediaElement,
+} from "./media-discovery.js";
 import { broadcastTopLevelSitePolicy } from "./frame-messaging.js";
 import { scheduleMediaPresenceReport } from "./media-presence.js";
 import { state } from "./state.js";
@@ -32,13 +37,31 @@ function attachMediaTracking(media: HTMLMediaElement): void {
   trackedMedia.add(media);
   // Pointer interactions are tracked at the document level (see
   // handleDocumentPointerDown) so clicks on custom player chrome count too.
-  media.addEventListener("play", () => trackInteraction(media, "play"));
+  media.addEventListener("play", () => {
+    // Muted playback without controls is the page's autoplay, which must
+    // start muted, and sites often set `loop` only after it starts. Neither
+    // that nor playback of a video the page hides (a collapsed menu's
+    // previews) is the user's choice, and crediting it would take the credit
+    // from the player they chose. A press on a custom play button still
+    // counts through handleDocumentPointerDown.
+    if (
+      isAmbientMediaElement(media) ||
+      (media instanceof HTMLVideoElement && !getVisibleBox(media))
+    ) {
+      return;
+    }
+    trackInteraction(media, "play");
+  });
   media.addEventListener("focus", () => trackInteraction(media, "focus"));
 }
 
-function rectContainsPoint(rect: DOMRect, point: { x: number; y: number }): boolean {
+function rectContainsPoint(rect: Box, point: { x: number; y: number }): boolean {
   return (
-    point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom
+    !isEmptyBox(rect) &&
+    point.x >= rect.left &&
+    point.x <= rect.right &&
+    point.y >= rect.top &&
+    point.y <= rect.bottom
   );
 }
 
@@ -50,12 +73,12 @@ function findMediaAtPoint(point: { x: number; y: number }): HTMLMediaElement | n
   let best: { media: HTMLMediaElement; area: number } | null = null;
 
   for (const media of findMedia(document)) {
-    const rect = media.getBoundingClientRect();
-    if (!rectContainsPoint(rect, point) || !isElementVisible(media, rect)) {
+    const box = getVisibleBox(media);
+    if (!box || !rectContainsPoint(box, point)) {
       continue;
     }
 
-    const area = rect.width * rect.height;
+    const area = (box.right - box.left) * (box.bottom - box.top);
     if (!best || area < best.area) {
       best = { media, area };
     }
@@ -65,7 +88,7 @@ function findMediaAtPoint(point: { x: number; y: number }): HTMLMediaElement | n
 }
 
 /** Whether the pointer currently rests over the given box. */
-export function isPointerOverRect(rect: DOMRect): boolean {
+export function isPointerOverRect(rect: Box): boolean {
   return pointerPosition !== null && rectContainsPoint(rect, pointerPosition);
 }
 

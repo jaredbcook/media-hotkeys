@@ -22,7 +22,8 @@ function pressKey(key: string): { event: KeyboardEvent; reachedPage: boolean } {
   return { event, reachedPage };
 }
 
-function addChildFrame(frameRect = rect(0, 0, 0, 0)): {
+// Visible, but too small to hold a click-to-play placeholder.
+function addChildFrame(frameRect = rect(0, 0, 80, 40)): {
   childWindow: Window;
   posted: { type: string }[];
 } {
@@ -127,6 +128,17 @@ describe("keys on pages whose media may be in child frames", () => {
     expect(event.defaultPrevented).toBe(true);
     expect(reachedPage).toBe(false);
     expect(child.posted.map((message) => message.type)).toContain("MEDIA_SHORTCUTS_SCORE_REQUEST");
+  });
+
+  it("leaves keys to the page when the frame reporting media is hidden", () => {
+    // A lightbox player preloaded in a 0x0 iframe.
+    const child = addChildFrame(rect(512, 384, 0, 0));
+    reportFromChild(child.childWindow, true);
+
+    const { event, reachedPage } = pressKey("ArrowRight");
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(reachedPage).toBe(true);
   });
 
   it("leaves keys to the page again after the child frame reports its media is gone", () => {

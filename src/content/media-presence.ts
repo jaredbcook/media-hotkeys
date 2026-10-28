@@ -9,6 +9,7 @@ import {
   type FrameMediaPresenceMessage,
   type FrameMediaPresenceRequestMessage,
   findIframeForWindow,
+  isIframeHidden,
   isTopWindow,
 } from "./frame-messaging.js";
 import { findIframes, findMedia, isTargetableMediaElement } from "./media-discovery.js";
@@ -32,9 +33,15 @@ function frameHasOwnMedia(): boolean {
 }
 
 function childFramesHaveMedia(): boolean {
+  // A hidden iframe's media (a lightbox player preloaded at 0x0) doesn't take
+  // keys from the page.
   return findIframes(document).some((iframe) => {
     const frameWindow = iframe.contentWindow;
-    return frameWindow !== null && childFrameHasMedia.get(frameWindow) === true;
+    return (
+      frameWindow !== null &&
+      childFrameHasMedia.get(frameWindow) === true &&
+      !isIframeHidden(iframe)
+    );
   });
 }
 

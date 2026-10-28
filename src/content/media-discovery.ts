@@ -12,6 +12,15 @@ export function isAmbientMediaElement(media: HTMLMediaElement): boolean {
   );
 }
 
+/**
+ * A muted, looping video without controls: a hero background, a hover
+ * preview, or a menu teaser. Unlike other ambient media, its size and muted
+ * playback say nothing about wanting to control it.
+ */
+export function isDecorativeLoop(media: HTMLMediaElement): boolean {
+  return isAmbientMediaElement(media) && media.loop;
+}
+
 export function hasValidMediaSource(media: HTMLMediaElement): boolean {
   if (typeof media.currentSrc === "string" && media.currentSrc.trim().length > 0) {
     return true;

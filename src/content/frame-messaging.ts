@@ -16,9 +16,9 @@ import {
   SITE_POLICY_TYPE,
   THEATER_TYPE,
 } from "./constants.js";
-import { getVisibleViewportArea, isElementVisible } from "./dom-utils.js";
+import { getVisibleBox, getVisibleViewportArea, isEmptyBox } from "./dom-utils.js";
 import { findIframeWindows, findIframes } from "./media-discovery.js";
-import { getBestLocalCandidate } from "./media-scoring.js";
+import { SCORE_HIDDEN_PENALTY, getBestLocalCandidate } from "./media-scoring.js";
 import { state } from "./state.js";
 import type { FrameTheaterMessage } from "./theater.js";
 
@@ -270,24 +270,31 @@ export function findIframeForWindow(frameWindow: Window): HTMLIFrameElement | un
 }
 
 /**
+ * Whether the page hides this iframe, e.g. a lightbox player preloaded at 0x0
+ * or inside a collapsed panel. Everything in its subtree is hidden too.
+ */
+export function isIframeHidden(iframe: HTMLIFrameElement): boolean {
+  return !getVisibleBox(iframe) || isEmptyBox(iframe.getBoundingClientRect());
+}
+
+/**
  * Fraction of this frame's viewport covered by the visible part of the iframe
  * hosting `frameWindow`. A child frame measures media area against its own
  * viewport, so a video filling a small (or scrolled-away) iframe would
  * otherwise claim the full visible-area score.
  */
-function getFrameViewportShare(frameWindow: Window): number {
-  const iframe = findIframeForWindow(frameWindow);
+function getFrameViewportShare(iframe: HTMLIFrameElement | undefined): number {
   if (!iframe) {
     return 1;
   }
 
-  const rect = iframe.getBoundingClientRect();
+  const box = getVisibleBox(iframe);
   const viewportArea = window.innerWidth * window.innerHeight;
-  if (viewportArea <= 0 || !isElementVisible(iframe, rect)) {
+  if (viewportArea <= 0 || !box) {
     return 0;
   }
 
-  return Math.min(1, getVisibleViewportArea(rect) / viewportArea);
+  return Math.min(1, getVisibleViewportArea(box) / viewportArea);
 }
 
 /**
@@ -324,9 +331,12 @@ export function collectChildFrameScores(budgetMs: number): Promise<ChildFrameBes
     pendingScoreRequests.set(requestId, (bestScore, areaScore, frameWindow) => {
       responseCount += 1;
       if (typeof bestScore === "number") {
-        const scaledAreaScore = Math.round(areaScore * getFrameViewportShare(frameWindow));
-        const score = bestScore - areaScore + scaledAreaScore;
-        if (!best || score > best.score) {
+        const iframe = findIframeForWindow(frameWindow);
+        const scaledAreaScore = Math.round(areaScore * getFrameViewportShare(iframe));
+        const hiddenPenalty = iframe && isIframeHidden(iframe) ? SCORE_HIDDEN_PENALTY : 0;
+        const score = bestScore - areaScore + scaledAreaScore + hiddenPenalty;
+        // Rescaling can leave a child below the targetability threshold.
+        if (score > 0 && (!best || score > best.score)) {
           best = { frameWindow, requestId, score, areaScore: scaledAreaScore };
         }
       }

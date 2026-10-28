@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "../setup.js";
-import { createMedia } from "../fixtures.js";
+import { createMedia, markPlaying, readMediaState } from "../fixtures.js";
 
 async function makePageScrollable(page: Page): Promise<void> {
   await page.evaluate(() => {
@@ -61,4 +61,32 @@ test("takes mapped keys from the page once media exists", async ({ page, server 
 
   expect(await readPageKeys(page)).toEqual([]);
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
+});
+
+test("leaves keys to the page next to a decorative hero loop until it is clicked", async ({
+  page,
+  server,
+}) => {
+  await page.goto(server.getUrl("/"));
+  await makePageScrollable(page);
+  await createMedia(page, "hero", { muted: true, loop: true, controls: false }, "video");
+  await page.evaluate(() => {
+    const hero = document.getElementById("hero");
+    if (hero) {
+      Object.assign(hero.style, { width: "90vw", height: "70vh" });
+    }
+  });
+  await markPlaying(page, "hero");
+  await expect.poll(async () => (await readMediaState(page, "hero")).paused).toBe(false);
+  await recordPageKeys(page);
+
+  await page.keyboard.press("ArrowDown");
+
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  expect(await readPageKeys(page)).toEqual(["ArrowDown"]);
+
+  await page.locator("#hero").click();
+  await page.keyboard.press("ArrowDown");
+
+  expect(await readPageKeys(page)).toEqual(["ArrowDown"]);
 });

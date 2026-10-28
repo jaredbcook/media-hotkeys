@@ -261,3 +261,52 @@ test("targets the video whose custom player controls the user clicked", async ({
   await waitForMediaState(page, "second", (state) => Math.abs(state.volume - 0.45) < 0.0001);
   await expect.poll(async () => (await readMediaState(page, "first")).volume).toBeCloseTo(0.5, 5);
 });
+
+test("ignores videos clipped away inside a collapsed menu", async ({ page }) => {
+  await createMedia(page, "player", { volume: 0.5 }, "video");
+
+  // A collapsed mega menu: a fixed, zero-height panel whose preview video
+  // overlaps the player's box but is clipped out of view.
+  await page.evaluate(() => {
+    const menu = document.createElement("nav");
+    Object.assign(menu.style, {
+      position: "fixed",
+      left: "0",
+      top: "0",
+      width: "100%",
+      height: "0",
+      overflow: "hidden",
+    });
+    document.body.appendChild(menu);
+    const preview = document.createElement("video");
+    preview.id = "menu-preview";
+    preview.src = "/silence.wav";
+    preview.volume = 0.5;
+    Object.assign(preview.style, { marginLeft: "40px", marginTop: "40px", width: "200px" });
+    menu.appendChild(preview);
+
+    const player = document.getElementById("player");
+    const box = player?.getBoundingClientRect();
+    if (!box) {
+      throw new Error("Missing player video");
+    }
+    const controls = document.createElement("div");
+    controls.id = "player-controls";
+    Object.assign(controls.style, {
+      position: "absolute",
+      left: `${box.left + window.scrollX}px`,
+      top: `${box.top + window.scrollY}px`,
+      width: `${box.width}px`,
+      height: `${box.height}px`,
+    });
+    document.body.appendChild(controls);
+  });
+
+  await page.locator("#player-controls").click({ position: { x: 60, y: 60 } });
+  await page.keyboard.press("ArrowDown");
+
+  await waitForMediaState(page, "player", (state) => Math.abs(state.volume - 0.45) < 0.0001);
+  await expect
+    .poll(async () => (await readMediaState(page, "menu-preview")).volume)
+    .toBeCloseTo(0.5, 5);
+});

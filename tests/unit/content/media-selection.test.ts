@@ -398,3 +398,203 @@ describe("pointer intent signals", () => {
     expect(getTargetMedia()).toBe(buffering);
   });
 });
+
+describe("hidden media", () => {
+  function makeContainer(style: Record<string, string>, parent: Element = document.body) {
+    const container = document.createElement("div");
+    for (const [property, value] of Object.entries(style)) {
+      container.style.setProperty(property, value);
+    }
+    parent.appendChild(container);
+    return container;
+  }
+
+  // A collapsed mega menu: a fixed, zero-height panel that clips its previews.
+  function makeCollapsedMenuVideo(overrides: Partial<HTMLVideoElement> = {}): HTMLVideoElement {
+    const menu = makeContainer({
+      position: "fixed",
+      "overflow-x": "hidden",
+      "overflow-y": "hidden",
+    });
+    mockRect(menu, rect(0, 0, 1024, 0));
+    const video = makeVideo(overrides);
+    menu.appendChild(video);
+    mockRect(video, rect(500, 400, 268, 201));
+    return video;
+  }
+
+  it("does not credit a press on the page to a video clipped away inside a collapsed menu", async () => {
+    const player = makeVideo();
+    mockRect(player, rect(0, 80, 960, 480));
+    const menuVideo = makeCollapsedMenuVideo();
+    await Promise.resolve();
+
+    document.body.dispatchEvent(
+      new MouseEvent("pointerdown", { bubbles: true, clientX: 600, clientY: 450 }),
+    );
+
+    expect(getTargetMedia()).toBe(player);
+    expect(getTargetMedia()).not.toBe(menuVideo);
+  });
+
+  it("does not let a hidden video take the interaction credit by autoplaying", async () => {
+    const player = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    mockRect(player, rect(0, 80, 400, 225));
+    const other = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    mockRect(other, rect(0, 400, 400, 225));
+    const menuVideo = makeCollapsedMenuVideo({
+      muted: true,
+      paused: false,
+      ended: false,
+      readyState: 4,
+    } as Partial<HTMLVideoElement>);
+    await Promise.resolve();
+
+    other.dispatchEvent(new Event("play"));
+    menuVideo.dispatchEvent(new Event("play"));
+
+    expect(getTargetMedia()).toBe(other);
+  });
+
+  it("does not target a video hidden by a transparent ancestor", () => {
+    const panel = makeContainer({ opacity: "0" });
+    const hidden = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    panel.appendChild(hidden);
+    mockRect(hidden, rect(0, 0, 640, 360));
+
+    expect(getTargetMedia()).toBeNull();
+
+    const player = makeVideo();
+    mockRect(player, rect(0, 400, 320, 180));
+    expect(getTargetMedia()).toBe(player);
+  });
+
+  it("does not target a video inside a display: none ancestor", () => {
+    const dialog = makeContainer({ display: "none" });
+    const video = makeVideo({ controls: true } as Partial<HTMLVideoElement>);
+    dialog.appendChild(video);
+
+    expect(getTargetMedia()).toBeNull();
+  });
+
+  it("still targets a hidden video that is playing audibly", () => {
+    const panel = makeContainer({ opacity: "0" });
+    const audible = makeVideo({
+      paused: false,
+      ended: false,
+      readyState: 4,
+      muted: false,
+      volume: 1,
+    } as Partial<HTMLVideoElement>);
+    panel.appendChild(audible);
+    const player = makeVideo();
+    mockRect(player, rect(0, 0, 1024, 768));
+
+    expect(getTargetMedia()).toBe(audible);
+  });
+
+  it("keeps targeting a hidden video the extension already controls", () => {
+    // Canvas-based players hide the <video> they draw from.
+    const video = makeVideo();
+    video.style.opacity = "0";
+    expect(getTargetMedia()).toBeNull();
+
+    handleAction("volumeDown", video);
+    expect(getTargetMedia()).toBe(video);
+  });
+
+  it("lets a fixed-position video escape a clipping ancestor", () => {
+    const clipper = makeContainer({ "overflow-x": "hidden", "overflow-y": "hidden" });
+    mockRect(clipper, rect(0, 0, 1024, 0));
+    const floating = makeContainer({ position: "fixed" }, clipper);
+    const video = makeVideo();
+    floating.appendChild(video);
+    mockRect(video, rect(0, 0, 640, 360));
+
+    expect(getTargetMedia()).toBe(video);
+  });
+
+  it("does not treat a video scrolled out of a scroll container as hidden", () => {
+    const scroller = makeContainer({ "overflow-x": "auto", "overflow-y": "auto" });
+    mockRect(scroller, rect(0, 0, 1024, 768));
+    const video = makeVideo();
+    scroller.appendChild(video);
+    mockRect(video, rect(0, 1200, 640, 360));
+
+    expect(getTargetMedia()).toBe(video);
+  });
+});
+
+describe("decorative loops", () => {
+  const playingMutedLoop = {
+    muted: true,
+    controls: false,
+    loop: true,
+    paused: false,
+    ended: false,
+    readyState: 4,
+  } as Partial<HTMLVideoElement>;
+
+  it("does not target an autoplaying hero loop that fills the viewport", async () => {
+    const hero = makeVideo(playingMutedLoop);
+    mockRect(hero, rect(0, 0, 1024, 768));
+    await Promise.resolve();
+
+    hero.dispatchEvent(new Event("play"));
+
+    expect(getTargetMedia()).toBeNull();
+  });
+
+  it("does not target a hero that starts playing before the page sets loop", async () => {
+    const hero = makeVideo({ ...playingMutedLoop, loop: false });
+    mockRect(hero, rect(0, 0, 1024, 768));
+    await Promise.resolve();
+
+    hero.dispatchEvent(new Event("play"));
+    hero.loop = true;
+
+    expect(getTargetMedia()).toBeNull();
+  });
+
+  it("still targets a muted video that fills the viewport when it doesn't loop", () => {
+    const feedVideo = makeVideo({ ...playingMutedLoop, loop: false });
+    mockRect(feedVideo, rect(0, 0, 1024, 768));
+
+    expect(getTargetMedia()).toBe(feedVideo);
+  });
+
+  it("targets a decorative loop once the user presses inside its box", async () => {
+    const hero = makeVideo(playingMutedLoop);
+    mockRect(hero, rect(0, 0, 1024, 768));
+    await Promise.resolve();
+
+    document.body.dispatchEvent(
+      new MouseEvent("pointerdown", { bubbles: true, clientX: 500, clientY: 400 }),
+    );
+
+    expect(getTargetMedia()).toBe(hero);
+  });
+
+  it("keeps targeting a decorative loop the extension already controls", () => {
+    const hero = makeVideo(playingMutedLoop);
+    mockRect(hero, rect(0, 0, 1024, 768));
+    expect(getTargetMedia()).toBeNull();
+
+    handleAction("volumeDown", hero);
+
+    expect(getTargetMedia()).toBe(hero);
+  });
+
+  it("does not let a starting decorative loop take the credit from the chosen player", async () => {
+    makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    const chosen = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    const hero = makeVideo(playingMutedLoop);
+    mockRect(hero, rect(0, 0, 1024, 400));
+    await Promise.resolve();
+
+    chosen.dispatchEvent(new Event("play"));
+    hero.dispatchEvent(new Event("play"));
+
+    expect(getTargetMedia()).toBe(chosen);
+  });
+});

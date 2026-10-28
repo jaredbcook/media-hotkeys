@@ -477,7 +477,11 @@ describe("cross-frame area scaling", () => {
    * made almost entirely of visible area in its own viewport, and records
    * whether the parent routes the action to it.
    */
-  function makeScoringChildFrame(frameRect: DOMRect): { executeRequests: unknown[] } {
+  function makeScoringChildFrame(
+    frameRect: DOMRect,
+    // A paused video filling the iframe: base 10 + full area 200.
+    { bestScore = 210, areaScore = 200 } = {},
+  ): { childWindow: Window; executeRequests: unknown[] } {
     const iframe = document.createElement("iframe");
     document.body.appendChild(iframe);
     mockRect(iframe, frameRect);
@@ -494,9 +498,8 @@ describe("cross-frame area scaling", () => {
               source: "media-shortcuts-extension",
               type: "MEDIA_SHORTCUTS_SCORE_RESPONSE",
               requestId: request.requestId,
-              // A paused video filling the iframe: base 10 + full area 200.
-              bestScore: 210,
-              areaScore: 200,
+              bestScore,
+              areaScore,
             },
           }),
         );
@@ -505,7 +508,7 @@ describe("cross-frame area scaling", () => {
       }
     });
 
-    return { executeRequests };
+    return { childWindow, executeRequests };
   }
 
   async function flushArbitration(): Promise<void> {
@@ -541,5 +544,45 @@ describe("cross-frame area scaling", () => {
 
     expect(child.executeRequests).toHaveLength(1);
     expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not route to a child frame whose iframe is hidden", async () => {
+    const localVideo = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    mockRect(localVideo, rect(0, 0, 512, 384));
+    const playSpy = vi.spyOn(localVideo, "play").mockResolvedValue(undefined);
+    // A lightbox player preloaded in a 0x0 iframe, with no area to rescale.
+    const child = makeScoringChildFrame(rect(512, 384, 0, 0), { bestScore: 240, areaScore: 0 });
+
+    await dispatchMappedKey("k");
+    await flushArbitration();
+
+    expect(playSpy).toHaveBeenCalledOnce();
+    expect(child.executeRequests).toHaveLength(0);
+  });
+
+  it("drops a child frame whose rescaled score is no longer above zero", async () => {
+    // A muted video filling a tiny iframe scores 150 + 200 - 250 in its own
+    // frame, but its area is worth almost nothing in this viewport.
+    const child = makeScoringChildFrame(rect(0, 0, 100, 50), { bestScore: 100, areaScore: 200 });
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        source: child.childWindow,
+        data: {
+          source: "media-shortcuts-extension",
+          type: "MEDIA_HOTKEYS_MEDIA_PRESENCE",
+          hasMedia: true,
+        },
+      }),
+    );
+
+    await dispatchMappedKey("ArrowDown");
+    await flushArbitration();
+
+    // Only the last-resort placeholder broadcast may reach it.
+    expect(
+      child.executeRequests.filter(
+        (request) => !(request as { allowPlaceholder?: boolean }).allowPlaceholder,
+      ),
+    ).toHaveLength(0);
   });
 });

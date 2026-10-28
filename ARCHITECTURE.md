@@ -36,25 +36,25 @@ Every file under `src/` is listed here; `tests/unit/docs/docs-consistency.test.t
 
 ### Content script (`src/content/`)
 
-| File                             | Responsibility                                                                                          |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `src/content.ts`                 | Entry point. Registers document listeners and re-exports a small API used by tests.                     |
-| `src/content/state.ts`           | The only shared mutable state: settings, key map, last-interacted and last-actioned media.              |
-| `src/content/constants.ts`       | `postMessage` types, cross-frame timeouts and budgets, extension-owned DOM attribute names.             |
-| `src/content/keyboard.ts`        | `keydown` handling: theater `Esc`, enabled/site-policy/editable/modifier guards, key-to-action lookup.  |
-| `src/content/dispatch.ts`        | Chooses which frame executes an action; handles all incoming frame messages.                            |
-| `src/content/frame-messaging.ts` | The cross-frame protocol: score requests, execute routing, site-policy propagation, theater grants.     |
-| `src/content/media-discovery.ts` | Finds media and iframes, including inside open shadow roots; ambient-media heuristic.                   |
-| `src/content/media-scoring.ts`   | Weighted scoring of local candidates (weights are the `SCORE_*` constants).                             |
-| `src/content/media-presence.ts`  | Tracks which child frames report media; decides synchronously whether a key may be taken from the page. |
-| `src/content/media-tracking.ts`  | `MutationObserver` on the document and every shadow root; interaction and pointer tracking.             |
-| `src/content/actions.ts`         | Executes an action on the chosen media and builds overlay display options (including skip streaks).     |
-| `src/content/player-control.ts`  | Reads and writes media state, preferring custom-player host APIs, falling back to `HTMLMediaElement`.   |
-| `src/content/placeholder.ts`     | Detects and clicks thumbnail "facades" when there is no real media yet.                                 |
-| `src/content/fullscreen.ts`      | Wraps media in a managed container for fullscreen so the overlay can render on top.                     |
-| `src/content/theater.ts`         | Theater mode: top-layer popover promotion of the video and of hosting iframes.                          |
-| `src/content/settings-sync.ts`   | Loads settings and reloads on `storage.onChanged`.                                                      |
-| `src/content/dom-utils.ts`       | Visibility, viewport area, deep active element, editable detection, `debugLog`.                         |
+| File                             | Responsibility                                                                                                |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `src/content.ts`                 | Entry point. Registers document listeners and re-exports a small API used by tests.                           |
+| `src/content/state.ts`           | The only shared mutable state: settings, key map, last-interacted and last-actioned media.                    |
+| `src/content/constants.ts`       | `postMessage` types, cross-frame timeouts and budgets, extension-owned DOM attribute names.                   |
+| `src/content/keyboard.ts`        | `keydown` handling: theater `Esc`, enabled/site-policy/editable/modifier guards, key-to-action lookup.        |
+| `src/content/dispatch.ts`        | Chooses which frame executes an action; handles all incoming frame messages.                                  |
+| `src/content/frame-messaging.ts` | The cross-frame protocol: score requests, execute routing, site-policy propagation, theater grants.           |
+| `src/content/media-discovery.ts` | Finds media and iframes, including inside open shadow roots; ambient-media heuristic.                         |
+| `src/content/media-scoring.ts`   | Weighted scoring of local candidates (weights are the `SCORE_*` constants).                                   |
+| `src/content/media-presence.ts`  | Tracks which child frames report media; decides synchronously whether a key may be taken from the page.       |
+| `src/content/media-tracking.ts`  | `MutationObserver` on the document and every shadow root; interaction and pointer tracking.                   |
+| `src/content/actions.ts`         | Executes an action on the chosen media and builds overlay display options (including skip streaks).           |
+| `src/content/player-control.ts`  | Reads and writes media state, preferring custom-player host APIs, falling back to `HTMLMediaElement`.         |
+| `src/content/placeholder.ts`     | Detects and clicks thumbnail "facades" when there is no real media yet.                                       |
+| `src/content/fullscreen.ts`      | Wraps media in a managed container for fullscreen so the overlay can render on top.                           |
+| `src/content/theater.ts`         | Theater mode: top-layer popover promotion of the video and of hosting iframes.                                |
+| `src/content/settings-sync.ts`   | Loads settings and reloads on `storage.onChanged`.                                                            |
+| `src/content/dom-utils.ts`       | Visibility, ancestor-clipped visible box, viewport area, deep active element, editable detection, `debugLog`. |
 
 ### Shared and UI (`src/`)
 
@@ -91,14 +91,17 @@ Each frame scores its own targetable media (`media-scoring.ts`). The highest sco
 5. Last media the extension acted on
 6. Playing but muted
 7. Visible viewport area (videos only, proportional), pointer hover, native controls, audio base, non-ambient base
-8. Ambient penalty: a muted video without controls is penalized
+8. Ambient penalty: a muted video without controls is penalized. A decorative loop (ambient and `loop`) also gets no credit for muted playback or area
+9. Hidden penalty: a video the page hides, or any media inside a hidden iframe, is penalized
 
 Design rules behind the signals:
 
 - **Intent beats prominence.** The weights are ordered so explicit user intent always outranks visual size. Change the `SCORE_*` constants only with tests that pin the new ordering.
 - **"Playing" tolerates buffering.** Media counts as playing when it is not paused or ended and has at least metadata, so a keypress during a stall still targets it.
 - **Clicks on custom controls count.** Players such as YouTube, Vimeo, Video.js, and Plyr layer controls over the `<video>`. A capture-phase `pointerdown` on the document credits the innermost visible media under the pointer.
-- **Ambient is a penalty, not an exclusion.** A muted autoplay loop can still win if the user focuses or clicks it, it dominates the viewport, or the extension already acted on it (`actionedMedia`). An idle background loop scores below zero and is never chosen.
+- **Ambient is a penalty, not an exclusion.** A muted video without controls can still win if the user focuses or clicks it, or the extension already acted on it (`actionedMedia`). An idle one scores below zero and is never chosen. A playing, non-looping one, such as a feed video that autoplays muted, can also win by dominating the viewport.
+- **Decorative loops need explicit intent.** Hero backgrounds, hover previews, and menu teasers are muted loops without controls (`isDecorativeLoop`), and their size or playback says nothing about wanting to control them. They become targets only through focus, a press in their box, fullscreen, PiP, theater, or an earlier extension action. `play` events from ambient media don't count as interaction either: autoplay must start muted, sites often set `loop` only after playback starts, and crediting it would take the credit from the player the user chose. The cost: muted looping feed players (short-video sites) need a click before keys reach them. Click-to-play posters are a separate path (see [Playable placeholders](#playable-placeholders)).
+- **Hidden means hidden by the page, not scrolled away.** `getVisibleBox` in `dom-utils.ts` clips a video's box by its ancestors. A video is hidden when it or an ancestor has `display: none`, `visibility: hidden`, or zero opacity, or when an `overflow: hidden` or `clip` ancestor in its containing-block chain cuts it off entirely, as in a collapsed mega menu. Hidden videos get no area or hover credit, presses inside their box aren't attributed to them, and their `play` events don't count as interaction. Like ambient, hidden is a penalty, not an exclusion: audible playback, focus, or an earlier extension action still wins, so canvas-based players that hide their `<video>` keep working once controlled. A video clipped by a scroll container or outside the viewport is not hidden, because the user can scroll it into view. An iframe that is hidden the same way, or is 0x0 (such as a lightbox player preloaded before it opens), hides its whole subtree; see [Cross-frame arbitration](#cross-frame-arbitration).
 - **Interaction memory survives DOM churn.** `lastInteractedMedia` is cleared only when that element leaves the document, not on unrelated mutations.
 
 ## Taking keys from the page
@@ -106,16 +109,16 @@ Design rules behind the signals:
 A matched key is only taken from the page (`preventDefault` and `stopPropagation`) when it can reach media. Otherwise pages without media would lose arrow-key scrolling and their own shortcuts (`j`, `k`, `o`, and others) to the extension. The decision must be synchronous, before any cross-frame round trip, so `media-presence.ts` keeps it answerable from local state:
 
 - **This frame:** a local candidate scores above zero, or theater mode is active.
-- **Child frames:** each frame posts `MEDIA_HOTKEYS_MEDIA_PRESENCE` to its parent with whether its subtree has controllable media. It reports when it loads, and after DOM mutations, `loadstart`, `emptied`, and `volumechange`, debounced and only on change. A frame that starts listening asks its children to report again, because reports sent before its content script loaded are lost. Ambient loops don't count, so a muted video ad in an iframe doesn't capture keys.
+- **Child frames:** each frame posts `MEDIA_HOTKEYS_MEDIA_PRESENCE` to its parent with whether its subtree has controllable media. It reports when it loads, and after DOM mutations, `loadstart`, `emptied`, and `volumechange`, debounced and only on change. A frame that starts listening asks its children to report again, because reports sent before its content script loaded are lost. Ambient loops don't count, so a muted video ad in an iframe doesn't capture keys. Neither do reports from a hidden iframe (`isIframeHidden`).
 - **Play key only:** a click-to-play placeholder in this frame, or a visible iframe big enough to hold one. Placeholder scans are too expensive to run on every mutation, so placeholders aren't reported across frames.
 
-When nothing qualifies, the key passes through untouched and no arbitration runs. The overlay toggle follows the same rule. Accepted gaps: a key pressed in the first moments after an iframe loads, or ambient media inside an iframe, stays with the page until the user clicks into the frame.
+When nothing qualifies, the key passes through untouched and no arbitration runs. The overlay toggle follows the same rule. Accepted gaps: a key pressed in the first moments after an iframe loads, or ambient media inside an iframe, stays with the page until the user clicks into the frame. Media playing in a hidden iframe also leaves keys with the page, because presence reports don't say whether the media is audible.
 
 ## Cross-frame arbitration
 
 The content script runs independently in every frame and frames cannot see each other's DOM, so exactly one frame must be chosen to act. `dispatch.ts` and `frame-messaging.ts` use a two-phase protocol:
 
-1. **Score.** The initiating frame scores local candidates and sends `SCORE_REQUEST` to child frames. Each child answers with the best score in its subtree within a shrinking time budget and records which descendant owns it, keyed by request id. Responses carry the visible-area part of the score separately. The parent rescales it by how much of its own viewport the iframe covers, so a video filling a tiny ad iframe can't claim a full area score.
+1. **Score.** The initiating frame scores local candidates and sends `SCORE_REQUEST` to child frames. Each child answers with the best score in its subtree within a shrinking time budget and records which descendant owns it, keyed by request id. Responses carry the visible-area part of the score separately. The parent rescales it by how much of its own viewport the iframe covers, so a video filling a tiny ad iframe can't claim a full area score, and applies the hidden penalty when the iframe is hidden. A child whose adjusted score is no longer above zero is dropped.
 2. **Execute.** The initiator compares local and child scores (local wins ties) and sends the action to the one winning frame, which routes it hop by hop to the recorded descendant. On failure or timeout the initiator falls back to its best local candidate.
 
 Shortcuts and exceptions:
