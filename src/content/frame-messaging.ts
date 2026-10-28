@@ -157,7 +157,16 @@ export function applyParentSitePolicy(disabled: boolean): void {
   broadcastTopLevelSitePolicy();
 }
 
-export function broadcastTopLevelSitePolicy(): void {
+/**
+ * Sends this frame's effective policy to one child frame. Each child reports
+ * its media presence when its content script starts, and gets the policy in
+ * reply, since a broadcast sent before it was listening is lost.
+ */
+export function sendSitePolicyToFrame(frameWindow: Window): void {
+  postMessageToFrames([frameWindow], createSitePolicyMessage());
+}
+
+function broadcastTopLevelSitePolicy(): void {
   const childFrames = getChildFrameWindows();
   if (childFrames.length === 0) {
     return;

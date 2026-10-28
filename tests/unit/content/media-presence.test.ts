@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeVideo, mockRect, rect, resetContentTestState } from "./helpers.js";
+import { setSettingsForTests } from "../../../src/content.js";
+import { DEFAULT_SETTINGS } from "../../../src/storage.js";
 
 const PRESENCE_TYPE = "MEDIA_HOTKEYS_MEDIA_PRESENCE";
 const PRESENCE_REQUEST_TYPE = "MEDIA_HOTKEYS_MEDIA_PRESENCE_REQUEST";
@@ -257,6 +259,22 @@ describe("keys on pages whose media may be in child frames", () => {
     document.querySelector("iframe")?.remove();
 
     expect(pressKey("ArrowRight").event.defaultPrevented).toBe(false);
+  });
+
+  it("sends the site policy to a child frame that starts after the page loaded", () => {
+    const settings = structuredClone(DEFAULT_SETTINGS);
+    settings.siteSettings.sitePolicies = [
+      { pattern: "localhost", policy: "disabled", embedsPolicy: "inherit" },
+    ];
+    setSettingsForTests(settings);
+    const child = addChildFrame();
+
+    // The child's content script reports its presence once it is running.
+    reportFromChild(child.childWindow, false);
+
+    expect(child.posted).toContainEqual(
+      expect.objectContaining({ type: "MEDIA_HOTKEYS_SITE_POLICY", disabled: true }),
+    );
   });
 
   it("takes the play key for a player-sized iframe that may hold a click-to-play embed", () => {

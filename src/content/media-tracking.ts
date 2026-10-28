@@ -11,10 +11,7 @@ import {
   hasValidMediaSource,
   isAmbientMediaElement,
 } from "./media-discovery.js";
-import {
-  broadcastTopLevelSitePolicy,
-  refreshTopLevelSitePolicyOnNavigation,
-} from "./frame-messaging.js";
+import { refreshTopLevelSitePolicyOnNavigation } from "./frame-messaging.js";
 import { scheduleMediaPresenceReport } from "./media-presence.js";
 import { state } from "./state.js";
 
@@ -216,7 +213,6 @@ function handleRootMutations(mutations: MutationRecord[]): void {
     // Single-page apps swap content when they navigate, so this also catches
     // pushState navigations the isolated world can't observe directly.
     refreshTopLevelSitePolicyOnNavigation();
-    broadcastTopLevelSitePolicy();
     scheduleMediaPresenceReport();
   }
 }

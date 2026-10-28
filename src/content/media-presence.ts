@@ -11,6 +11,7 @@ import {
   findIframeForWindow,
   isIframeHidden,
   isTopWindow,
+  sendSitePolicyToFrame,
 } from "./frame-messaging.js";
 import { canScrollVerticallyFrom } from "./dom-utils.js";
 import { findIframes, findMedia, isTargetableMediaElement } from "./media-discovery.js";
@@ -129,6 +130,7 @@ export function handleMediaPresenceMessage(
   }
 
   childFrameHasMedia.set(source, message.hasMedia);
+  sendSitePolicyToFrame(source);
   // Children already coalesce their own changes, so pass this up without
   // another delay; nested frames would otherwise add one per level.
   reportToParent();
