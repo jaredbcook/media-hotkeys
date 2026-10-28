@@ -7,13 +7,22 @@ Instructions for AI coding agents working on Media Hotkeys, a Manifest V3 browse
 Read the relevant doc before you change code. Each fact lives in one file, so link to it rather than copying.
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): code map, how target selection, cross-frame arbitration, placeholders, theater mode, and settings work, and the **invariants**
-- [CONTRIBUTING.md](CONTRIBUTING.md): commands, test layout, debugging, commit style, release
+- [CONTRIBUTING.md](CONTRIBUTING.md): issue and pull request workflow, commands, test layout, debugging, commit style, release
 - [README.md](README.md): user-facing behavior, default hotkeys and settings
 - [docs/player-compatibility.md](docs/player-compatibility.md): third-party player research
 
+## Workflow
+
+Work comes from GitHub issues and lands through pull requests. Follow [CONTRIBUTING.md](CONTRIBUTING.md#issues-and-pull-requests). The parts agents most often get wrong:
+
+- Only start on an issue labeled `ready` and not `in progress`, and add `in progress` before you start. Never work on `main`; the pre-commit hook refuses it.
+- One issue per branch and pull request, with `Closes #<issue>` in the description. Don't close issues yourself.
+- When you notice a bug, risk, or recommended change outside your issue, file it as a new `needs triage` issue (search for duplicates first) instead of fixing it in passing or only mentioning it in chat.
+- Don't name yourself, your model, your tool, or the machine you run on in issues, pull requests, comments, branches, or commits.
+
 ## Verify your work
 
-`npm run check` runs format check, lint, typecheck, and unit/UI tests. It is also the pre-commit hook. Add more depending on what you touched:
+`npm run check` runs format check, lint, typecheck, and unit/UI tests. The pre-commit hook runs it too. Add more depending on what you touched:
 
 | You changed                                                                                            | Also run                                                            |
 | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |

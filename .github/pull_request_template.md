@@ -1,6 +1,8 @@
+Closes #
+
 ## Summary
 
-<!-- What changed and why. Link issues. -->
+<!-- What changed and why. -->
 
 ## Verification
 

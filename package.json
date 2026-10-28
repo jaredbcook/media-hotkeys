@@ -20,6 +20,7 @@
     "package:firefox": "tsx scripts/package.ts --browser firefox",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.tools.json --noEmit",
     "safari:convert": "tsx scripts/safari-convert.ts",
+    "labels:sync": "tsx scripts/sync-labels.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
