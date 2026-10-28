@@ -52,15 +52,36 @@ test("leaves arrow keys alone next to an iframe without media", async ({ page, s
 
 test("takes mapped keys from the page once media exists", async ({ page, server }) => {
   await page.goto(server.getUrl("/"));
-  await makePageScrollable(page);
-  await createMedia(page, "primary", { currentTime: 25, duration: 100 });
+  await createMedia(page, "primary", { currentTime: 25, duration: 100 }, "video");
   await recordPageKeys(page);
 
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("j");
 
   expect(await readPageKeys(page)).toEqual([]);
-  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+});
+
+test("keeps arrow scrolling on a scrollable page until the video is in use", async ({
+  page,
+  server,
+}) => {
+  await page.goto(server.getUrl("/"));
+  await makePageScrollable(page);
+  await createMedia(page, "primary", { currentTime: 25, duration: 100 }, "video");
+  await recordPageKeys(page);
+
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("j");
+
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  expect(await readPageKeys(page)).toEqual(["ArrowDown"]);
+
+  await page.locator("#primary").dispatchEvent("pointerdown");
+  const scrollY = await page.evaluate(() => window.scrollY);
+  await page.keyboard.press("ArrowDown");
+
+  expect(await readPageKeys(page)).toEqual(["ArrowDown"]);
+  expect(await page.evaluate(() => window.scrollY)).toBe(scrollY);
 });
 
 test("leaves keys to the page next to a decorative hero loop until it is clicked", async ({

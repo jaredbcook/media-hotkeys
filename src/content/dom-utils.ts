@@ -200,6 +200,45 @@ export function getDeepActiveElement(): Element | null {
   return active;
 }
 
+function hasVerticalOverflow(element: Element): boolean {
+  return element.scrollHeight > element.clientHeight;
+}
+
+// The viewport takes its overflow from the root element, or from the body when
+// the root leaves it visible. Pages lock scrolling under a modal this way.
+function canViewportScroll(): boolean {
+  const scroller = document.scrollingElement;
+  if (!scroller || !hasVerticalOverflow(scroller)) {
+    return false;
+  }
+
+  const rootOverflow = window.getComputedStyle(document.documentElement).overflowY;
+  const viewportOverflow =
+    !clipsOverflow(rootOverflow) && document.body
+      ? window.getComputedStyle(document.body).overflowY
+      : rootOverflow;
+  return !hidesOverflow(viewportOverflow);
+}
+
+/**
+ * Whether a vertical scroll key pressed at `target` would scroll something:
+ * a scroll container around it, or the viewport.
+ */
+export function canScrollVerticallyFrom(target: Element | null): boolean {
+  for (let element = target; element; element = getFlatTreeParent(element)) {
+    if (element === document.documentElement || element === document.body) {
+      break;
+    }
+
+    const overflowY = window.getComputedStyle(element).overflowY;
+    if (clipsOverflow(overflowY) && !hidesOverflow(overflowY) && hasVerticalOverflow(element)) {
+      return true;
+    }
+  }
+
+  return canViewportScroll();
+}
+
 export function isWithinEditableElement(element: Element): boolean {
   let current: Element | null = element;
 

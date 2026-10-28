@@ -127,6 +127,45 @@ function scoreMediaCandidate(media: HTMLMediaElement): { score: number; areaScor
   return { score, areaScore };
 }
 
+function isOnScreen(media: HTMLMediaElement): boolean {
+  if (!(media instanceof HTMLVideoElement)) {
+    // Audio has no visual footprint to scroll past.
+    return true;
+  }
+
+  const box = getVisibleBox(media);
+  return box !== null && getVisibleViewportArea(box) > 0;
+}
+
+/**
+ * Whether the user is evidently using this media rather than reading past it:
+ * it is fullscreen, in picture-in-picture or theater mode, or focused, or it
+ * is on screen and they interacted with it, controlled it, or it plays with
+ * sound.
+ */
+function isMediaInUse(media: HTMLMediaElement): boolean {
+  const fullscreenElement = document.fullscreenElement;
+  if (
+    (fullscreenElement && (fullscreenElement === media || fullscreenElement.contains(media))) ||
+    ("pictureInPictureElement" in document && document.pictureInPictureElement === media) ||
+    isTheaterMedia(media) ||
+    document.activeElement === media
+  ) {
+    return true;
+  }
+
+  return (
+    (media === state.lastInteractedMedia ||
+      media === state.lastActionedMedia ||
+      isMediaAudible(media)) &&
+    isOnScreen(media)
+  );
+}
+
+export function hasMediaInUse(): boolean {
+  return findMedia(document).some(isMediaInUse);
+}
+
 /**
  * Scores every valid-source media element in this frame and returns the
  * highest-scoring one. Candidates must score above zero to be targetable, so

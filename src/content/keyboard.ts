@@ -75,7 +75,8 @@ export async function handleKeyDown(e: KeyboardEvent): Promise<void> {
 
   // Only take the key from the page when it can do something. Otherwise pages
   // without media would lose scrolling and their own shortcuts to our bindings.
-  if (!hasPotentialTarget(action)) {
+  const keyTarget = e.composedPath()[0];
+  if (!hasPotentialTarget(action, key, keyTarget instanceof Element ? keyTarget : null)) {
     debugLog("No media for action; leaving the key to the page", undefined, { action, key });
     return;
   }
