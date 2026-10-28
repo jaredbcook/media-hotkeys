@@ -21,8 +21,10 @@ async function run(): Promise<void> {
   await buildBrowsers(browsers);
 
   for (const browser of browsers) {
-    const extension = browser === "firefox" ? "xpi" : "zip";
-    const archiveName = `${packageJson.name}-${browser}-v${packageJson.version}.${extension}`;
+    // Mozilla signs Firefox add-ons when they're uploaded to addons.mozilla.org,
+    // so the package built here is named as unsigned.
+    const suffix = browser === "firefox" ? "-unsigned.xpi" : ".zip";
+    const archiveName = `${packageJson.name}-${browser}-v${packageJson.version}${suffix}`;
     const archivePath = path.join(packagesDir, archiveName);
 
     await rm(archivePath, { force: true });
