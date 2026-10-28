@@ -15,20 +15,21 @@ Load `dist/<browser>` in your browser as described in [README.md](README.md#inst
 
 ## Commands
 
-| Command                                      | What it does                                                       |
-| -------------------------------------------- | ------------------------------------------------------------------ |
-| `npm run check`                              | Format check, lint, typecheck, and unit/UI tests (the commit gate) |
-| `npm run build`                              | Build Chrome, Edge, and Firefox into `dist/`                       |
-| `npm run build:chrome` (`:edge`, `:firefox`) | Build one browser                                                  |
-| `npm test` / `npm run test:watch`            | Vitest unit and UI tests                                           |
-| `npm run test:e2e`                           | Playwright end-to-end tests (run `npm run build:chrome` first)     |
-| `npm run typecheck`                          | `tsc` for app code, unit/UI tests, scripts, configs, and E2E tests |
-| `npm run lint`                               | ESLint                                                             |
-| `npm run format` / `npm run format:check`    | Prettier, including Markdown docs                                  |
-| `npm run package`                            | Build and zip all browsers into `dist/packages/`                   |
-| `npm run safari:convert`                     | macOS only: print the Xcode Safari conversion command              |
+| Command                                      | What it does                                                         |
+| -------------------------------------------- | -------------------------------------------------------------------- |
+| `npm run check`                              | Format check, lint, typecheck, and unit/UI tests (the commit gate)   |
+| `npm run build`                              | Build Chrome, Edge, and Firefox into `dist/`                         |
+| `npm run build:chrome` (`:edge`, `:firefox`) | Build one browser                                                    |
+| `npm test` / `npm run test:watch`            | Vitest unit and UI tests                                             |
+| `npm run test:e2e`                           | Playwright end-to-end tests (run `npm run build:chrome` first)       |
+| `npm run typecheck`                          | `tsc` for app code, unit/UI tests, scripts, configs, and E2E tests   |
+| `npm run lint`                               | ESLint                                                               |
+| `npm run lint:firefox`                       | `web-ext lint` on `dist/firefox` (run `npm run build:firefox` first) |
+| `npm run format` / `npm run format:check`    | Prettier, including Markdown docs                                    |
+| `npm run package`                            | Build and zip all browsers into `dist/packages/`                     |
+| `npm run safari:convert`                     | macOS only: print the Xcode Safari conversion command                |
 
-The pre-commit hook runs `npm run check`. CI (`.github/workflows/ci.yml`) runs the same checks, builds every browser, and runs the E2E suite on Chromium.
+The pre-commit hook runs `npm run check`. CI (`.github/workflows/ci.yml`) runs the same checks, builds every browser, lints the Firefox build with `web-ext lint`, and runs the E2E suite on Chromium.
 
 ## Testing
 
