@@ -354,6 +354,36 @@ describe("keyboard shortcut routing", () => {
     expect(event.defaultPrevented).toBe(false);
   });
 
+  it("takes a held toggle key from the page without toggling again", async () => {
+    const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
+    const event = new KeyboardEvent("keydown", {
+      key: "k",
+      repeat: true,
+      bubbles: true,
+      cancelable: true,
+    });
+
+    document.dispatchEvent(event);
+    await Promise.resolve();
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it("keeps stepping while a seek key is held", async () => {
+    const video = makeVideo({
+      paused: true,
+      currentTime: 20,
+      duration: 100,
+    } as Partial<HTMLVideoElement>);
+
+    await dispatchMappedKey("ArrowRight", { repeat: true });
+    await dispatchMappedKey("ArrowRight", { repeat: true });
+
+    expect(video.currentTime).toBe(30);
+  });
+
   it("skips action when the active element is contenteditable", async () => {
     const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
     const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
