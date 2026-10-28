@@ -3,8 +3,12 @@
   "version": "0.1.0",
   "description": "A browser extension that adds hotkeys to control HTML video or audio on any webpage",
   "author": "Jared Cook",
+  "license": "MIT",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "build": "tsx scripts/build.ts",
     "build:chrome": "tsx scripts/build.ts --browser chrome",
@@ -31,7 +35,7 @@
     "@types/archiver": "^6.0.4",
     "@types/chrome": "^0.0.268",
     "@types/firefox-webext-browser": "^120.0.5",
-    "@types/node": "^20.19.43",
+    "@types/node": "^24.19.2",
     "@types/webextension-polyfill": "^0.12.6",
     "@vitest/coverage-v8": "^1.6.1",
     "archiver": "^7.0.1",
