@@ -109,12 +109,16 @@ const theaterGrantsByRequestId = new Map<string, TheaterGrant>();
 
 let topLevelSitePolicyDisabled = false;
 let topLevelSitePolicyDisabledForEmbeds = false;
+// The top-level URL the policy was last evaluated for. Single-page apps change
+// it without reloading the page, so path rules must be checked again.
+let sitePolicyUrl: string | null = null;
 
 export function isTopWindow(): boolean {
   return window.parent === window;
 }
 
 export function isSiteDisabledByPolicy(): boolean {
+  refreshTopLevelSitePolicyOnNavigation();
   return topLevelSitePolicyDisabled;
 }
 
@@ -131,11 +135,19 @@ export function refreshTopLevelSitePolicy(): void {
     return;
   }
 
-  const matchingPolicy = findMatchingSitePolicy(window.location.href, state.settings.siteSettings);
+  sitePolicyUrl = window.location.href;
+  const matchingPolicy = findMatchingSitePolicy(sitePolicyUrl, state.settings.siteSettings);
   topLevelSitePolicyDisabled = matchingPolicy?.policy === "disabled";
   topLevelSitePolicyDisabledForEmbeds =
     topLevelSitePolicyDisabled && matchingPolicy?.embedsPolicy !== "ignore";
   broadcastTopLevelSitePolicy();
+}
+
+/** Re-evaluates the site policy if the top-level page navigated in place. */
+export function refreshTopLevelSitePolicyOnNavigation(): void {
+  if (isTopWindow() && sitePolicyUrl !== null && window.location.href !== sitePolicyUrl) {
+    refreshTopLevelSitePolicy();
+  }
 }
 
 /** Applies a site-policy notification received from the parent frame. */

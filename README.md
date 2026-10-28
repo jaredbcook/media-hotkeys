@@ -67,7 +67,7 @@ Some sites, such as YouTube, have their own shortcuts. Add a site rule in Advanc
 
 - A rule is a domain (`youtube.com`) or a path (`youtube.com/shorts`), and it either **disables** or **enables** Media Hotkeys there.
 - More specific rules win. For example, disable `youtube.com` but enable `youtube.com/shorts`.
-- Rules match the address of the page in the tab. Embedded players inherit a disabled page's rule unless that rule's embeds setting is **ignore**.
+- Rules match the address of the page in the tab, including after a single-page app such as YouTube navigates without reloading. Embedded players inherit a disabled page's rule unless that rule's embeds setting is **ignore**.
 
 ## Install from source
 
