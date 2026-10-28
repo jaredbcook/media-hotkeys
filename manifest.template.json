@@ -2,6 +2,7 @@
   "manifest_version": 3,
   "name": "Media Hotkeys",
   "description": "Adds hotkeys to control HTML video or audio on any webpage",
+  "minimum_chrome_version": "114",
   "permissions": ["storage", "activeTab"],
   "icons": {
     "16": "assets/icon16.png",

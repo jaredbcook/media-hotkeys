@@ -2,7 +2,7 @@
 
 A browser extension that adds YouTube-style keyboard shortcuts to HTML `<video>` and `<audio>` on any website, including media inside iframes and shadow DOM.
 
-Works in Chrome, Edge, and Firefox 128 or newer. Safari is possible by converting the Chrome build with Xcode.
+Works in Chrome and Edge 114 or newer and Firefox 128 or newer. Safari is possible by converting the Chrome build with Xcode.
 
 ## Features
 
