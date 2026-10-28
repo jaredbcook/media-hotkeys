@@ -21,11 +21,6 @@ export function createViteConfigs(outDir: string): UserConfig[] {
           name: "MediaHotkeysContent",
           fileName: () => "content.js",
         },
-        rollupOptions: {
-          output: {
-            inlineDynamicImports: true,
-          },
-        },
       },
     },
     {
@@ -40,11 +35,6 @@ export function createViteConfigs(outDir: string): UserConfig[] {
           formats: ["iife"],
           name: "MediaHotkeysPlayerBridge",
           fileName: () => "player-bridge.js",
-        },
-        rollupOptions: {
-          output: {
-            inlineDynamicImports: true,
-          },
         },
       },
     },
@@ -73,11 +63,6 @@ export function createViteConfigs(outDir: string): UserConfig[] {
           entry: path.resolve(projectRoot, "src/advanced-settings-page.ts"),
           formats: ["es"],
           fileName: () => "advanced-settings-page.js",
-        },
-        rollupOptions: {
-          output: {
-            format: "es",
-          },
         },
       },
     },
