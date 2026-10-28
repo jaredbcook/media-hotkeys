@@ -51,6 +51,19 @@ function getActionForKey(key: string): MediaAction | undefined {
   return undefined;
 }
 
+// Holding a key repeats only actions that step a value. Repeating a toggle
+// would flip it back and forth, such as fullscreen on and off.
+function isRepeatableAction(action: MediaAction): boolean {
+  return (
+    action.startsWith("seekForward") ||
+    action.startsWith("seekBackward") ||
+    action === "volumeUp" ||
+    action === "volumeDown" ||
+    action === "speedUp" ||
+    action === "slowDown"
+  );
+}
+
 function hasReservedModifier(e: KeyboardEvent): boolean {
   return e.metaKey || e.altKey || e.ctrlKey;
 }
@@ -87,6 +100,10 @@ export async function handleKeyDown(e: KeyboardEvent): Promise<void> {
 
   e.preventDefault();
   e.stopPropagation();
+
+  if (e.repeat && !isRepeatableAction(action)) {
+    return;
+  }
 
   if (isGlobalAction(action)) {
     await handleGlobalAction(action);
