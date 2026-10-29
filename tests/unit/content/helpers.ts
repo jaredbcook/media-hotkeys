@@ -48,6 +48,24 @@ import { setSettingsForTests } from "../../../src/content.js";
 
 const DEFAULT_SETTINGS = defaults as ExtensionSettings;
 
+// Placeholder activation polls for media for up to a second after its click.
+// Stop leftover polling after every test, so it can't act on the next test's
+// page or run after the test environment is torn down.
+const pendingIntervals = new Set<number>();
+const originalSetInterval = window.setInterval.bind(window);
+window.setInterval = ((...args: Parameters<typeof window.setInterval>) => {
+  const id = originalSetInterval(...args);
+  pendingIntervals.add(id);
+  return id;
+}) as typeof window.setInterval;
+
+afterEach(() => {
+  for (const id of pendingIntervals) {
+    window.clearInterval(id);
+  }
+  pendingIntervals.clear();
+});
+
 // jsdom empties the body when Vitest tears the environment down, after the
 // window globals are gone. Empty it first so the content script's mutation
 // observer doesn't run without a window.
