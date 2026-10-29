@@ -1,3 +1,4 @@
+import browser from "webextension-polyfill";
 import { collectAdvancedSettings, populateAdvancedSettings } from "./advanced-settings.js";
 import { DELETE } from "./icons.js";
 import {
@@ -22,6 +23,7 @@ let debouncedInputSaveId: number | undefined;
 const INPUT_SAVE_DEBOUNCE_MS = 500;
 const DISABLED_SITE_PREFILL_PARAM = "disabledSitePrefill";
 const DISABLED_SITE_HIGHLIGHT_URL_PARAM = "highlightDisabledSiteUrl";
+const NEW_ISSUE_URL = "https://github.com/jaredbcook/media-hotkeys/issues/new";
 
 function showStatus(message = "Settings saved.", tone: StatusToastTone = "success"): void {
   showStatusToast(message, tone);
@@ -424,7 +426,44 @@ async function handleReset(): Promise<void> {
   await persistSettings(nextSettings);
 }
 
+function getReportIssueUrl(version: string): string {
+  const url = new URL(NEW_ISSUE_URL);
+  url.searchParams.set("template", "bug.md");
+  url.searchParams.set(
+    "body",
+    [
+      "## What happens",
+      "",
+      "## What should happen",
+      "",
+      "## Steps to reproduce",
+      "",
+      "<!-- Browser and version, the page or site, and the keys pressed. -->",
+      "",
+      "## Version",
+      "",
+      `Media Hotkeys ${version}`,
+      "",
+    ].join("\n"),
+  );
+  return url.href;
+}
+
+function renderVersionAndReportLink(): void {
+  const { version } = browser.runtime.getManifest();
+  const versionLabel = document.getElementById("extension-version");
+  if (versionLabel) {
+    versionLabel.textContent = `v${version}`;
+  }
+
+  const reportIssueLink = document.getElementById("report-issue-link") as HTMLAnchorElement | null;
+  if (reportIssueLink) {
+    reportIssueLink.href = getReportIssueUrl(version);
+  }
+}
+
 async function init(): Promise<void> {
+  renderVersionAndReportLink();
   currentSettings = await getSettings();
   populateAdvancedSettings(currentSettings.advancedSettings);
   renderSitePoliciesList();

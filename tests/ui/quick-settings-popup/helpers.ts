@@ -7,6 +7,7 @@ const hoistedMocks = vi.hoisted(() => ({
   saveSettingsMock: vi.fn(),
   openOptionsPageMock: vi.fn(),
   runtimeGetUrlMock: vi.fn((path: string) => `chrome-extension://test/${path}`),
+  runtimeGetManifestMock: vi.fn(() => ({ version: "1.2.3" })),
   tabsCreateMock: vi.fn(),
   tabsQueryMock: vi.fn(),
 }));
@@ -15,6 +16,7 @@ export const getSettingsMock = hoistedMocks.getSettingsMock;
 export const saveSettingsMock = hoistedMocks.saveSettingsMock;
 export const openOptionsPageMock = hoistedMocks.openOptionsPageMock;
 export const runtimeGetUrlMock = hoistedMocks.runtimeGetUrlMock;
+export const runtimeGetManifestMock = hoistedMocks.runtimeGetManifestMock;
 export const tabsCreateMock = hoistedMocks.tabsCreateMock;
 export const tabsQueryMock = hoistedMocks.tabsQueryMock;
 const DEFAULT_SETTINGS = defaults as ExtensionSettings;
@@ -22,6 +24,7 @@ const DEFAULT_SETTINGS = defaults as ExtensionSettings;
 vi.mock("webextension-polyfill", () => ({
   default: {
     runtime: {
+      getManifest: runtimeGetManifestMock,
       getURL: runtimeGetUrlMock,
       openOptionsPage: openOptionsPageMock,
     },
@@ -50,17 +53,30 @@ vi.mock("../../../src/storage.js", async () => {
 
 export function renderQuickSettingsDom(): void {
   document.body.innerHTML = `
-    <input id="hotkeysEnabled" type="checkbox" />
-    <table><tbody id="actions-body"></tbody></table>
+    <h1>Media Hotkeys <span id="extension-version"></span></h1>
+    <button id="advanced-settings"></button>
     <div id="site-controls-container">
-      <p id="site-control-status"></p>
-      <button id="site-control-button"></button>
-      <button id="site-edit-rule-button"></button>
+      <input type="checkbox" id="disable-everywhere" />
+      <label for="disable-everywhere">Disable on all pages</label>
+      <div id="disable-on-site-field" style="display: none">
+        <input type="checkbox" id="disable-on-site" />
+        <label for="disable-on-site" id="disable-on-site-label"></label>
+      </div>
+      <div id="enable-on-section-field" style="display: none">
+        <input type="checkbox" id="enable-on-section" />
+        <label for="enable-on-section" id="enable-on-section-label"></label>
+      </div>
+      <div id="site-rule-row" style="display: none">
+        <p id="site-control-status"></p>
+        <button id="site-edit-rule-button"></button>
+      </div>
     </div>
+    <section id="key-bindings-section">
+      <button id="reset"></button>
+      <table><tbody id="actions-body"></tbody></table>
+    </section>
     <div id="announcements"></div>
     <div id="announcement-live-region" class="screen-reader" aria-live="polite" aria-atomic="true"></div>
-    <button id="reset"></button>
-    <button id="advanced-settings"></button>
   `;
 }
 
@@ -71,6 +87,7 @@ export function resetQuickSettingsTestState(): void {
   openOptionsPageMock.mockReset();
   runtimeGetUrlMock.mockReset();
   runtimeGetUrlMock.mockImplementation((path: string) => `chrome-extension://test/${path}`);
+  runtimeGetManifestMock.mockClear();
   tabsCreateMock.mockReset();
   tabsQueryMock.mockReset();
   document.body.innerHTML = "";
@@ -102,4 +119,16 @@ export function findRowByLabel(label: string): HTMLTableRowElement {
   const row = rows.find((candidate) => candidate.firstElementChild?.textContent === label);
   expect(row).toBeTruthy();
   return row as HTMLTableRowElement;
+}
+
+export function isDisplayed(id: string): boolean {
+  const element = document.getElementById(id);
+  expect(element).toBeTruthy();
+  return element!.style.display !== "none";
+}
+
+export function setCheckbox(id: string, checked: boolean): void {
+  const checkbox = document.getElementById(id) as HTMLInputElement;
+  checkbox.checked = checked;
+  checkbox.dispatchEvent(new Event("change", { bubbles: true }));
 }
