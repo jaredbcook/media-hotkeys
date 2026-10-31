@@ -64,8 +64,13 @@ function isRepeatableAction(action: MediaAction): boolean {
   );
 }
 
+// Layouts such as German and French type characters like `[` and `]` with
+// AltGr, which Windows reports as Ctrl+Alt. Those keys are plain characters,
+// not shortcuts.
 function hasReservedModifier(e: KeyboardEvent): boolean {
-  return e.metaKey || e.altKey || e.ctrlKey;
+  if (e.metaKey) return true;
+  if (e.getModifierState("AltGraph")) return false;
+  return e.altKey || e.ctrlKey;
 }
 
 export async function handleKeyDown(e: KeyboardEvent): Promise<void> {
