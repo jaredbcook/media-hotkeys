@@ -420,6 +420,43 @@ describe("keyboard shortcut routing", () => {
     expect(preventDefaultSpy).not.toHaveBeenCalled();
     expect(event.defaultPrevented).toBe(false);
   });
+
+  it("matches a key typed with AltGr, which reports Ctrl+Alt", async () => {
+    const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
+    const event = new KeyboardEvent("keydown", {
+      key: "k",
+      ctrlKey: true,
+      altKey: true,
+      modifierAltGraph: true,
+      bubbles: true,
+      cancelable: true,
+    });
+
+    document.dispatchEvent(event);
+    await Promise.resolve();
+
+    expect(playSpy).toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("still ignores Meta pressed together with AltGr", async () => {
+    const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
+    const event = new KeyboardEvent("keydown", {
+      key: "k",
+      metaKey: true,
+      modifierAltGraph: true,
+      bubbles: true,
+      cancelable: true,
+    });
+
+    document.dispatchEvent(event);
+    await Promise.resolve();
+
+    expect(playSpy).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
 });
 
 describe("playable placeholder activation", () => {
