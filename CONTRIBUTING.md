@@ -60,7 +60,7 @@ GitHub issues are the task list, for people and AI agents alike. Every change re
 2. **Claim it.** Add the `in progress` label. That label alone means the issue is taken. If an issue has been `in progress` for a day with no linked pull request, anyone may remove the label and claim it.
 3. **Branch.** Start from an up-to-date `main`, on a branch or a worktree named `<type>/<issue>-<slug>`, for example `fix/42-altgr-brackets`.
 4. **Open a draft pull request early** with `Closes #<issue>` in the description, so the issue shows its work is underway. Keep it to that one issue.
-5. **Finish.** Run the checks for what you changed, fill in `.github/pull_request_template.md`, and mark the pull request ready for review. Merging (squash) closes the issue.
+5. **Finish.** Run the checks for what you changed, fill in `.github/pull_request_template.md`, and mark the pull request ready for review. The maintainer merges by rebase and fast-forward, so `main` stays linear with no merge commits and each commit lands as written. That means every commit on the branch must be a clean Conventional Commit; squash fixups before you mark the pull request ready. Merging closes the issue.
 
 **File what you find.** A bug, risk, or recommended change outside the issue you're working on becomes a new issue rather than a fix slipped into your pull request. Search open issues first, then file it from a template in `.github/ISSUE_TEMPLATE/` (bug report or change). New issues start as `needs triage` until the maintainer marks them `ready`. Report security problems privately as described in [SECURITY.md](SECURITY.md).
 
