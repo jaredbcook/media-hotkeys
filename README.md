@@ -20,6 +20,8 @@ Hotkeys only take effect when the page (or a frame inside it) has media to contr
 
 Holding a key repeats skip, volume, and speed changes. Toggles such as play/pause and fullscreen happen once per press.
 
+Letter hotkeys follow the character a key types, so on Latin layouts such as AZERTY or Dvorak `k` is wherever your layout puts `k`. On a non-Latin layout such as Cyrillic, Greek, or Hebrew, a letter hotkey also works from the key in the same position on a US QWERTY keyboard (for example, `л` on Russian ЙЦУКЕН triggers `k`), unless that character has its own binding.
+
 | Action                 | Key                 | Notes                                                         |
 | ---------------------- | ------------------- | ------------------------------------------------------------- |
 | Play/Pause             | `k`                 | Activates a click-to-play thumbnail if no media is loaded     |
