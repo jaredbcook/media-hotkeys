@@ -223,8 +223,12 @@ export function handleAction(action: MediaAction, media: HTMLMediaElement): void
 
     case "toggleFullscreen":
       if (media instanceof HTMLVideoElement) {
+        // Browsers reject without user activation or in iframes lacking
+        // allowfullscreen; that's expected, so keep it out of the page console.
         if (document.fullscreenElement) {
-          document.exitFullscreen();
+          document.exitFullscreen().catch((error: unknown) => {
+            debugLog("Fullscreen exit was rejected", media, { error });
+          });
         } else {
           // The fullscreen wrapper reparents the video, which would drop it out
           // of the top layer anyway; leave theater mode cleanly first.
@@ -235,11 +239,14 @@ export function handleAction(action: MediaAction, media: HTMLMediaElement): void
 
           const fullscreenHost = getFullscreenHost(media);
           if (!fullscreenHost) {
-            media.requestFullscreen();
+            media.requestFullscreen().catch((error: unknown) => {
+              debugLog("Fullscreen request was rejected", media, { error });
+            });
             break;
           }
 
-          void fullscreenHost.requestFullscreen().catch(() => {
+          void fullscreenHost.requestFullscreen().catch((error: unknown) => {
+            debugLog("Fullscreen request was rejected", media, { error });
             if (document.fullscreenElement !== fullscreenHost) {
               unwrapManagedFullscreenMedia();
             }
