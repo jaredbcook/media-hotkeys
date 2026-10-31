@@ -216,9 +216,19 @@ describe("theater mode across frames", () => {
     received: unknown[];
   };
 
-  async function makeChildFrame({ entersTheater = true } = {}): Promise<ChildFrame> {
+  async function makeChildFrame({
+    entersTheater = true,
+    inShadowRoot = false,
+  } = {}): Promise<ChildFrame> {
     const iframe = document.createElement("iframe");
-    document.body.appendChild(iframe);
+    if (inShadowRoot) {
+      // Build the iframe in place: reparenting one gives it a new window.
+      const host = document.createElement("div");
+      host.attachShadow({ mode: "open" }).appendChild(iframe);
+      document.body.appendChild(host);
+    } else {
+      document.body.appendChild(iframe);
+    }
     mockRect(iframe, rect(0, 0, 1024, 768));
     const childWindow = iframe.contentWindow as Window;
     const executeRequests: ChildFrame["executeRequests"] = [];
@@ -341,10 +351,7 @@ describe("theater mode across frames", () => {
   });
 
   it("follows focus into shadow roots when checking the focused iframe", async () => {
-    const child = await makeChildFrame();
-    const host = document.createElement("div");
-    host.attachShadow({ mode: "open" }).appendChild(child.iframe);
-    document.body.appendChild(host);
+    const child = await makeChildFrame({ inShadowRoot: true });
     child.iframe.focus();
 
     postFromChild(child, { active: true });
