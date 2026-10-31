@@ -12,7 +12,7 @@ The extension is a Manifest V3 web extension with four runtime pieces:
 | ---------------------- | ------------------------------- | ------------------------------------------------ | -------------------------------------------------------------------------- |
 | Content script         | `src/content.ts`                | Every frame, isolated world, `document_idle`     | Maps keys to actions, picks the target media, acts, shows the overlay      |
 | Player bridge          | `src/player-bridge.ts`          | Every frame, page's main world, `document_start` | Calls page-defined custom-element player APIs the isolated world can't see |
-| Quick settings popup   | `src/quick-settings-popup.ts`   | Toolbar action popup                             | Global toggle, key bindings, current-site policy                           |
+| Quick settings popup   | `src/quick-settings-popup.ts`   | Toolbar action popup                             | Global toggle, version, key bindings, current-site policy                  |
 | Advanced settings page | `src/advanced-settings-page.ts` | Options page (opens in a tab)                    | Playback, skip, volume, overlay, site policies, debug logging              |
 
 There is no background service worker. All state that crosses contexts goes through `browser.storage.sync` (settings) or `window.postMessage` (frame-to-frame coordination).
@@ -58,20 +58,20 @@ Every file under `src/` is listed here; `tests/unit/docs/docs-consistency.test.t
 
 ### Shared and UI (`src/`)
 
-| File                              | Responsibility                                                                                      |
-| --------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `src/storage.ts`                  | Settings types, `MediaAction`, normalization and legacy migration, site-policy matching, load/save. |
-| `src/settings/defaults.json`      | Single source of truth for default settings and key bindings.                                       |
-| `src/overlay.ts`                  | The on-screen action indicator: anchoring, sizing, top-layer promotion, fade.                       |
-| `src/icons.ts`                    | Inline SVG strings for overlay and settings UI icons (sourced from `assets/material-icons/`).       |
-| `src/player-bridge.ts`            | Main-world bridge for whitelisted custom-player host operations. Must stay import-free.             |
-| `src/quick-settings-popup.html`   | Popup markup.                                                                                       |
-| `src/quick-settings-popup.ts`     | Popup logic: key capture, binding table, site-policy buttons. `ACTION_LABELS` names actions.        |
-| `src/advanced-settings-page.html` | Options page markup.                                                                                |
-| `src/advanced-settings-page.ts`   | Options page logic: debounced autosave, validation, site-policy list.                               |
-| `src/advanced-settings.ts`        | Populate/collect helpers for the advanced settings form.                                            |
-| `src/status-toast.ts`             | Transient "Settings saved." / error toasts used by both settings UIs.                               |
-| `src/ui.css`                      | Shared styles for popup and options page (light and dark).                                          |
+| File                              | Responsibility                                                                                                 |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `src/storage.ts`                  | Settings types, `MediaAction`, normalization and legacy migration, site-policy matching, load/save.            |
+| `src/settings/defaults.json`      | Single source of truth for default settings and key bindings.                                                  |
+| `src/overlay.ts`                  | The on-screen action indicator: anchoring, sizing, top-layer promotion, fade.                                  |
+| `src/icons.ts`                    | Inline SVG strings for overlay and settings UI icons (sourced from `assets/material-icons/`).                  |
+| `src/player-bridge.ts`            | Main-world bridge for whitelisted custom-player host operations. Must stay import-free.                        |
+| `src/quick-settings-popup.html`   | Popup markup.                                                                                                  |
+| `src/quick-settings-popup.ts`     | Popup logic: global toggle, key capture, binding table, site-policy checkboxes. `ACTION_LABELS` names actions. |
+| `src/advanced-settings-page.html` | Options page markup.                                                                                           |
+| `src/advanced-settings-page.ts`   | Options page logic: debounced autosave, validation, site-policy list, version and report-issue link.           |
+| `src/advanced-settings.ts`        | Populate/collect helpers for the advanced settings form.                                                       |
+| `src/status-toast.ts`             | Transient "Settings saved." / error toasts used by both settings UIs.                                          |
+| `src/ui.css`                      | Shared styles for popup and options page (light and dark).                                                     |
 
 ### Build and tests
 

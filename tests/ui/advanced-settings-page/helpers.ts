@@ -13,6 +13,9 @@ const DEFAULT_SETTINGS = defaults as ExtensionSettings;
 
 vi.mock("webextension-polyfill", () => ({
   default: {
+    runtime: {
+      getManifest: () => ({ version: "1.2.3" }),
+    },
     storage: {
       sync: {
         get: vi.fn(),
@@ -35,6 +38,8 @@ vi.mock("../../../src/storage.js", async () => {
 export function renderAdvancedSettingsDom(): void {
   Element.prototype.scrollIntoView = vi.fn();
   document.body.innerHTML = `
+    <h1>Media Hotkeys <span id="extension-version"></span></h1>
+    <a id="report-issue-link" href="https://github.com/jaredbcook/media-hotkeys/issues/new"></a>
     <input type="number" id="volumeStep" min="1" max="10" step="1" />
     <input type="number" id="speedMin" min="0.1" max="1" step="0.05" />
     <input type="number" id="speedMax" min="1" max="8" step="0.25" />

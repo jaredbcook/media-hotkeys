@@ -43,7 +43,7 @@ Holding a key repeats skip, volume, and speed changes. Toggles such as play/paus
 
 ## Settings
 
-Click the toolbar icon for **Quick Settings**: turn hotkeys on or off, rebind any action, and disable or enable the extension for the current site or section. **Advanced Settings** (the gear icon in Quick Settings, or the extension's Options page) holds everything else:
+Click the toolbar icon for **Quick Settings**: disable the extension on all pages, on the current domain, or on the page's first path segment such as `youtube.com/shorts` (which becomes an enable checkbox once the domain is disabled); the key bindings are hidden while a disable checkbox applies to the current page, unless the section is re-enabled, and rebind any action. **Advanced Settings** (the gear icon in Quick Settings, or the extension's Options page) holds everything else, plus the installed version and a link to report an issue:
 
 | Setting                          | Default        |
 | -------------------------------- | -------------- |
@@ -65,7 +65,7 @@ With **Sum skips** on, pressing skip repeatedly shows the running total (for exa
 
 ### Site rules
 
-Some sites, such as YouTube, have their own shortcuts. Add a site rule in Advanced Settings, or use the buttons in Quick Settings, to let the site's shortcuts win:
+Some sites, such as YouTube, have their own shortcuts. Add a site rule in Advanced Settings, or use the checkboxes in Quick Settings, to let the site's shortcuts win:
 
 - A rule is a domain (`youtube.com`) or a path (`youtube.com/shorts`), and it either **disables** or **enables** Media Hotkeys there.
 - More specific rules win. For example, disable `youtube.com` but enable `youtube.com/shorts`.

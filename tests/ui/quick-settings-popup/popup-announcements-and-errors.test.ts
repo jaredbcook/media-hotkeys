@@ -32,9 +32,8 @@ describe("quick settings popup: status, reset, and error handling", () => {
         volumeStep: 0.2,
       },
     });
-    expect((document.getElementById("hotkeysEnabled") as HTMLInputElement).checked).toBe(
-      DEFAULT_SETTINGS.quickSettings.hotkeysEnabled,
-    );
+    expect((document.getElementById("disable-everywhere") as HTMLInputElement).checked).toBe(false);
+    expect(document.getElementById("key-bindings-section")?.style.display).not.toBe("none");
     expect(document.getElementById("announcements")?.textContent).toContain(
       "Quick settings reset to default values.",
     );
@@ -43,14 +42,9 @@ describe("quick settings popup: status, reset, and error handling", () => {
   it("fades out the active status announcement when a new one is shown", async () => {
     await loadQuickSettingsModule();
 
-    const hotkeysEnabled = document.getElementById("hotkeysEnabled") as HTMLInputElement;
-
-    hotkeysEnabled.checked = false;
-    hotkeysEnabled.dispatchEvent(new Event("change", { bubbles: true }));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    hotkeysEnabled.checked = true;
-    hotkeysEnabled.dispatchEvent(new Event("change", { bubbles: true }));
+    const addButton = document.querySelector(".add-key-button") as HTMLButtonElement;
+    addButton.click();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const visibleAnnouncements = Array.from(
@@ -60,26 +54,10 @@ describe("quick settings popup: status, reset, and error handling", () => {
       "#announcements .announcement-exiting",
     ) as HTMLDivElement | null;
 
-    expect(visibleAnnouncements).toEqual(["Hotkeys enabled"]);
-    expect(exitingAnnouncement?.textContent).toBe("Hotkeys disabled");
-  });
-
-  it("shows status announcements when hotkeys are enabled or disabled", async () => {
-    await loadQuickSettingsModule();
-
-    const hotkeysEnabled = document.getElementById("hotkeysEnabled") as HTMLInputElement;
-
-    hotkeysEnabled.checked = false;
-    hotkeysEnabled.dispatchEvent(new Event("change", { bubbles: true }));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(document.getElementById("announcements")?.textContent).toContain("Hotkeys disabled");
-
-    hotkeysEnabled.checked = true;
-    hotkeysEnabled.dispatchEvent(new Event("change", { bubbles: true }));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(document.getElementById("announcements")?.textContent).toContain("Hotkeys enabled");
+    expect(visibleAnnouncements).toEqual(["Key assignment canceled for Play/Pause."]);
+    expect(exitingAnnouncement?.textContent).toBe(
+      "Listening for a shortcut key for Play/Pause. Press Escape to cancel.",
+    );
   });
 
   it("shows a failure announcement when quick settings cannot be loaded", async () => {
