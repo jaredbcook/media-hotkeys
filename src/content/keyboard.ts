@@ -38,6 +38,17 @@ function getKeyString(e: KeyboardEvent): string {
   return normalizeHotkeyKey(e.key);
 }
 
+// On Cyrillic, Greek, Hebrew, and similar layouts `event.key` is never a Latin
+// letter, so letter bindings would never match. Fall back to the physical key
+// (`KeyK` for `k`) only when the typed character is a letter from another
+// script. Latin layouts such as AZERTY and Dvorak keep matching on what they
+// type, because their physical positions differ from the labels.
+function getPhysicalLetterFallback(e: KeyboardEvent): string | undefined {
+  if (!/^\p{L}$/u.test(e.key) || /^\p{Script=Latin}$/u.test(e.key)) return undefined;
+  const match = /^Key([A-Z])$/.exec(e.code);
+  return match ? match[1].toLowerCase() : undefined;
+}
+
 function getActionForKey(key: string): MediaAction | undefined {
   const action = state.keyToActionMap.get(key);
   if (action) {
@@ -87,11 +98,19 @@ export async function handleKeyDown(e: KeyboardEvent): Promise<void> {
   if (isEditableKeyEvent(e)) return;
   if (hasReservedModifier(e)) return;
 
-  const key = getKeyString(e);
+  let key = getKeyString(e);
   const keyTarget = e.composedPath()[0];
   if (isControlValueKey(keyTarget, key)) return;
 
-  const action = getActionForKey(key);
+  // A binding to the typed character itself wins over the physical key.
+  let action = getActionForKey(key);
+  if (!action) {
+    const fallbackKey = getPhysicalLetterFallback(e);
+    if (fallbackKey) {
+      key = fallbackKey;
+      action = getActionForKey(key);
+    }
+  }
   if (!action) return;
 
   // Only take the key from the page when it can do something. Otherwise pages
