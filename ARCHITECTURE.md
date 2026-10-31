@@ -41,7 +41,7 @@ Every file under `src/` is listed here; `tests/unit/docs/docs-consistency.test.t
 | `src/content.ts`                 | Entry point. Registers document listeners and re-exports a small API used by tests.                           |
 | `src/content/state.ts`           | The only shared mutable state: settings, key map, last-interacted and last-actioned media.                    |
 | `src/content/constants.ts`       | `postMessage` types, cross-frame timeouts and budgets, extension-owned DOM attribute names.                   |
-| `src/content/keyboard.ts`        | `keydown` handling: theater `Esc`, enabled/site-policy/editable/modifier guards, key-to-action lookup.        |
+| `src/content/keyboard.ts`        | `keydown` handling: theater `Esc`, enabled/site/editable/modifier guards, key lookup, non-Latin fallback.     |
 | `src/content/dispatch.ts`        | Chooses which frame executes an action; handles all incoming frame messages.                                  |
 | `src/content/frame-messaging.ts` | The cross-frame protocol: score requests, execute routing, site-policy propagation, theater grants.           |
 | `src/content/media-discovery.ts` | Finds media and iframes, including inside open shadow roots; ambient-media heuristic.                         |

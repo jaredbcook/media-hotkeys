@@ -459,6 +459,89 @@ describe("keyboard shortcut routing", () => {
   });
 });
 
+describe("letter hotkeys on non-Latin layouts", () => {
+  it.each([
+    ["Cyrillic", "л", "KeyK"],
+    ["shifted Cyrillic", "Л", "KeyK"],
+    ["Greek", "κ", "KeyK"],
+    ["Hebrew", "ל", "KeyK"],
+  ])("matches a %s letter by its physical key", async (_layout, key, code) => {
+    const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
+
+    await dispatchMappedKey(key, { code, cancelable: true });
+
+    expect(playSpy).toHaveBeenCalled();
+  });
+
+  it("prefers a binding to the typed non-Latin character over the physical key", async () => {
+    const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    video.muted = false;
+    const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
+    const settings = structuredClone(DEFAULT_SETTINGS);
+    settings.quickSettings.actionKeyBindings.toggleMute.keys = ["м", "m"];
+    setSettingsForTests(settings);
+
+    await dispatchMappedKey("м", { code: "KeyK" });
+
+    expect(video.muted).toBe(true);
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it("keeps matching Latin layouts such as Dvorak and AZERTY on the typed character", async () => {
+    const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
+
+    // Dvorak types `x` on the physical K key, and AZERTY types `q` on the
+    // physical A key. Neither may fall back to the physical position.
+    await dispatchMappedKey("x", { code: "KeyK" });
+    await dispatchMappedKey("q", { code: "KeyA" });
+    expect(playSpy).not.toHaveBeenCalled();
+
+    // Dvorak types `k` on the physical V key.
+    await dispatchMappedKey("k", { code: "KeyV" });
+    expect(playSpy).toHaveBeenCalledOnce();
+  });
+
+  it("does not fall back for accented Latin letters", async () => {
+    const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
+
+    await dispatchMappedKey("é", { code: "KeyK" });
+
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not fall back for non-letter characters or non-letter physical keys", async () => {
+    const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
+
+    await dispatchMappedKey("№", { code: "KeyK" });
+    await dispatchMappedKey("ж", { code: "Semicolon" });
+    await dispatchMappedKey("л");
+
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it("still ignores a non-Latin letter pressed with Ctrl", async () => {
+    const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    const playSpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
+    const event = new KeyboardEvent("keydown", {
+      key: "л",
+      code: "KeyK",
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+
+    document.dispatchEvent(event);
+    await Promise.resolve();
+
+    expect(playSpy).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
+});
+
 describe("playable placeholder activation", () => {
   it("clicks a Skool-like placeholder and plays injected paused media", async () => {
     const video = document.createElement("video");
