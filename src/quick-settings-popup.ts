@@ -329,17 +329,23 @@ function isSiteDisabledByCheckbox(patterns: SiteControlPatterns): boolean {
 }
 
 function hasSectionCheckbox(patterns: SiteControlPatterns): boolean {
-  return patterns.sectionPattern !== patterns.hostPattern && isSiteDisabledByCheckbox(patterns);
+  return patterns.sectionPattern !== patterns.hostPattern;
 }
 
-function isSectionEnabledByCheckbox(patterns: SiteControlPatterns): boolean {
+/** The section checkbox disables the section, or re-enables it once the whole domain is disabled. */
+function getSectionCheckboxPolicy(patterns: SiteControlPatterns): SitePolicy["policy"] {
+  return isSiteDisabledByCheckbox(patterns) ? "enabled" : "disabled";
+}
+
+function isSectionCheckboxChecked(patterns: SiteControlPatterns): boolean {
   return (
-    hasSectionCheckbox(patterns) && findSitePolicy(patterns.sectionPattern)?.policy === "enabled"
+    hasSectionCheckbox(patterns) &&
+    findSitePolicy(patterns.sectionPattern)?.policy === getSectionCheckboxPolicy(patterns)
   );
 }
 
 /**
- * The checkboxes show only the domain rule and the section override. When a different rule decides
+ * The checkboxes show only the domain rule and the first-path-segment rule. When a different rule decides
  * the current page (for example a deeper path), say which one so the checkboxes don't mislead.
  */
 function getOtherMatchingPolicy(patterns: SiteControlPatterns): SitePolicy | undefined {
@@ -355,11 +361,28 @@ function getOtherMatchingPolicy(patterns: SiteControlPatterns): SitePolicy | und
     return undefined;
   }
 
-  if (matchingPolicy.pattern === patterns.sectionPattern && isSectionEnabledByCheckbox(patterns)) {
+  if (matchingPolicy.pattern === patterns.sectionPattern && isSectionCheckboxChecked(patterns)) {
     return undefined;
   }
 
   return matchingPolicy;
+}
+
+/**
+ * The key bindings are hidden whenever a "Disable on ..." checkbox is checked for this page, unless a
+ * checked "Enable on <section>" override re-enables it.
+ */
+function isDisabledByCheckbox(patterns: SiteControlPatterns | undefined): boolean {
+  if (!currentSettings.quickSettings.hotkeysEnabled) {
+    return true;
+  }
+
+  if (!patterns) {
+    return false;
+  }
+
+  // The section checkbox is a Disable when the domain is enabled and an Enable (override) when not.
+  return isSiteDisabledByCheckbox(patterns) !== isSectionCheckboxChecked(patterns);
 }
 
 function renderSiteControls(): void {
@@ -368,13 +391,18 @@ function renderSiteControls(): void {
   if (disableEverywhere) {
     disableEverywhere.checked = !enabled;
   }
-  setDisplayed(getElement("key-bindings-section"), enabled);
+  const bindingsHidden = isDisabledByCheckbox(siteControlPatterns);
+  if (bindingsHidden) {
+    // The bindings are about to be hidden, so a pending key capture must not keep listening.
+    clearActiveKeyCapture();
+  }
+  setDisplayed(getElement("key-bindings-section"), !bindingsHidden);
 
   // Site rules don't matter while the extension is disabled everywhere.
   const patterns = enabled ? siteControlPatterns : undefined;
   setDisplayed(getElement("disable-on-site-field"), patterns !== undefined);
   if (!patterns) {
-    setDisplayed(getElement("enable-on-section-field"), false);
+    setDisplayed(getElement("site-section-field"), false);
     setDisplayed(getElement("site-rule-row"), false);
     return;
   }
@@ -388,14 +416,15 @@ function renderSiteControls(): void {
     disableOnSiteLabel.textContent = `Disable on ${patterns.hostPattern}`;
   }
 
-  const enableOnSection = getElement<HTMLInputElement>("enable-on-section");
-  const enableOnSectionLabel = getElement<HTMLLabelElement>("enable-on-section-label");
-  setDisplayed(getElement("enable-on-section-field"), hasSectionCheckbox(patterns));
-  if (enableOnSection) {
-    enableOnSection.checked = isSectionEnabledByCheckbox(patterns);
+  const siteSection = getElement<HTMLInputElement>("site-section");
+  const siteSectionLabel = getElement<HTMLLabelElement>("site-section-label");
+  setDisplayed(getElement("site-section-field"), hasSectionCheckbox(patterns));
+  if (siteSection) {
+    siteSection.checked = isSectionCheckboxChecked(patterns);
   }
-  if (enableOnSectionLabel) {
-    enableOnSectionLabel.textContent = `Enable on ${patterns.sectionPattern}`;
+  if (siteSectionLabel) {
+    const verb = getSectionCheckboxPolicy(patterns) === "enabled" ? "Enable" : "Disable";
+    siteSectionLabel.textContent = `${verb} on ${patterns.sectionPattern}`;
   }
 
   const otherPolicy = getOtherMatchingPolicy(patterns);
@@ -425,7 +454,7 @@ function handleDisableOnSiteChange(checked: boolean): void {
   );
 }
 
-function handleEnableOnSectionChange(checked: boolean): void {
+function handleSiteSectionChange(checked: boolean): void {
   const patterns = siteControlPatterns;
   if (!patterns) {
     return;
@@ -435,7 +464,7 @@ function handleEnableOnSectionChange(checked: boolean): void {
     checked
       ? addOrReplaceSitePolicy({
           pattern: patterns.sectionPattern,
-          policy: "enabled",
+          policy: getSectionCheckboxPolicy(patterns),
           embedsPolicy: "inherit",
         })
       : withoutSitePolicyPattern(
@@ -446,10 +475,6 @@ function handleEnableOnSectionChange(checked: boolean): void {
 }
 
 function handleDisableEverywhereChange(checked: boolean): void {
-  if (checked) {
-    // The bindings are about to be hidden, so a pending key capture must not keep listening.
-    clearActiveKeyCapture();
-  }
   const nextSettings = structuredClone(currentSettings);
   nextSettings.quickSettings.hotkeysEnabled = !checked;
   void persistSettings(nextSettings);
@@ -562,8 +587,8 @@ async function init(): Promise<void> {
   getElement<HTMLInputElement>("disable-on-site")?.addEventListener("change", (event) => {
     handleDisableOnSiteChange((event.currentTarget as HTMLInputElement).checked);
   });
-  getElement<HTMLInputElement>("enable-on-section")?.addEventListener("change", (event) => {
-    handleEnableOnSectionChange((event.currentTarget as HTMLInputElement).checked);
+  getElement<HTMLInputElement>("site-section")?.addEventListener("change", (event) => {
+    handleSiteSectionChange((event.currentTarget as HTMLInputElement).checked);
   });
   getElement("site-edit-rule-button")?.addEventListener("click", () => {
     if (siteControlPatterns) {

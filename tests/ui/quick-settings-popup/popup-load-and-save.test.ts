@@ -53,6 +53,11 @@ const DOMAIN_DISABLED: SitePolicy = {
   policy: "disabled",
   embedsPolicy: "inherit",
 };
+const SECTION_DISABLED: SitePolicy = {
+  pattern: "youtube.com/shorts",
+  policy: "disabled",
+  embedsPolicy: "inherit",
+};
 const SECTION_ENABLED: SitePolicy = {
   pattern: "youtube.com/shorts",
   policy: "enabled",
@@ -122,20 +127,20 @@ describe("quick settings popup: load and save", () => {
     await flush();
 
     expect(isDisplayed("disable-on-site-field")).toBe(true);
-    expect(isDisplayed("enable-on-section-field")).toBe(true);
+    expect(isDisplayed("site-section-field")).toBe(true);
 
     setCheckbox("disable-everywhere", true);
     await flush();
 
     expect(isDisplayed("disable-on-site-field")).toBe(false);
-    expect(isDisplayed("enable-on-section-field")).toBe(false);
+    expect(isDisplayed("site-section-field")).toBe(false);
     expect(isDisplayed("site-rule-row")).toBe(false);
 
     setCheckbox("disable-everywhere", false);
     await flush();
 
     expect(isDisplayed("disable-on-site-field")).toBe(true);
-    expect(isDisplayed("enable-on-section-field")).toBe(true);
+    expect(isDisplayed("site-section-field")).toBe(true);
   });
 
   it("stops listening for a new key when the extension is disabled everywhere", async () => {
@@ -157,22 +162,23 @@ describe("quick settings popup: load and save", () => {
   });
 
   it("disables the current domain from the checkbox", async () => {
-    await loadQuickSettingsModule(DEFAULT_SETTINGS, "https://www.youtube.com/watch?v=1");
+    await loadQuickSettingsModule(DEFAULT_SETTINGS, "https://www.youtube.com/watch/1");
     await flush();
 
     expect(isDisplayed("disable-on-site-field")).toBe(true);
     expect(text("disable-on-site-label")).toBe("Disable on youtube.com");
     expect(checkbox("disable-on-site").checked).toBe(false);
-    expect(isDisplayed("enable-on-section-field")).toBe(false);
+    expect(isDisplayed("site-section-field")).toBe(true);
+    expect(text("site-section-label")).toBe("Disable on youtube.com/watch");
     expect(isDisplayed("site-rule-row")).toBe(false);
 
     setCheckbox("disable-on-site", true);
     await flush();
 
     expectSavedPolicies([DOMAIN_DISABLED]);
-    expect(isDisplayed("enable-on-section-field")).toBe(true);
-    expect(text("enable-on-section-label")).toBe("Enable on youtube.com/watch");
-    expect(checkbox("enable-on-section").checked).toBe(false);
+    expect(isDisplayed("site-section-field")).toBe(true);
+    expect(text("site-section-label")).toBe("Enable on youtube.com/watch");
+    expect(checkbox("site-section").checked).toBe(false);
     expect(text("announcements")).toBe("");
     expect(tabsCreateMock).not.toHaveBeenCalled();
   });
@@ -180,7 +186,7 @@ describe("quick settings popup: load and save", () => {
   it("re-enables the current domain when the checkbox is cleared", async () => {
     await loadQuickSettingsModule(
       settingsWithPolicies([DOMAIN_DISABLED, SECTION_ENABLED]),
-      "https://www.youtube.com/watch?v=1",
+      "https://www.youtube.com/watch/1",
     );
     await flush();
 
@@ -190,7 +196,9 @@ describe("quick settings popup: load and save", () => {
     await flush();
 
     expectSavedPolicies([SECTION_ENABLED]);
-    expect(isDisplayed("enable-on-section-field")).toBe(false);
+    expect(isDisplayed("site-section-field")).toBe(true);
+    expect(text("site-section-label")).toBe("Disable on youtube.com/watch");
+    expect(checkbox("site-section").checked).toBe(false);
   });
 
   it("checks both boxes for rules added in advanced settings", async () => {
@@ -201,10 +209,50 @@ describe("quick settings popup: load and save", () => {
     await flush();
 
     expect(checkbox("disable-on-site").checked).toBe(true);
-    expect(isDisplayed("enable-on-section-field")).toBe(true);
-    expect(text("enable-on-section-label")).toBe("Enable on youtube.com/shorts");
-    expect(checkbox("enable-on-section").checked).toBe(true);
+    expect(isDisplayed("site-section-field")).toBe(true);
+    expect(text("site-section-label")).toBe("Enable on youtube.com/shorts");
+    expect(checkbox("site-section").checked).toBe(true);
     expect(isDisplayed("site-rule-row")).toBe(false);
+  });
+
+  it("shows a Disable checkbox for the first path segment while the domain is enabled", async () => {
+    await loadQuickSettingsModule(DEFAULT_SETTINGS, "https://www.youtube.com/shorts/abc");
+    await flush();
+
+    expect(isDisplayed("site-section-field")).toBe(true);
+    expect(text("site-section-label")).toBe("Disable on youtube.com/shorts");
+    expect(checkbox("site-section").checked).toBe(false);
+
+    setCheckbox("site-section", true);
+    await flush();
+
+    expectSavedPolicies([SECTION_DISABLED]);
+    expect(checkbox("site-section").checked).toBe(true);
+    expect(isDisplayed("site-rule-row")).toBe(false);
+
+    setCheckbox("site-section", false);
+    await flush();
+
+    expectSavedPolicies([]);
+    expect(text("announcements")).toBe("");
+  });
+
+  it("switches the first path segment checkbox between Disable and Enable with the domain", async () => {
+    await loadQuickSettingsModule(DEFAULT_SETTINGS, "https://www.youtube.com/shorts/abc");
+    await flush();
+
+    expect(text("site-section-label")).toBe("Disable on youtube.com/shorts");
+
+    setCheckbox("disable-on-site", true);
+    await flush();
+
+    expect(text("site-section-label")).toBe("Enable on youtube.com/shorts");
+    expect(checkbox("site-section").checked).toBe(false);
+
+    setCheckbox("disable-on-site", false);
+    await flush();
+
+    expect(text("site-section-label")).toBe("Disable on youtube.com/shorts");
   });
 
   it("adds and removes a section override from the checkbox", async () => {
@@ -214,16 +262,94 @@ describe("quick settings popup: load and save", () => {
     );
     await flush();
 
-    setCheckbox("enable-on-section", true);
+    setCheckbox("site-section", true);
     await flush();
 
     expectSavedPolicies([DOMAIN_DISABLED, SECTION_ENABLED]);
 
-    setCheckbox("enable-on-section", false);
+    setCheckbox("site-section", false);
     await flush();
 
     expectSavedPolicies([DOMAIN_DISABLED]);
     expect(text("announcements")).toBe("");
+  });
+
+  it("hides the key bindings while a Disable checkbox is checked for the page", async () => {
+    await loadQuickSettingsModule(DEFAULT_SETTINGS, "https://www.youtube.com/shorts/abc");
+    await flush();
+
+    expect(isDisplayed("key-bindings-section")).toBe(true);
+
+    setCheckbox("site-section", true);
+    await flush();
+    expect(isDisplayed("key-bindings-section")).toBe(false);
+
+    setCheckbox("site-section", false);
+    await flush();
+    expect(isDisplayed("key-bindings-section")).toBe(true);
+
+    setCheckbox("disable-on-site", true);
+    await flush();
+    expect(isDisplayed("key-bindings-section")).toBe(false);
+
+    setCheckbox("disable-on-site", false);
+    await flush();
+    expect(isDisplayed("key-bindings-section")).toBe(true);
+  });
+
+  it("shows the key bindings on a section re-enabled within a disabled domain", async () => {
+    await loadQuickSettingsModule(
+      settingsWithPolicies([DOMAIN_DISABLED, SECTION_ENABLED]),
+      "https://www.youtube.com/shorts/abc",
+    );
+    await flush();
+
+    expect(isDisplayed("key-bindings-section")).toBe(true);
+
+    setCheckbox("site-section", false);
+    await flush();
+    expect(isDisplayed("key-bindings-section")).toBe(false);
+
+    setCheckbox("site-section", true);
+    await flush();
+    expect(isDisplayed("key-bindings-section")).toBe(true);
+  });
+
+  it("keeps the key bindings when a Disable checkbox is checked for another section", async () => {
+    await loadQuickSettingsModule(
+      settingsWithPolicies([SECTION_DISABLED]),
+      "https://www.youtube.com/watch/1",
+    );
+    await flush();
+
+    expect(isDisplayed("key-bindings-section")).toBe(true);
+  });
+
+  it("stops listening for a new key when a site checkbox hides the key bindings", async () => {
+    await loadQuickSettingsModule(DEFAULT_SETTINGS, "https://www.youtube.com/watch/1");
+    await flush();
+
+    const addButton = findRowByLabel("Play/Pause").querySelector(
+      ".add-key-button",
+    ) as HTMLButtonElement;
+    addButton.click();
+    setCheckbox("disable-on-site", true);
+    await flush();
+    saveSettingsMock.mockClear();
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    await flush();
+
+    expect(saveSettingsMock).not.toHaveBeenCalled();
+    expect(addButton.classList.contains("listening")).toBe(false);
+  });
+
+  it("hides the section checkbox when the first path segment has no trailing slash", async () => {
+    await loadQuickSettingsModule(DEFAULT_SETTINGS, "https://www.youtube.com/watch?v=abc123");
+    await flush();
+
+    expect(isDisplayed("disable-on-site-field")).toBe(true);
+    expect(isDisplayed("site-section-field")).toBe(false);
   });
 
   it("hides the section checkbox on the domain root", async () => {
@@ -231,13 +357,13 @@ describe("quick settings popup: load and save", () => {
     await flush();
 
     expect(checkbox("disable-on-site").checked).toBe(true);
-    expect(isDisplayed("enable-on-section-field")).toBe(false);
+    expect(isDisplayed("site-section-field")).toBe(false);
   });
 
   it("names a deeper rule that decides the page and routes Edit site rule to it", async () => {
     await loadQuickSettingsModule(
       settingsWithPolicies([
-        { pattern: "youtube.com/shorts", policy: "disabled", embedsPolicy: "inherit" },
+        { pattern: "youtube.com/shorts/abc", policy: "disabled", embedsPolicy: "inherit" },
       ]),
       "https://www.youtube.com/shorts/abc",
     );
@@ -245,7 +371,7 @@ describe("quick settings popup: load and save", () => {
 
     expect(checkbox("disable-on-site").checked).toBe(false);
     expect(isDisplayed("site-rule-row")).toBe(true);
-    expect(text("site-control-status")).toBe("Disabled here by rule: youtube.com/shorts");
+    expect(text("site-control-status")).toBe("Disabled here by rule: youtube.com/shorts/abc");
 
     (document.getElementById("site-edit-rule-button") as HTMLButtonElement).click();
     await flush();
@@ -261,7 +387,7 @@ describe("quick settings popup: load and save", () => {
 
     expect(isDisplayed("site-controls-container")).toBe(true);
     expect(isDisplayed("disable-on-site-field")).toBe(false);
-    expect(isDisplayed("enable-on-section-field")).toBe(false);
+    expect(isDisplayed("site-section-field")).toBe(false);
     expect(isDisplayed("site-rule-row")).toBe(false);
   });
 });

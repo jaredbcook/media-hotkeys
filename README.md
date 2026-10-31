@@ -43,7 +43,7 @@ Holding a key repeats skip, volume, and speed changes. Toggles such as play/paus
 
 ## Settings
 
-Click the toolbar icon for **Quick Settings**: disable the extension on all pages or on the current domain (and re-enable it on the current section, such as `youtube.com/shorts`), and rebind any action. **Advanced Settings** (the gear icon in Quick Settings, or the extension's Options page) holds everything else, plus the installed version and a link to report an issue:
+Click the toolbar icon for **Quick Settings**: disable the extension on all pages, on the current domain, or on the page's first path segment such as `youtube.com/shorts` (which becomes an enable checkbox once the domain is disabled); the key bindings are hidden while a disable checkbox applies to the current page, unless the section is re-enabled, and rebind any action. **Advanced Settings** (the gear icon in Quick Settings, or the extension's Options page) holds everything else, plus the installed version and a link to report an issue:
 
 | Setting                          | Default        |
 | -------------------------------- | -------------- |

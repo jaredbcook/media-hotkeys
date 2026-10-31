@@ -62,9 +62,9 @@ export function renderQuickSettingsDom(): void {
         <input type="checkbox" id="disable-on-site" />
         <label for="disable-on-site" id="disable-on-site-label"></label>
       </div>
-      <div id="enable-on-section-field" style="display: none">
-        <input type="checkbox" id="enable-on-section" />
-        <label for="enable-on-section" id="enable-on-section-label"></label>
+      <div id="site-section-field" style="display: none">
+        <input type="checkbox" id="site-section" />
+        <label for="site-section" id="site-section-label"></label>
       </div>
       <div id="site-rule-row" style="display: none">
         <p id="site-control-status"></p>

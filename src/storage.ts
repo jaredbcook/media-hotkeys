@@ -366,12 +366,9 @@ export function getSitePolicySectionPatternForUrl(url: string): string | null {
     return null;
   }
 
-  const pathSegments = normalizePath(parsedUrl.pathname).split("/").filter(Boolean);
-  if (pathSegments.length === 0) {
-    return domain;
-  }
-
-  return `${domain}/${pathSegments[0]}`;
+  // Only a first segment followed by a slash is a section (/shorts/abc); /watch?v=abc is a page.
+  const firstSegment = /^\/+([^/]+)\//.exec(parsedUrl.pathname)?.[1];
+  return firstSegment ? `${domain}/${firstSegment}` : domain;
 }
 
 export function findMatchingDisabledUrlPattern(
