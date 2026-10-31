@@ -1,4 +1,4 @@
-import { type MediaAction, normalizeHotkeyKey } from "../storage.js";
+import { type MediaAction, hasReservedModifier, normalizeHotkeyKey } from "../storage.js";
 import { isGlobalAction } from "./actions.js";
 import { dispatchMediaAction, handleGlobalAction } from "./dispatch.js";
 import { debugLog, isControlValueKey, isWithinEditableElement } from "./dom-utils.js";
@@ -62,15 +62,6 @@ function isRepeatableAction(action: MediaAction): boolean {
     action === "speedUp" ||
     action === "slowDown"
   );
-}
-
-// Layouts such as German and French type characters like `[` and `]` with
-// AltGr, which Windows reports as Ctrl+Alt. Those keys are plain characters,
-// not shortcuts.
-function hasReservedModifier(e: KeyboardEvent): boolean {
-  if (e.metaKey) return true;
-  if (e.getModifierState("AltGraph")) return false;
-  return e.altKey || e.ctrlKey;
 }
 
 export async function handleKeyDown(e: KeyboardEvent): Promise<void> {

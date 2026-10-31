@@ -651,6 +651,15 @@ export function normalizeHotkeyKey(key: string): string {
   return /^[a-z]$/i.test(key) ? key.toLowerCase() : key;
 }
 
+// Layouts such as German and French type characters like `[` and `]` with
+// AltGr, which Windows reports as Ctrl+Alt. Those keys are plain characters,
+// not shortcuts.
+export function hasReservedModifier(e: KeyboardEvent): boolean {
+  if (e.metaKey) return true;
+  if (e.getModifierState("AltGraph")) return false;
+  return e.altKey || e.ctrlKey;
+}
+
 export function buildKeyToActionMap(
   actionKeyBindings: Record<ConfigurableMediaAction, ActionConfig>,
 ): Map<string, ConfigurableMediaAction> {

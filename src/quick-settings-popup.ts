@@ -9,6 +9,7 @@ import {
   getDisabledSitePrefillForUrl,
   getSitePolicySectionPatternForUrl,
   getSettings,
+  hasReservedModifier,
   normalizeHotkeyKey,
   normalizeSitePolicies,
   saveSettings,
@@ -54,6 +55,45 @@ const KEY_ACCESSIBLE_LABELS: Record<string, string> = {
   ArrowLeft: "Left Arrow",
   ArrowRight: "Right Arrow",
 };
+
+/** Modifier keys pressed on their own: capture waits for the key they're held with. */
+const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "AltGraph", "Meta"]);
+
+/** Keys that never reach the content script as a usable hotkey, or break keyboard navigation. */
+const UNUSABLE_KEY_REASONS = new Map<string, string>([
+  ["Tab", "Tab can't be a hotkey because it moves keyboard focus."],
+  ["Enter", "Enter can't be a hotkey because it activates buttons and links."],
+  ["Dead", "Accent keys that combine with the next key can't be hotkeys."],
+  ["Process", "Keys typed through an input method can't be hotkeys."],
+  ["Unidentified", "The browser can't identify that key, so it can't be a hotkey."],
+  ["CapsLock", "Caps Lock can't be a hotkey."],
+  ["NumLock", "Num Lock can't be a hotkey."],
+  ["ScrollLock", "Scroll Lock can't be a hotkey."],
+  ["Fn", "Fn can't be a hotkey."],
+  ["FnLock", "Fn Lock can't be a hotkey."],
+  ["Hyper", "Hyper can't be a hotkey."],
+  ["Super", "Super can't be a hotkey."],
+  ["Symbol", "Symbol can't be a hotkey."],
+  ["SymbolLock", "Symbol Lock can't be a hotkey."],
+  ["Compose", "Compose can't be a hotkey."],
+  ["ContextMenu", "The context menu key can't be a hotkey."],
+]);
+
+/**
+ * Why a captured key can't be bound, or undefined if it can. Any single character is accepted, so letters
+ * typed on non-Latin layouts still bind.
+ */
+function getUnusableKeyReason(e: KeyboardEvent): string | undefined {
+  if (hasReservedModifier(e)) {
+    return "Hotkeys don't work while Ctrl, Alt, or Meta is held. Press the key on its own.";
+  }
+
+  if (e.isComposing) {
+    return UNUSABLE_KEY_REASONS.get("Process");
+  }
+
+  return UNUSABLE_KEY_REASONS.get(e.key);
+}
 
 let currentSettings: ExtensionSettings;
 let activeKeyCaptureCleanup: (() => void) | undefined;
@@ -517,7 +557,14 @@ function startKeyCapture(action: ConfigurableMediaAction, button: HTMLButtonElem
       return;
     }
 
-    if (["Shift", "Control", "Alt", "Meta"].includes(e.key)) {
+    if (MODIFIER_KEYS.has(e.key)) {
+      return;
+    }
+
+    const unusableKeyReason = getUnusableKeyReason(e);
+    if (unusableKeyReason) {
+      // Keep listening so the user can press a different key.
+      showAnnouncement(`${unusableKeyReason} Press another key, or Escape to cancel.`, "error");
       return;
     }
 
