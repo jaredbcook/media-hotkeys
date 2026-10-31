@@ -9,14 +9,7 @@
   </head>
   <body class="popup-page">
     <div class="row row--space-between">
-      <h1>Media Hotkeys</h1>
-      <div class="settings-field">
-        <input type="checkbox" id="hotkeysEnabled" />
-        <label for="hotkeysEnabled">
-          <span class="screen-reader">Extension</span>
-          Enabled
-        </label>
-      </div>
+      <h1>Media Hotkeys <span id="extension-version" class="version"></span></h1>
       <button id="advanced-settings" type="button">
         <span aria-hidden="true" class="icon">
           <svg
@@ -36,8 +29,30 @@
       </button>
     </div>
 
-    <section class="settings-section" aria-labelledby="bindings-title">
-      <h2 id="bindings-title">Key Bindings</h2>
+    <div class="site-controls" id="site-controls-container">
+      <div class="settings-field">
+        <input type="checkbox" id="disable-everywhere" />
+        <label for="disable-everywhere">Disable on all pages</label>
+      </div>
+      <div class="settings-field" id="disable-on-site-field" style="display: none">
+        <input type="checkbox" id="disable-on-site" />
+        <label for="disable-on-site" id="disable-on-site-label"></label>
+      </div>
+      <div class="settings-field" id="site-section-field" style="display: none">
+        <input type="checkbox" id="site-section" />
+        <label for="site-section" id="site-section-label"></label>
+      </div>
+      <div class="row" id="site-rule-row" style="display: none">
+        <p id="site-control-status" class="site-control-status"></p>
+        <button id="site-edit-rule-button" class="align-right" type="button">Edit site rule</button>
+      </div>
+    </div>
+
+    <section class="settings-section" id="key-bindings-section" aria-labelledby="bindings-title">
+      <div class="row row--space-between">
+        <h2 id="bindings-title">Key Bindings</h2>
+        <button id="reset" type="button">Restore Defaults</button>
+      </div>
       <table id="actions-table">
         <caption class="screen-reader">
           Media actions and their associated hotkeys.
@@ -45,7 +60,7 @@
         <thead>
           <tr>
             <th scope="col">Action</th>
-            <th scope="col">Hotkeys</th>
+            <th scope="col">Keys</th>
           </tr>
         </thead>
         <tbody id="actions-body">
@@ -53,16 +68,6 @@
         </tbody>
       </table>
     </section>
-
-    <div class="site-controls" id="site-controls-container" style="display: none">
-      <p id="site-control-status" class="site-control-status"></p>
-      <button id="site-control-button" type="button"></button>
-      <button id="site-edit-rule-button" type="button">Edit site rule</button>
-    </div>
-
-    <div class="button-group button-group">
-      <button id="reset" type="button">Restore Defaults</button>
-    </div>
 
     <div id="announcements"></div>
     <div

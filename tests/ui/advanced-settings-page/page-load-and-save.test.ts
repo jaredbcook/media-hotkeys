@@ -15,6 +15,18 @@ afterEach(() => {
 });
 
 describe("advanced settings page: load and save", () => {
+  it("shows the version and links to a bug report that includes it", async () => {
+    await loadAdvancedSettingsModule();
+
+    expect(document.getElementById("extension-version")?.textContent).toBe("v1.2.3");
+    const link = new URL((document.getElementById("report-issue-link") as HTMLAnchorElement).href);
+    expect(link.origin + link.pathname).toBe(
+      "https://github.com/jaredbcook/media-hotkeys/issues/new",
+    );
+    expect(link.searchParams.get("template")).toBe("bug.md");
+    expect(link.searchParams.get("body")).toContain("Media Hotkeys 1.2.3");
+  });
+
   it("loads advanced settings into the form", async () => {
     const settings = structuredClone(DEFAULT_SETTINGS);
     settings.advancedSettings.volumeStep = 0.1;

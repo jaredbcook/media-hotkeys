@@ -309,6 +309,13 @@ describe("settings storage", () => {
     expect(getSitePolicySectionPatternForUrl("https://www.youtube.com/shorts/abc")).toBe(
       "youtube.com/shorts",
     );
+    expect(getSitePolicySectionPatternForUrl("https://www.youtube.com/shorts/")).toBe(
+      "youtube.com/shorts",
+    );
+    expect(getSitePolicySectionPatternForUrl("https://www.youtube.com/watch?v=abc")).toBe(
+      "youtube.com",
+    );
+    expect(getSitePolicySectionPatternForUrl("https://www.youtube.com/")).toBe("youtube.com");
     expect(getDisabledSitePrefillForUrl("chrome://extensions")).toBeNull();
   });
 

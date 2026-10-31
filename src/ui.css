@@ -96,7 +96,7 @@ h1 {
 h2 {
   font-size: var(--font-size-xl);
   font-weight: 500;
-  margin: 0 0 16px;
+  margin: 0 0 12px;
 }
 
 p {
@@ -210,8 +210,27 @@ button:hover svg {
   justify-content: space-between;
 }
 
-.row > h1 {
+.row > h1,
+.row > h2 {
   margin: 0;
+}
+
+.row .align-right {
+  margin-left: auto;
+}
+
+.settings-section > .row {
+  margin: 0 0 12px;
+}
+
+.version {
+  color: var(--text-color-secondary);
+  font-size: var(--font-size-base);
+  font-weight: 400;
+}
+
+a {
+  color: var(--button-primary-bg-color);
 }
 
 .popup-page > .row {
@@ -231,7 +250,7 @@ button:hover svg {
 .site-controls {
   display: grid;
   gap: 10px;
-  margin: 24px 0 0;
+  margin: 0;
 }
 
 .site-control-status {
@@ -304,7 +323,6 @@ body.options-page .settings-sections {
 
 .settings-section h2 {
   font-size: 1rem;
-  margin: 0 0 12px;
 }
 
 .settings-grid-single {
@@ -396,6 +414,11 @@ body.options-page .settings-sections {
 
 .delete-icon {
   display: flex;
+}
+
+.options-header {
+  flex-wrap: wrap;
+  margin: 0 0 16px;
 }
 
 .options-page table {

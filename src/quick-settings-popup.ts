@@ -60,6 +60,7 @@ let activeKeyCaptureCleanup: (() => void) | undefined;
 let pendingSave: Promise<void> = Promise.resolve();
 let activeBindingAnnouncement: HTMLDivElement | undefined;
 let bindingAnnouncementFrameId: number | undefined;
+let siteControlPatterns: SiteControlPatterns | undefined;
 
 const DISABLED_SITE_HIGHLIGHT_URL_PARAM = "highlightDisabledSiteUrl";
 
@@ -267,72 +268,42 @@ async function openAdvancedSettingsPage(params?: Record<string, string>): Promis
   window.close();
 }
 
-function setUnavailableSiteControls(): void {
-  const container = document.getElementById("site-controls-container");
-  if (container) {
-    container.style.display = "none";
+interface SiteControlPatterns {
+  activeTabUrl: string;
+  hostPattern: string;
+  sectionPattern: string;
+}
+
+function getSiteControlPatterns(activeTabUrl: string | null): SiteControlPatterns | undefined {
+  if (!activeTabUrl) {
+    return undefined;
+  }
+
+  const hostPattern = getDisabledSitePrefillForUrl(activeTabUrl);
+  const sectionPattern = getSitePolicySectionPatternForUrl(activeTabUrl);
+  if (!hostPattern || !sectionPattern) {
+    return undefined;
+  }
+
+  return { activeTabUrl, hostPattern, sectionPattern };
+}
+
+function getElement<T extends HTMLElement>(id: string): T | null {
+  return document.getElementById(id) as T | null;
+}
+
+function setDisplayed(element: HTMLElement | null, displayed: boolean): void {
+  if (element) {
+    element.style.display = displayed ? "" : "none";
   }
 }
 
-function resetSiteControlButton(): HTMLButtonElement | null {
-  const button = document.getElementById("site-control-button") as HTMLButtonElement | null;
-  if (!button) {
-    return null;
-  }
-
-  const nextButton = button.cloneNode() as HTMLButtonElement;
-  button.replaceWith(nextButton);
-  return nextButton;
-}
-
-function resetSiteEditButton(): HTMLButtonElement | null {
-  const button = document.getElementById("site-edit-rule-button") as HTMLButtonElement | null;
-  if (!button) {
-    return null;
-  }
-
-  const nextButton = button.cloneNode() as HTMLButtonElement;
-  button.replaceWith(nextButton);
-  return nextButton;
-}
-
-function getSiteControlStatus(): HTMLParagraphElement | null {
-  return document.getElementById("site-control-status") as HTMLParagraphElement | null;
-}
-
-function setSiteControlStatus(message: string): void {
-  const status = getSiteControlStatus();
-  if (status) {
-    status.textContent = message;
-  }
+function findSitePolicy(pattern: string): SitePolicy | undefined {
+  return currentSettings.siteSettings.sitePolicies.find((policy) => policy.pattern === pattern);
 }
 
 function withoutSitePolicyPattern(policies: SitePolicy[], pattern: string): SitePolicy[] {
   return policies.filter((policy) => policy.pattern !== pattern);
-}
-
-function hasBroaderDisabledPolicy(activeTabUrl: string, excludedPattern: string): boolean {
-  return (
-    findMatchingSitePolicy(activeTabUrl, {
-      ...currentSettings.siteSettings,
-      sitePolicies: currentSettings.siteSettings.sitePolicies.filter(
-        (policy) => policy.pattern !== excludedPattern,
-      ),
-    })?.policy === "disabled"
-  );
-}
-
-async function persistSitePolicies(
-  sitePolicies: SitePolicy[],
-  successMessage: string,
-): Promise<void> {
-  const nextSettings = structuredClone(currentSettings);
-  nextSettings.siteSettings.sitePolicies = normalizeSitePolicies(sitePolicies);
-  nextSettings.siteSettings.disabledUrlPatterns = nextSettings.siteSettings.sitePolicies
-    .filter((policy) => policy.policy === "disabled")
-    .map((policy) => policy.pattern);
-  await persistSettings(nextSettings, { successMessage });
-  void renderSiteControls();
 }
 
 function addOrReplaceSitePolicy(policy: SitePolicy): SitePolicy[] {
@@ -342,121 +313,178 @@ function addOrReplaceSitePolicy(policy: SitePolicy): SitePolicy[] {
   ];
 }
 
-async function renderSiteControls(): Promise<void> {
-  const container = document.getElementById("site-controls-container");
-  const button = resetSiteControlButton();
-  const editButton = resetSiteEditButton();
-  if (!container || !button) {
+async function persistSitePolicies(sitePolicies: SitePolicy[]): Promise<void> {
+  const nextSettings = structuredClone(currentSettings);
+  nextSettings.siteSettings.sitePolicies = normalizeSitePolicies(sitePolicies);
+  nextSettings.siteSettings.disabledUrlPatterns = nextSettings.siteSettings.sitePolicies
+    .filter((policy) => policy.policy === "disabled")
+    .map((policy) => policy.pattern);
+  const saved = persistSettings(nextSettings);
+  renderSiteControls();
+  await saved;
+}
+
+function isSiteDisabledByCheckbox(patterns: SiteControlPatterns): boolean {
+  return findSitePolicy(patterns.hostPattern)?.policy === "disabled";
+}
+
+function hasSectionCheckbox(patterns: SiteControlPatterns): boolean {
+  return patterns.sectionPattern !== patterns.hostPattern;
+}
+
+/** The section checkbox disables the section, or re-enables it once the whole domain is disabled. */
+function getSectionCheckboxPolicy(patterns: SiteControlPatterns): SitePolicy["policy"] {
+  return isSiteDisabledByCheckbox(patterns) ? "enabled" : "disabled";
+}
+
+function isSectionCheckboxChecked(patterns: SiteControlPatterns): boolean {
+  return (
+    hasSectionCheckbox(patterns) &&
+    findSitePolicy(patterns.sectionPattern)?.policy === getSectionCheckboxPolicy(patterns)
+  );
+}
+
+/**
+ * The checkboxes show only the domain rule and the first-path-segment rule. When a different rule decides
+ * the current page (for example a deeper path), say which one so the checkboxes don't mislead.
+ */
+function getOtherMatchingPolicy(patterns: SiteControlPatterns): SitePolicy | undefined {
+  const matchingPolicy = findMatchingSitePolicy(
+    patterns.activeTabUrl,
+    currentSettings.siteSettings,
+  );
+  if (!matchingPolicy) {
+    return undefined;
+  }
+
+  if (matchingPolicy.pattern === patterns.hostPattern && matchingPolicy.policy === "disabled") {
+    return undefined;
+  }
+
+  if (matchingPolicy.pattern === patterns.sectionPattern && isSectionCheckboxChecked(patterns)) {
+    return undefined;
+  }
+
+  return matchingPolicy;
+}
+
+/**
+ * The key bindings are hidden whenever a "Disable on ..." checkbox is checked for this page, unless a
+ * checked "Enable on <section>" override re-enables it.
+ */
+function isDisabledByCheckbox(patterns: SiteControlPatterns | undefined): boolean {
+  if (!currentSettings.quickSettings.hotkeysEnabled) {
+    return true;
+  }
+
+  if (!patterns) {
+    return false;
+  }
+
+  // The section checkbox is a Disable when the domain is enabled and an Enable (override) when not.
+  return isSiteDisabledByCheckbox(patterns) !== isSectionCheckboxChecked(patterns);
+}
+
+function renderSiteControls(): void {
+  const enabled = currentSettings.quickSettings.hotkeysEnabled;
+  const disableEverywhere = getElement<HTMLInputElement>("disable-everywhere");
+  if (disableEverywhere) {
+    disableEverywhere.checked = !enabled;
+  }
+  const bindingsHidden = isDisabledByCheckbox(siteControlPatterns);
+  if (bindingsHidden) {
+    // The bindings are about to be hidden, so a pending key capture must not keep listening.
+    clearActiveKeyCapture();
+  }
+  setDisplayed(getElement("key-bindings-section"), !bindingsHidden);
+
+  // Site rules don't matter while the extension is disabled everywhere.
+  const patterns = enabled ? siteControlPatterns : undefined;
+  setDisplayed(getElement("disable-on-site-field"), patterns !== undefined);
+  if (!patterns) {
+    setDisplayed(getElement("site-section-field"), false);
+    setDisplayed(getElement("site-rule-row"), false);
     return;
   }
-  const status = getSiteControlStatus();
+
+  const disableOnSite = getElement<HTMLInputElement>("disable-on-site");
+  const disableOnSiteLabel = getElement<HTMLLabelElement>("disable-on-site-label");
+  if (disableOnSite) {
+    disableOnSite.checked = isSiteDisabledByCheckbox(patterns);
+  }
+  if (disableOnSiteLabel) {
+    disableOnSiteLabel.textContent = `Disable on ${patterns.hostPattern}`;
+  }
+
+  const siteSection = getElement<HTMLInputElement>("site-section");
+  const siteSectionLabel = getElement<HTMLLabelElement>("site-section-label");
+  setDisplayed(getElement("site-section-field"), hasSectionCheckbox(patterns));
+  if (siteSection) {
+    siteSection.checked = isSectionCheckboxChecked(patterns);
+  }
+  if (siteSectionLabel) {
+    const verb = getSectionCheckboxPolicy(patterns) === "enabled" ? "Enable" : "Disable";
+    siteSectionLabel.textContent = `${verb} on ${patterns.sectionPattern}`;
+  }
+
+  const otherPolicy = getOtherMatchingPolicy(patterns);
+  setDisplayed(getElement("site-rule-row"), otherPolicy !== undefined);
+  const status = getElement<HTMLParagraphElement>("site-control-status");
   if (status) {
-    status.textContent = "";
+    status.textContent = otherPolicy
+      ? `${otherPolicy.policy === "disabled" ? "Disabled" : "Enabled"} here by rule: ${otherPolicy.pattern}`
+      : "";
   }
-  if (editButton) {
-    editButton.style.display = "none";
+}
+
+function handleDisableOnSiteChange(checked: boolean): void {
+  const patterns = siteControlPatterns;
+  if (!patterns) {
+    return;
   }
 
-  try {
-    const activeTabUrl = await getActiveTabUrl();
-    if (!activeTabUrl) {
-      setUnavailableSiteControls();
-      return;
-    }
-
-    const hostPattern = getDisabledSitePrefillForUrl(activeTabUrl);
-    const sectionPattern = getSitePolicySectionPatternForUrl(activeTabUrl);
-    if (!hostPattern || !sectionPattern) {
-      setUnavailableSiteControls();
-      return;
-    }
-
-    const matchingPolicy = findMatchingSitePolicy(activeTabUrl, currentSettings.siteSettings);
-    const editMatchingRule = () => {
-      void openAdvancedSettingsPage({
-        [DISABLED_SITE_HIGHLIGHT_URL_PARAM]: activeTabUrl,
-      });
-    };
-
-    if (matchingPolicy?.policy === "disabled") {
-      container.style.display = "";
-      setSiteControlStatus(`Media Hotkeys disabled by rule: ${matchingPolicy.pattern}`);
-      if (matchingPolicy.pattern === sectionPattern) {
-        button.textContent = "Enable on this site";
-        button.addEventListener("click", () => {
-          void persistSitePolicies(
-            withoutSitePolicyPattern(
-              currentSettings.siteSettings.sitePolicies,
-              matchingPolicy.pattern,
-            ),
-            `Enabled on ${matchingPolicy.pattern}`,
-          );
-        });
-      } else {
-        button.textContent = "Enable on this section";
-        button.addEventListener("click", () => {
-          void persistSitePolicies(
-            addOrReplaceSitePolicy({
-              pattern: sectionPattern,
-              policy: "enabled",
-              embedsPolicy: "inherit",
-            }),
-            `Enabled on ${sectionPattern}`,
-          );
-        });
-      }
-      if (editButton) {
-        editButton.style.display = "";
-        editButton.textContent = "Edit site rule";
-        editButton.addEventListener("click", editMatchingRule);
-      }
-      return;
-    }
-
-    if (matchingPolicy?.policy === "enabled") {
-      container.style.display = "";
-      setSiteControlStatus(`Media Hotkeys enabled by rule: ${matchingPolicy.pattern}`);
-      button.textContent = "Disable on this section";
-      button.addEventListener("click", () => {
-        const remainingPolicies = withoutSitePolicyPattern(
-          currentSettings.siteSettings.sitePolicies,
-          matchingPolicy.pattern,
-        );
-        const nextPolicies = hasBroaderDisabledPolicy(activeTabUrl, matchingPolicy.pattern)
-          ? remainingPolicies
-          : [
-              ...withoutSitePolicyPattern(remainingPolicies, sectionPattern),
-              {
-                pattern: sectionPattern,
-                policy: "disabled" as const,
-                embedsPolicy: "inherit" as const,
-              },
-            ];
-        void persistSitePolicies(nextPolicies, `Disabled on ${sectionPattern}`);
-      });
-      if (editButton) {
-        editButton.style.display = "";
-        editButton.textContent = "Edit site rule";
-        editButton.addEventListener("click", editMatchingRule);
-      }
-      return;
-    }
-
-    container.style.display = "";
-    setSiteControlStatus(`Media Hotkeys enabled on ${hostPattern}`);
-    button.textContent = `Disable on ${hostPattern}`;
-    button.addEventListener("click", () => {
-      void persistSitePolicies(
-        addOrReplaceSitePolicy({
-          pattern: hostPattern,
+  void persistSitePolicies(
+    checked
+      ? addOrReplaceSitePolicy({
+          pattern: patterns.hostPattern,
           policy: "disabled",
           embedsPolicy: "inherit",
-        }),
-        `Disabled on ${hostPattern}`,
-      );
-    });
-  } catch {
-    setUnavailableSiteControls();
+        })
+      : withoutSitePolicyPattern(currentSettings.siteSettings.sitePolicies, patterns.hostPattern),
+  );
+}
+
+function handleSiteSectionChange(checked: boolean): void {
+  const patterns = siteControlPatterns;
+  if (!patterns) {
+    return;
+  }
+
+  void persistSitePolicies(
+    checked
+      ? addOrReplaceSitePolicy({
+          pattern: patterns.sectionPattern,
+          policy: getSectionCheckboxPolicy(patterns),
+          embedsPolicy: "inherit",
+        })
+      : withoutSitePolicyPattern(
+          currentSettings.siteSettings.sitePolicies,
+          patterns.sectionPattern,
+        ),
+  );
+}
+
+function handleDisableEverywhereChange(checked: boolean): void {
+  const nextSettings = structuredClone(currentSettings);
+  nextSettings.quickSettings.hotkeysEnabled = !checked;
+  void persistSettings(nextSettings);
+  renderSiteControls();
+}
+
+function renderVersion(): void {
+  const version = getElement<HTMLSpanElement>("extension-version");
+  if (version) {
+    version.textContent = `v${browser.runtime.getManifest().version}`;
   }
 }
 
@@ -538,8 +566,7 @@ async function handleReset(): Promise<void> {
     failureMessage: "Failed to reset quick settings. Try again.",
   });
 
-  (document.getElementById("hotkeysEnabled") as HTMLInputElement).checked =
-    currentSettings.quickSettings.hotkeysEnabled;
+  renderSiteControls();
   renderActionKeyBindingsTable();
 }
 
@@ -549,26 +576,40 @@ async function handleAdvancedSettings(): Promise<void> {
 }
 
 async function init(): Promise<void> {
+  renderVersion();
   currentSettings = await getSettings();
-  (document.getElementById("hotkeysEnabled") as HTMLInputElement).checked =
-    currentSettings.quickSettings.hotkeysEnabled;
   renderActionKeyBindingsTable();
-  void renderSiteControls();
+  renderSiteControls();
 
-  document.getElementById("hotkeysEnabled")?.addEventListener("change", () => {
-    const hotkeysEnabled = (document.getElementById("hotkeysEnabled") as HTMLInputElement).checked;
-    const nextSettings = structuredClone(currentSettings);
-    nextSettings.quickSettings.hotkeysEnabled = hotkeysEnabled;
-    void persistSettings(nextSettings, {
-      successMessage: hotkeysEnabled ? "Hotkeys enabled" : "Hotkeys disabled",
-    });
+  getElement<HTMLInputElement>("disable-everywhere")?.addEventListener("change", (event) => {
+    handleDisableEverywhereChange((event.currentTarget as HTMLInputElement).checked);
   });
-  document.getElementById("reset")?.addEventListener("click", () => {
+  getElement<HTMLInputElement>("disable-on-site")?.addEventListener("change", (event) => {
+    handleDisableOnSiteChange((event.currentTarget as HTMLInputElement).checked);
+  });
+  getElement<HTMLInputElement>("site-section")?.addEventListener("change", (event) => {
+    handleSiteSectionChange((event.currentTarget as HTMLInputElement).checked);
+  });
+  getElement("site-edit-rule-button")?.addEventListener("click", () => {
+    if (siteControlPatterns) {
+      void openAdvancedSettingsPage({
+        [DISABLED_SITE_HIGHLIGHT_URL_PARAM]: siteControlPatterns.activeTabUrl,
+      });
+    }
+  });
+  getElement("reset")?.addEventListener("click", () => {
     void handleReset();
   });
-  document.getElementById("advanced-settings")?.addEventListener("click", () => {
+  getElement("advanced-settings")?.addEventListener("click", () => {
     void handleAdvancedSettings();
   });
+
+  try {
+    siteControlPatterns = getSiteControlPatterns(await getActiveTabUrl());
+  } catch {
+    siteControlPatterns = undefined;
+  }
+  renderSiteControls();
 }
 
 void init().catch(() => {
