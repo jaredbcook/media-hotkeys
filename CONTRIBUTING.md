@@ -21,6 +21,7 @@ Load `dist/<browser>` in your browser as described in [README.md](README.md#inst
 | `npm run build`                              | Build Chrome, Edge, and Firefox into `dist/`                         |
 | `npm run build:chrome` (`:edge`, `:firefox`) | Build one browser                                                    |
 | `npm test` / `npm run test:watch`            | Vitest unit and UI tests                                             |
+| `npm run test:coverage`                      | Unit and UI tests with the 80% coverage thresholds enforced          |
 | `npm run test:e2e`                           | Playwright end-to-end tests (run `npm run build:chrome` first)       |
 | `npm run typecheck`                          | `tsc` for app code, unit/UI tests, scripts, configs, and E2E tests   |
 | `npm run lint`                               | ESLint                                                               |
@@ -30,7 +31,7 @@ Load `dist/<browser>` in your browser as described in [README.md](README.md#inst
 | `npm run safari:convert`                     | macOS only: print the Xcode Safari conversion command                |
 | `npm run labels:sync`                        | Create or update the GitHub issue labels (needs `gh`)                |
 
-The pre-commit hook refuses commits on `main` and runs `npm run check`. CI (`.github/workflows/ci.yml`) runs the same checks, builds every browser, lints the Firefox build with `web-ext lint`, and runs the E2E suite on Chromium.
+The pre-commit hook refuses commits on `main` and runs `npm run check`. CI (`.github/workflows/ci.yml`) runs the same checks (with `npm run test:coverage` in place of `npm test`), builds every browser, lints the Firefox build with `web-ext lint`, and runs the E2E suite on Chromium.
 
 ## Testing
 
@@ -43,7 +44,7 @@ The pre-commit hook refuses commits on `main` and runs `npm run check`. CI (`.gi
 - `webextension-polyfill` is mocked with `vi.mock` in unit and UI tests; reuse the `helpers.ts` in each folder rather than writing new mocks.
 - jsdom has no layout, media playback, or Popover API. Tests stub these explicitly (see `mockRect` in `tests/unit/content/helpers.ts` and the popover stub in `theater-mode.test.ts`). Anything that depends on real layout, focus, or playback needs an E2E test.
 - E2E tests load `dist/chrome`, so **rebuild before running them**. They run with one worker because the extension context is shared. Page fixtures and media helpers are in `tests/e2e/setup.ts` and `tests/e2e/fixtures.ts`.
-- Coverage thresholds (80%) are configured in `vitest.config.ts`; run `npx vitest run --coverage` to check them.
+- Coverage thresholds (80%) are configured in `vitest.config.ts`. CI enforces them with `npm run test:coverage`; the pre-commit hook does not, so run it yourself when you remove or add a lot of code.
 
 ## Debugging
 

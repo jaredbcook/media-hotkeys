@@ -22,6 +22,7 @@
     "safari:convert": "tsx scripts/safari-convert.ts",
     "labels:sync": "tsx scripts/sync-labels.ts",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "lint": "eslint src/ scripts/ tests/ eslint.config.js vite.config.ts vitest.config.ts playwright.config.ts",
