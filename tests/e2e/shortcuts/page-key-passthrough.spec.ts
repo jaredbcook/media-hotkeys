@@ -76,6 +76,15 @@ test("keeps arrow scrolling on a scrollable page until the video is in use", asy
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
   expect(await readPageKeys(page)).toEqual(["ArrowDown"]);
 
+  // Arrow scrolling animates, so let it settle before measuring.
+  await page.waitForFunction(
+    () =>
+      new Promise<boolean>((resolve) => {
+        const before = window.scrollY;
+        setTimeout(() => resolve(window.scrollY === before), 250);
+      }),
+  );
+
   await page.locator("#primary").dispatchEvent("pointerdown");
   const scrollY = await page.evaluate(() => window.scrollY);
   await page.keyboard.press("ArrowDown");
