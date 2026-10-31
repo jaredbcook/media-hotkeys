@@ -563,4 +563,57 @@ describe("media action handling", () => {
     expect(video.parentElement).toBe(document.body);
     expect(document.querySelector('[data-media-hotkeys-fullscreen-wrapper="true"]')).toBeNull();
   });
+
+  it("handles a rejected fullscreen request, restores the DOM, and logs it", async () => {
+    const consoleInfoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const settings = structuredClone(DEFAULT_SETTINGS);
+    settings.advancedSettings.debugLogging = true;
+    setSettingsForTests(settings);
+    const video = makeVideo();
+    const rejection = new TypeError("Fullscreen request denied");
+    Object.defineProperty(HTMLDivElement.prototype, "requestFullscreen", {
+      configurable: true,
+      value: vi.fn().mockRejectedValue(rejection),
+    });
+    Object.defineProperty(document, "fullscreenElement", {
+      configurable: true,
+      get: () => null,
+    });
+
+    handleAction("toggleFullscreen", video);
+    await vi.waitFor(() => {
+      expect(consoleInfoSpy).toHaveBeenCalledWith(
+        "[Media Hotkeys][debug] Fullscreen request was rejected",
+        expect.objectContaining({ error: rejection }),
+      );
+    });
+
+    expect(video.parentElement).toBe(document.body);
+    expect(document.querySelector('[data-media-hotkeys-fullscreen-wrapper="true"]')).toBeNull();
+  });
+
+  it("handles a rejected fullscreen exit and logs it", async () => {
+    const consoleInfoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const settings = structuredClone(DEFAULT_SETTINGS);
+    settings.advancedSettings.debugLogging = true;
+    setSettingsForTests(settings);
+    const video = makeVideo();
+    const rejection = new TypeError("Document not active");
+    Object.defineProperty(document, "fullscreenElement", {
+      configurable: true,
+      get: () => document.body,
+    });
+    Object.defineProperty(document, "exitFullscreen", {
+      configurable: true,
+      value: vi.fn().mockRejectedValue(rejection),
+    });
+
+    handleAction("toggleFullscreen", video);
+    await vi.waitFor(() => {
+      expect(consoleInfoSpy).toHaveBeenCalledWith(
+        "[Media Hotkeys][debug] Fullscreen exit was rejected",
+        expect.objectContaining({ error: rejection }),
+      );
+    });
+  });
 });
