@@ -68,6 +68,7 @@ With **Sum skips** on, pressing skip repeatedly shows the running total (for exa
 Some sites, such as YouTube, have their own shortcuts. Add a site rule in Advanced Settings, or use the checkboxes in Quick Settings, to let the site's shortcuts win:
 
 - A rule is a domain (`youtube.com`) or a path (`youtube.com/shorts`), and it either **disables** or **enables** Media Hotkeys there.
+- A domain rule covers its subdomains, so `youtube.com` also covers `www.youtube.com` and `m.youtube.com`. On shared hosting such as GitHub Pages, Vercel, Netlify, or Cloudflare Pages, each site is its own domain: a rule for `alice.github.io` doesn't affect `bob.github.io`.
 - More specific rules win. For example, disable `youtube.com` but enable `youtube.com/shorts`.
 - Rules match the address of the page in the tab, including after a single-page app such as YouTube navigates without reloading. Embedded players inherit a disabled page's rule unless that rule's embeds setting is **ignore**.
 
