@@ -45,6 +45,32 @@ function frameHasOwnMedia(): boolean {
   );
 }
 
+// Permissions that video embed snippets (YouTube, Vimeo, Dailymotion, Wistia,
+// and others) grant their iframe. Ad iframes are just as large but don't ask
+// for them.
+const VIDEO_EMBED_PERMISSIONS = new Set(["autoplay", "fullscreen"]);
+const FULLSCREEN_ATTRIBUTES = ["allowfullscreen", "webkitallowfullscreen", "mozallowfullscreen"];
+
+function grantsVideoEmbedPermission(allow: string): boolean {
+  return allow.split(";").some((directive) => {
+    const [feature, ...origins] = directive.trim().toLowerCase().split(/\s+/);
+    return (
+      feature !== undefined && VIDEO_EMBED_PERMISSIONS.has(feature) && !origins.includes("'none'")
+    );
+  });
+}
+
+/**
+ * Whether an iframe could hold a click-to-play video embed: big enough on
+ * screen, and granted fullscreen or autoplay the way embed snippets are.
+ */
+function mayHoldVideoEmbed(iframe: HTMLIFrameElement): boolean {
+  const looksLikeEmbed =
+    FULLSCREEN_ATTRIBUTES.some((name) => iframe.hasAttribute(name)) ||
+    grantsVideoEmbedPermission(iframe.getAttribute("allow") ?? "");
+  return looksLikeEmbed && isPlaceholderSized(iframe);
+}
+
 function childFramesHaveMedia(): boolean {
   // A hidden iframe's media (a lightbox player preloaded at 0x0) doesn't take
   // keys from the page.
@@ -140,8 +166,9 @@ export function handleMediaPresenceMessage(
  * Whether an action pressed in this frame could reach media. Answered
  * synchronously, because the keydown handler must decide whether to take the
  * key from the page (preventDefault) before cross-frame arbitration runs.
- * The play key also counts a click-to-play placeholder here, or an iframe
- * large enough to hold one, since placeholders aren't reported across frames.
+ * The play key also counts a click-to-play placeholder here, or an iframe that
+ * looks like a video embed large enough to hold one, since placeholders aren't
+ * reported across frames.
  * Vertical scroll keys stay with a page that can scroll unless media in this
  * frame is in use, so reading past an idle video still scrolls.
  */
@@ -171,6 +198,6 @@ export function hasPotentialTarget(
   }
 
   return (
-    hasPlayablePlaceholder() || findIframes(document).some((iframe) => isPlaceholderSized(iframe))
+    hasPlayablePlaceholder() || findIframes(document).some((iframe) => mayHoldVideoEmbed(iframe))
   );
 }

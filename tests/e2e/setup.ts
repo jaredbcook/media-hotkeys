@@ -339,7 +339,19 @@ export const test = base.extend<Fixtures>({
       "/page-with-cued-embed": {
         body: createFixturePage(
           "Page With Cued Embed",
-          `<iframe id="embed-frame" src="/cued-embed-frame" style="width: 640px; height: 360px; border: 0;"></iframe>`,
+          `<iframe id="embed-frame" src="/cued-embed-frame" style="width: 640px; height: 360px; border: 0;"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowfullscreen></iframe>`,
+        ),
+      },
+      "/ad-frame": {
+        body: createFixturePage("Ad Frame", `<a href="/other-video">Buy now</a>`),
+      },
+      "/page-with-ad-iframe": {
+        body: createFixturePage(
+          "Page With Ad Iframe",
+          `<iframe id="ad-frame" src="/ad-frame" allow="attribution-reporting; run-ad-auction"
+            style="width: 300px; height: 250px; border: 0;"></iframe>`,
         ),
       },
       "/page-with-iframe": {
