@@ -329,6 +329,53 @@ describe("settings storage", () => {
     expect(getDisabledSitePrefillForUrl("chrome://extensions")).toBeNull();
   });
 
+  it("keeps sites on shared hosting platforms separate", () => {
+    expect(normalizeDisabledUrlPattern("https://alice.github.io/blog/post")).toBe(
+      "alice.github.io/blog/post",
+    );
+    expect(normalizeDisabledUrlPattern("www.alice.github.io")).toBe("alice.github.io");
+    expect(normalizeDisabledUrlPattern("app.b.vercel.app")).toBe("b.vercel.app");
+    expect(getDisabledSitePrefillForUrl("https://alice.github.io/blog/")).toBe("alice.github.io");
+    expect(getSitePolicySectionPatternForUrl("https://alice.github.io/blog/post")).toBe(
+      "alice.github.io/blog",
+    );
+
+    const siteSettings = {
+      sitePolicies: [
+        {
+          pattern: "alice.github.io",
+          policy: "disabled" as const,
+          embedsPolicy: "inherit" as const,
+        },
+      ],
+      disabledUrlPatterns: ["alice.github.io"],
+    };
+    expect(isUrlDisabledBySiteSettings("https://alice.github.io/video", siteSettings)).toBe(true);
+    expect(isUrlDisabledBySiteSettings("https://bob.github.io/video", siteSettings)).toBe(false);
+    expect(findMatchingDisabledUrlPattern("https://bob.github.io/", ["alice.github.io"])).toBe(
+      undefined,
+    );
+  });
+
+  it("drops rules for a whole shared hosting platform", async () => {
+    expect(normalizeDisabledUrlPattern("github.io")).toBeNull();
+    expect(normalizeDisabledUrlPattern("https://pages.dev/")).toBeNull();
+
+    await saveSettings({
+      siteSettings: {
+        sitePolicies: [
+          { pattern: "github.io", policy: "disabled", embedsPolicy: "inherit" },
+          { pattern: "alice.github.io", policy: "disabled", embedsPolicy: "inherit" },
+        ],
+      },
+    });
+
+    const settings = await getSettings();
+    expect(settings.siteSettings.sitePolicies).toEqual([
+      { pattern: "alice.github.io", policy: "disabled", embedsPolicy: "inherit" },
+    ]);
+  });
+
   it("deduplicates site policies by topmost rule", () => {
     expect(
       normalizeSitePolicies([
