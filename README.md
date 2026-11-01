@@ -45,7 +45,7 @@ Letter hotkeys follow the character a key types, so on Latin layouts such as AZE
 
 ## Settings
 
-Click the toolbar icon for **Quick Settings**: disable the extension on all pages, on the current domain, or on the page's first path segment such as `youtube.com/shorts` (which becomes an enable checkbox once the domain is disabled); the key bindings are hidden while a disable checkbox applies to the current page, unless the section is re-enabled, and rebind any action. **Advanced Settings** (the gear icon in Quick Settings, or the extension's Options page) holds everything else, plus the installed version and a link to report an issue:
+Click the toolbar icon for **Quick Settings**: disable the extension on all pages, on the current domain, or on the page's first path segment such as `youtube.com/shorts` (which becomes an enable checkbox once the domain is disabled); the key bindings are hidden while a disable checkbox applies to the current page, unless the section is re-enabled, and rebind any action. When rebinding, keys that can't work as hotkeys are refused with a message and the popup keeps listening: combinations with Ctrl, Alt, or Meta, Tab and Enter (needed for keyboard navigation), lock keys, and accent or input-method keys that don't produce a character. **Advanced Settings** (the gear icon in Quick Settings, or the extension's Options page) holds everything else, plus the installed version and a link to report an issue:
 
 | Setting                          | Default        |
 | -------------------------------- | -------------- |
