@@ -212,10 +212,12 @@ function normalizePath(pathname: string): string {
   return pathname.replace(/\/+$/, "");
 }
 
+// Private suffixes (github.io, vercel.app, ...) count as public suffixes, so a rule for
+// alice.github.io covers only that site instead of every site on the hosting platform.
 function getRegistrableDomain(hostname: string): string | null {
   const normalizedHostname = hostname.toLowerCase();
   return (
-    getDomain(normalizedHostname) ??
+    getDomain(normalizedHostname, { allowPrivateDomains: true }) ??
     (isLocalHostname(normalizedHostname) ? normalizedHostname : null)
   );
 }
