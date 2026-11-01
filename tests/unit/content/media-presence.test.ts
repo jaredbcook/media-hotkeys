@@ -297,11 +297,52 @@ describe("keys on pages whose media may be in child frames", () => {
     );
   });
 
-  it("takes the play key for a player-sized iframe that may hold a click-to-play embed", () => {
+  it("takes the play key for a player-sized video embed iframe that may hold a click-to-play embed", () => {
     addChildFrame(rect(0, 0, 640, 360));
+    document.querySelector("iframe")?.setAttribute("allowfullscreen", "");
 
     expect(pressKey("k").event.defaultPrevented).toBe(true);
     expect(pressKey("ArrowRight").event.defaultPrevented).toBe(false);
+  });
+
+  it.each([
+    ["allowfullscreen", ""],
+    ["webkitallowfullscreen", ""],
+    ["mozallowfullscreen", ""],
+    ["allow", "accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture"],
+    ["allow", "fullscreen *"],
+    ["allow", "Autoplay 'src'"],
+  ])("counts a player-sized iframe with %s=%j as a possible embed", (name, value) => {
+    addChildFrame(rect(0, 0, 640, 360));
+    document.querySelector("iframe")?.setAttribute(name, value);
+
+    expect(pressKey("k").event.defaultPrevented).toBe(true);
+  });
+
+  it("leaves the play key to the page next to an ad-sized iframe that isn't a video embed", () => {
+    addChildFrame(rect(0, 0, 300, 250));
+
+    const { event, reachedPage } = pressKey("k");
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(reachedPage).toBe(true);
+  });
+
+  it.each(["attribution-reporting; run-ad-auction", "autoplay 'none'; fullscreen 'none'", ""])(
+    "leaves the play key to the page next to an iframe allowing only %j",
+    (allow) => {
+      addChildFrame(rect(0, 0, 300, 250));
+      document.querySelector("iframe")?.setAttribute("allow", allow);
+
+      expect(pressKey("k").event.defaultPrevented).toBe(false);
+    },
+  );
+
+  it("leaves the play key to the page next to a video embed iframe too small to hold a player", () => {
+    addChildFrame();
+    document.querySelector("iframe")?.setAttribute("allowfullscreen", "");
+
+    expect(pressKey("k").event.defaultPrevented).toBe(false);
   });
 });
 
