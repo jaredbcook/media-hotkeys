@@ -85,7 +85,9 @@ function getClampedNumberInputValue(input: HTMLInputElement): string | undefined
 
   const min = input.min === "" ? -Infinity : Number(input.min);
   const max = input.max === "" ? Infinity : Number(input.max);
-  const clampedValue = Math.min(Math.max(parsedValue, min), max);
+  const step = Number(input.step);
+  const wholeValue = Number.isInteger(step) && step >= 1 ? Math.round(parsedValue) : parsedValue;
+  const clampedValue = Math.min(Math.max(wholeValue, min), max);
 
   return String(clampedValue);
 }

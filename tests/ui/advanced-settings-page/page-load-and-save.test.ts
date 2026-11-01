@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   loadAdvancedSettingsModule,
@@ -93,6 +95,44 @@ describe("advanced settings page: load and save", () => {
       advancedSettings: expect.objectContaining({
         volumeStep: 0.1,
       }),
+    });
+  });
+
+  it("allows 1 to 600 whole seconds for every skip in the shipped page", () => {
+    const html = readFileSync(
+      path.resolve(__dirname, "../../../src/advanced-settings-page.html"),
+      "utf8",
+    );
+    const page = new DOMParser().parseFromString(html, "text/html");
+
+    for (const id of ["seekStepSmall", "seekStepMedium", "seekStepLarge"]) {
+      const input = page.getElementById(id) as HTMLInputElement;
+      expect([id, input.min, input.max, input.step]).toEqual([id, "1", "600", "1"]);
+    }
+  });
+
+  it.each([
+    ["seekStepSmall", "300", "300"],
+    ["seekStepMedium", "1", "1"],
+    ["seekStepLarge", "600", "600"],
+    ["seekStepSmall", "900", "600"],
+    ["seekStepMedium", "0", "1"],
+    ["seekStepLarge", "-5", "1"],
+    ["seekStepLarge", "2.6", "3"],
+  ])("normalizes %s %s to %s seconds before saving", async (id, entered, expected) => {
+    await loadAdvancedSettingsModule();
+    vi.useFakeTimers();
+
+    const input = document.getElementById(id) as HTMLInputElement;
+    input.value = entered;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(input.value).toBe(expected);
+    expect(saveSettingsMock).toHaveBeenCalledOnce();
+    expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
+      advancedSettings: expect.objectContaining({ [id]: Number(expected) }),
     });
   });
 
