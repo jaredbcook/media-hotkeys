@@ -44,9 +44,9 @@ export function renderAdvancedSettingsDom(): void {
     <input type="number" id="speedMin" min="0.1" max="1" step="0.05" />
     <input type="number" id="speedMax" min="1" max="8" step="0.25" />
     <input type="number" id="speedStep" min="0.05" max="1" step="0.05" />
-    <input type="number" id="seekStepSmall" min="1" max="15" step="1" />
-    <input type="number" id="seekStepMedium" min="2" max="30" step="1" />
-    <input type="number" id="seekStepLarge" min="3" max="60" step="1" />
+    <input type="number" id="seekStepSmall" min="1" max="600" step="1" />
+    <input type="number" id="seekStepMedium" min="1" max="600" step="1" />
+    <input type="number" id="seekStepLarge" min="1" max="600" step="1" />
     <input id="useNumberKeysToJump" type="checkbox" />
     <input id="sumQuickSkips" type="checkbox" />
     <input id="showOverlays" type="checkbox" />

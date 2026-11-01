@@ -71,6 +71,16 @@ describe("settings storage", () => {
     expect(settings.advancedSettings.debugLogging).toBe(true);
   });
 
+  it("keeps a skip of 600 seconds through save and load", async () => {
+    const modified = structuredClone(DEFAULT_SETTINGS);
+    modified.advancedSettings.seekStepLarge = 600;
+    await saveSettings(modified);
+
+    const settings = await getSettings();
+
+    expect(settings.advancedSettings.seekStepLarge).toBe(600);
+  });
+
   it("persists advanced settings changes", async () => {
     const modified = structuredClone(DEFAULT_SETTINGS);
     modified.advancedSettings.volumeStep = 0.1;
