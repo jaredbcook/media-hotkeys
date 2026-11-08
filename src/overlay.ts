@@ -415,6 +415,39 @@ function resizeOverlayText(el: HTMLElement, media: HTMLMediaElement): void {
   el.style.fontSize = `${getOverlayTextSizePx(media)}px`;
 }
 
+const OVERLAY_STYLE_SELECTOR = 'style[data-media-shortcuts-overlay="true"]';
+
+const OVERLAY_STYLES = `
+  @keyframes media-shortcuts-skip-slide {
+    from {
+      transform: translate(
+        calc(var(--media-shortcuts-translate-x, 0%) + var(--media-shortcuts-slide-from-x, 0px)),
+        var(--media-shortcuts-translate-y, 0%)
+      );
+    }
+    to {
+      transform: translate(
+        var(--media-shortcuts-translate-x, 0%),
+        var(--media-shortcuts-translate-y, 0%)
+      );
+    }
+  }
+`;
+
+// Added on first use so pages without an overlay stay untouched. SVG and XML
+// documents have no <head>, so fall back to the root element.
+function ensureOverlayStyles(): void {
+  const parent = document.head ?? document.documentElement;
+  if (!parent || parent.querySelector(OVERLAY_STYLE_SELECTOR)) {
+    return;
+  }
+
+  const style = document.createElement("style");
+  style.dataset.mediaShortcutsOverlay = "true";
+  style.textContent = OVERLAY_STYLES;
+  parent.appendChild(style);
+}
+
 export function showActionOverlay(
   action: MediaAction,
   media: HTMLMediaElement,
@@ -425,6 +458,7 @@ export function showActionOverlay(
   const content = buildContent(action, media, advancedSettings, options);
   if (!content) return;
 
+  ensureOverlayStyles();
   const anchor = resolveOverlayAnchor(media);
   const el = getOrCreateOverlay(anchor.kind === "media" ? media : undefined);
   if (el.parentElement !== anchor.host) {
@@ -462,27 +496,4 @@ export function showActionOverlay(
       el.style.animation = "none";
     }, advancedSettings.overlayFadeDuration);
   }, advancedSettings.overlayVisibleDuration);
-}
-
-const overlayStyles = document.createElement("style");
-overlayStyles.textContent = `
-  @keyframes media-shortcuts-skip-slide {
-    from {
-      transform: translate(
-        calc(var(--media-shortcuts-translate-x, 0%) + var(--media-shortcuts-slide-from-x, 0px)),
-        var(--media-shortcuts-translate-y, 0%)
-      );
-    }
-    to {
-      transform: translate(
-        var(--media-shortcuts-translate-x, 0%),
-        var(--media-shortcuts-translate-y, 0%)
-      );
-    }
-  }
-`;
-
-if (!document.head.querySelector('style[data-media-shortcuts-overlay="true"]')) {
-  overlayStyles.dataset.mediaShortcutsOverlay = "true";
-  document.head.appendChild(overlayStyles);
 }
