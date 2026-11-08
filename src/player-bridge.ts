@@ -30,6 +30,8 @@ type PlayerBridgeResponse = {
 const PLAYER_BRIDGE_EVENT = "media-hotkeys-player-bridge-command";
 const PLAYER_BRIDGE_COMMAND_ATTR = "data-media-hotkeys-player-command";
 const PLAYER_BRIDGE_RESPONSE_ATTR = "data-media-hotkeys-player-response";
+// Must match SHADOW_ROOT_ATTACHED_EVENT in src/content/constants.ts.
+const SHADOW_ROOT_ATTACHED_EVENT = "media-hotkeys-shadow-root-attached";
 
 function isPlayerBridgeCommand(value: unknown): value is PlayerBridgeCommand {
   if (!value || typeof value !== "object") {
@@ -180,3 +182,33 @@ document.addEventListener(
   },
   true,
 );
+
+// Page scripts attach shadow roots through the main world's Element.prototype,
+// which the content script's isolated world can't patch. Tell the content
+// script about roots attached to hosts already in the document, so media added
+// inside them later is noticed. Hosts that are still detached are scanned when
+// they are inserted. The event doesn't bubble: the content script listens in
+// the capture phase, which still reaches it across shadow boundaries.
+function patchAttachShadow(): void {
+  if (typeof Element.prototype.attachShadow !== "function") {
+    return;
+  }
+
+  const originalAttachShadow = Element.prototype.attachShadow;
+  Element.prototype.attachShadow = function attachShadow(
+    this: Element,
+    init: ShadowRootInit,
+  ): ShadowRoot {
+    const shadowRoot = originalAttachShadow.call(this, init);
+    if (this.isConnected) {
+      try {
+        this.dispatchEvent(new Event(SHADOW_ROOT_ATTACHED_EVENT, { composed: true }));
+      } catch {
+        // Never let notification break the page's own attachShadow call.
+      }
+    }
+    return shadowRoot;
+  };
+}
+
+patchAttachShadow();

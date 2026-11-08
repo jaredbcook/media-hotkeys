@@ -382,6 +382,36 @@ export const test = base.extend<Fixtures>({
           `<iframe id="outer-frame" src="/page-with-video-iframe" style="width: 640px; height: 400px; border: 0;"></iframe>`,
         ),
       },
+      "/late-shadow-frame": {
+        body: createFixturePage(
+          "Late Shadow Frame",
+          `<late-player></late-player>
+          <script>
+            // Defined after the markup has loaded, so the element upgrades in
+            // place and attaches its shadow root without any DOM mutation.
+            window.defineLatePlayer = () => {
+              customElements.define(
+                "late-player",
+                class extends HTMLElement {
+                  connectedCallback() {
+                    const media = document.createElement("audio");
+                    media.id = "late-media";
+                    this.attachShadow({ mode: "open" }).appendChild(media);
+                    media.src = "/silence.wav";
+                    media.preload = "auto";
+                  }
+                },
+              );
+            };
+          </script>`,
+        ),
+      },
+      "/page-with-late-shadow-iframe": {
+        body: createFixturePage(
+          "Page With Late Shadow Iframe",
+          `<iframe id="late-frame" src="/late-shadow-frame" style="width: 480px; height: 270px; border: 0;"></iframe>`,
+        ),
+      },
       "/page-with-two-iframes": {
         body: createFixturePage(
           "Page With Two Iframes",
