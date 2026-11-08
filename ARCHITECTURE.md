@@ -47,7 +47,7 @@ Every file under `src/` is listed here; `tests/unit/docs/docs-consistency.test.t
 | `src/content/media-discovery.ts` | Finds media and iframes, including inside open shadow roots; ambient-media heuristic.                         |
 | `src/content/media-scoring.ts`   | Weighted scoring of local candidates (weights are the `SCORE_*` constants).                                   |
 | `src/content/media-presence.ts`  | Tracks which child frames report media; decides synchronously whether a key may be taken from the page.       |
-| `src/content/media-tracking.ts`  | `MutationObserver` on the document and every shadow root; interaction and pointer tracking.                   |
+| `src/content/media-tracking.ts`  | `MutationObserver` on the document and every shadow root, late ones too; interaction and pointer tracking.    |
 | `src/content/actions.ts`         | Executes an action on the chosen media and builds overlay display options (including skip streaks).           |
 | `src/content/player-control.ts`  | Reads and writes media state, preferring custom-player host APIs, falling back to `HTMLMediaElement`.         |
 | `src/content/placeholder.ts`     | Detects and clicks thumbnail "facades" when there is no real media yet.                                       |
@@ -142,6 +142,8 @@ Many pages show a thumbnail facade and only create the real player on click (You
 ## Custom players
 
 The extension is native-media first: it controls real `HTMLMediaElement`s, and only uses a player's host API when the media lives inside an open shadow root of a custom element (`player-control.ts`). Page-defined element methods are invisible to the isolated world, so `player-bridge.ts` runs in the main world and executes a fixed whitelist of synchronous operations, exchanged through a DOM event plus temporary `data-media-hotkeys-*` attributes. Any failure falls back to direct media control.
+
+The bridge also patches `Element.prototype.attachShadow`, because the content script's isolated world has its own prototypes and never sees the page's calls. When a connected host attaches a shadow root, the patch dispatches a composed, non-bubbling `media-hotkeys-shadow-root-attached` event on it. The content script listens in the capture phase on `document`, which receives the event across shadow boundaries, and observes `host.shadowRoot` so media added inside is tracked and reported. Hosts that attach a root while detached are found when they are inserted, and the initial scan walks roots that already exist. Closed roots can't be read from the isolated world, so media inside them isn't tracked.
 
 Provider iframes (YouTube, Vimeo, and similar) are handled by the content script running inside them when the browser allows it. The extension injects no provider SDKs and has no per-provider adapters. The only button it ever clicks is a play button (placeholders and shadow-DOM play fallback); clicking arbitrary mute, seek, or fullscreen buttons risks hitting the wrong control or double-toggling.
 
