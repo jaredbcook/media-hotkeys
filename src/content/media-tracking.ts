@@ -3,6 +3,7 @@ import {
   FULLSCREEN_WRAPPER_ATTR,
   OVERLAY_ID,
   OVERLAY_STYLE_ATTR,
+  SHADOW_ROOT_ATTACHED_EVENT,
 } from "./constants.js";
 import { type Box, debugLog, getVisibleBox, isEmptyBox } from "./dom-utils.js";
 import {
@@ -19,7 +20,6 @@ const trackedMedia = new WeakSet<HTMLMediaElement>();
 const observedRoots = new WeakSet<Document | ShadowRoot>();
 const PRESENCE_MEDIA_EVENTS = ["loadstart", "emptied", "volumechange"] as const;
 let rootObserver: MutationObserver | null = null;
-let shadowObserverPatched = false;
 // Last known pointer position in viewport coordinates, or null when the
 // pointer has left this frame's document.
 let pointerPosition: { x: number; y: number } | null = null;
@@ -244,22 +244,20 @@ function observeRoot(root: Document | ShadowRoot): void {
   }
 }
 
-function patchAttachShadow(): void {
-  if (shadowObserverPatched || !("attachShadow" in Element.prototype)) {
-    return;
+/**
+ * Observes a shadow root the page attached to a host already in the document.
+ * The bridge reports these from the main world; the event path starts at the
+ * real host even when it sits inside another shadow root. Closed roots stay
+ * out of reach, because only `host.shadowRoot` is readable here.
+ */
+function handleShadowRootAttached(event: Event): void {
+  const host = event.composedPath()[0];
+  if (host instanceof Element && host.shadowRoot) {
+    observeRoot(host.shadowRoot);
   }
-
-  shadowObserverPatched = true;
-  const originalAttachShadow = Element.prototype.attachShadow;
-
-  Element.prototype.attachShadow = function attachShadow(init: ShadowRootInit): ShadowRoot {
-    const shadowRoot = originalAttachShadow.call(this, init);
-    observeRoot(shadowRoot);
-    return shadowRoot;
-  };
 }
 
 export function initializeDynamicMediaTracking(): void {
-  patchAttachShadow();
+  document.addEventListener(SHADOW_ROOT_ATTACHED_EVENT, handleShadowRootAttached, true);
   observeRoot(document);
 }

@@ -305,11 +305,21 @@ describe("media target selection", () => {
     focused.remove();
   });
 
-  it("tracks media added inside a shadow root after initialization", async () => {
+  // The page-world bridge reports shadow roots attached to hosts already in the
+  // document. jsdom has no separate worlds, so announce the root the same way.
+  function announceShadowRoot(host: Element): void {
+    host.dispatchEvent(new Event("media-hotkeys-shadow-root-attached", { composed: true }));
+  }
+
+  it("tracks media added inside a shadow root the page attaches later", async () => {
+    const other = makeVideo();
     const host = document.createElement("div");
     document.body.appendChild(host);
+    // Let the mutation observer see the bare host before the page attaches a root.
+    await Promise.resolve();
 
     const shadowRoot = host.attachShadow({ mode: "open" });
+    announceShadowRoot(host);
     const shadowVideo = document.createElement("video");
     shadowVideo.setAttribute("src", "https://example.com/shadow.mp4");
     shadowRoot.appendChild(shadowVideo);
@@ -319,6 +329,39 @@ describe("media target selection", () => {
     await Promise.resolve();
 
     expect(getTargetMedia()).toBe(shadowVideo);
+    other.remove();
+  });
+
+  it("tracks media in a shadow root attached inside another shadow root", async () => {
+    const other = makeVideo();
+    const outerHost = document.createElement("div");
+    document.body.appendChild(outerHost);
+    await Promise.resolve();
+    const outerRoot = outerHost.attachShadow({ mode: "open" });
+    announceShadowRoot(outerHost);
+    const innerHost = document.createElement("div");
+    outerRoot.appendChild(innerHost);
+    await Promise.resolve();
+
+    const innerRoot = innerHost.attachShadow({ mode: "open" });
+    announceShadowRoot(innerHost);
+    const nestedVideo = document.createElement("video");
+    nestedVideo.setAttribute("src", "https://example.com/nested.mp4");
+    innerRoot.appendChild(nestedVideo);
+
+    await Promise.resolve();
+    nestedVideo.dispatchEvent(new Event("play"));
+    await Promise.resolve();
+
+    expect(getTargetMedia()).toBe(nestedVideo);
+    other.remove();
+  });
+
+  it("ignores a shadow root announcement from a host without an open root", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+
+    expect(() => announceShadowRoot(host)).not.toThrow();
   });
 });
 
