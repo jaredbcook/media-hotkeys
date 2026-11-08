@@ -50,6 +50,39 @@ test("leaves arrow keys alone next to an iframe without media", async ({ page, s
   expect(await readPageKeys(page)).toEqual(["ArrowDown"]);
 });
 
+test("leaves the play key to the page next to an ad-sized iframe that isn't a video embed", async ({
+  page,
+  server,
+}) => {
+  await page.goto(server.getUrl("/page-with-ad-iframe"));
+  await expect(page.frameLocator("#ad-frame").locator("a")).toHaveCount(1);
+  await recordPageKeys(page);
+  await page.evaluate(() => {
+    const prevented: boolean[] = [];
+    (window as typeof window & { __prevented: boolean[] }).__prevented = prevented;
+    window.addEventListener("keydown", (event) => prevented.push(event.defaultPrevented));
+  });
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+
+  await page.keyboard.press("k");
+
+  expect(await readPageKeys(page)).toEqual(["k"]);
+  expect(
+    await page.evaluate(() => (window as typeof window & { __prevented: boolean[] }).__prevented),
+  ).toEqual([false]);
+});
+
+test("takes the play key next to a video embed iframe", async ({ page, server }) => {
+  await page.goto(server.getUrl("/page-with-cued-embed"));
+  await expect(page.frameLocator("#embed-frame").locator("#cued-play")).toHaveCount(1);
+  await recordPageKeys(page);
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+
+  await page.keyboard.press("k");
+
+  expect(await readPageKeys(page)).toEqual([]);
+});
+
 test("takes mapped keys from the page once media exists", async ({ page, server }) => {
   await page.goto(server.getUrl("/"));
   await createMedia(page, "primary", { currentTime: 25, duration: 100 }, "video");
