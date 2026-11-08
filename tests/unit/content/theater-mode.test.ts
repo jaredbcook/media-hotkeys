@@ -30,7 +30,7 @@ function installPopoverStub(): void {
       return openPopovers.has(this) && this.isConnected;
     }
     return originalMatches.call(this, selectors);
-  };
+  } as Element["matches"];
 }
 
 function removePopoverStub(): void {
