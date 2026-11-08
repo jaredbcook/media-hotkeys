@@ -26,11 +26,13 @@ function createFullscreenWrapperStyle(): HTMLStyleElement {
 }
 
 function ensureFullscreenWrapperStyles(): void {
-  if (document.head.querySelector('style[data-media-hotkeys-fullscreen="true"]')) {
+  // SVG and XML documents have no <head>, so fall back to the root element.
+  const parent = document.head ?? document.documentElement;
+  if (!parent || parent.querySelector('style[data-media-hotkeys-fullscreen="true"]')) {
     return;
   }
 
-  document.head.appendChild(createFullscreenWrapperStyle());
+  parent.appendChild(createFullscreenWrapperStyle());
 }
 
 function getManagedFullscreenWrapper(media: HTMLVideoElement): HTMLDivElement | null {

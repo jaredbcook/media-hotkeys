@@ -516,6 +516,33 @@ describe("media action handling", () => {
     expect(requestFullscreenMock.mock.instances[0]).toBe(wrapper);
   });
 
+  it("wraps bare videos for fullscreen in a document without a head", () => {
+    const video = makeVideo();
+    document.querySelectorAll('style[data-media-hotkeys-fullscreen="true"]').forEach((style) => {
+      style.remove();
+    });
+    const head = document.head;
+    head.remove();
+    Object.defineProperty(HTMLDivElement.prototype, "requestFullscreen", {
+      configurable: true,
+      value: vi.fn().mockResolvedValue(undefined),
+    });
+    Object.defineProperty(document, "fullscreenElement", {
+      configurable: true,
+      get: () => null,
+    });
+
+    try {
+      expect(document.head).toBeNull();
+      expect(() => handleAction("toggleFullscreen", video)).not.toThrow();
+      expect(
+        document.documentElement.querySelectorAll('style[data-media-hotkeys-fullscreen="true"]'),
+      ).toHaveLength(1);
+    } finally {
+      document.documentElement.prepend(head);
+    }
+  });
+
   it("prefers a custom element host for fullscreen when available", () => {
     const { host, video } = makeCustomPlayerVideo();
     const hostRequestFullscreenMock = vi.fn().mockResolvedValue(undefined);
