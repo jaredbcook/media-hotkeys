@@ -26,3 +26,7 @@ export const THEATER_ATTR = "data-media-hotkeys-theater";
 export const THEATER_STYLE_ATTR = "data-media-hotkeys-theater-style";
 export const OVERLAY_STYLE_ATTR = "data-media-shortcuts-overlay";
 export const OVERLAY_ID = "media-shortcuts-overlay";
+
+// Dispatched by src/player-bridge.ts (main world) on a host that just attached
+// a shadow root. Keep the value in sync with the bridge, which can't import it.
+export const SHADOW_ROOT_ATTACHED_EVENT = "media-hotkeys-shadow-root-attached";

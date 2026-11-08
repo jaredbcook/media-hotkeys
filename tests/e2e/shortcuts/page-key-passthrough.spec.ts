@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "../setup.js";
-import { createMedia, markPlaying, readMediaState } from "../fixtures.js";
+import { createMedia, markPlaying, readFrameMediaState, readMediaState } from "../fixtures.js";
 
 async function makePageScrollable(page: Page): Promise<void> {
   await page.evaluate(() => {
@@ -152,4 +152,38 @@ test("leaves keys to the page next to a decorative hero loop until it is clicked
   await page.keyboard.press("ArrowDown");
 
   expect(await readPageKeys(page)).toEqual(["ArrowDown"]);
+});
+
+test("takes the play key once a player upgraded late in an iframe attaches its media", async ({
+  page,
+  server,
+}) => {
+  await page.goto(server.getUrl("/page-with-late-shadow-iframe"));
+  const frame = page.frame({ url: /\/late-shadow-frame$/ })!;
+  await recordPageKeys(page);
+  await page.locator("body").click({ position: { x: 1, y: 1 } });
+
+  // The frame has no media yet, so an ad-sized iframe leaves the key to the page.
+  await page.keyboard.press("k");
+  expect(await readPageKeys(page)).toEqual(["k"]);
+
+  await frame.evaluate(() => {
+    (window as typeof window & { defineLatePlayer: () => void }).defineLatePlayer();
+  });
+  await expect
+    .poll(async () => (await readFrameMediaState(frame, "late-media")).readyState)
+    .toBeGreaterThan(0);
+
+  // The frame reports its new media shortly after, from a shadow root that the
+  // page attached to an element that was already in the document.
+  await expect
+    .poll(async () => {
+      const before = (await readPageKeys(page)).length;
+      await page.keyboard.press("k");
+      return (await readPageKeys(page)).length - before;
+    })
+    .toBe(0);
+  await expect
+    .poll(async () => (await readFrameMediaState(frame, "late-media")).paused)
+    .toBe(false);
 });
