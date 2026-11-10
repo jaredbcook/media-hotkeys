@@ -18,7 +18,7 @@ test("hides overlays after the overlay hotkey toggles them off", async ({ page }
   await expect
     .poll(async () => {
       return page.evaluate(() => {
-        const overlay = document.getElementById("media-shortcuts-overlay");
+        const overlay = document.getElementById("media-hotkeys-overlay");
         return overlay ? getComputedStyle(overlay).display : "none";
       });
     })

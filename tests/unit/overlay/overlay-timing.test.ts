@@ -36,7 +36,7 @@ describe("overlay timing and lifecycle", () => {
     showActionOverlay("togglePlayPause", video, "center", advancedSettings);
     showActionOverlay("toggleMute", video, "center", advancedSettings);
 
-    expect(document.querySelectorAll("#media-shortcuts-overlay")).toHaveLength(1);
+    expect(document.querySelectorAll("#media-hotkeys-overlay")).toHaveLength(1);
   });
 
   it("uses custom global settings for timing", () => {
@@ -65,8 +65,8 @@ describe("overlay timing and lifecycle", () => {
     });
 
     const overlay = getOverlayElement()!;
-    expect(overlay.style.animation).toContain("media-shortcuts-skip-slide");
-    expect(overlay.style.getPropertyValue("--media-shortcuts-slide-from-x")).toBe("-20%");
+    expect(overlay.style.animation).toContain("media-hotkeys-skip-slide");
+    expect(overlay.style.getPropertyValue("--media-hotkeys-slide-from-x")).toBe("-20%");
   });
 
   it("does not animate when no skip animation direction is provided", () => {

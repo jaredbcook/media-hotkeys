@@ -22,19 +22,19 @@ describe("overlay layout", () => {
   it("sizes overlay icons to 10% of media width and clamps them to min and max sizes", () => {
     const mediumVideo = makeVideo(500);
     showActionOverlay("togglePlayPause", mediumVideo, "center", advancedSettings);
-    let icon = document.querySelector("#media-shortcuts-overlay svg") as SVGElement;
+    let icon = document.querySelector("#media-hotkeys-overlay svg") as SVGElement;
     expect(icon.style.width).toBe("50px");
     expect(icon.style.height).toBe("50px");
 
     const smallVideo = makeVideo(200);
     showActionOverlay("togglePlayPause", smallVideo, "center", advancedSettings);
-    icon = document.querySelector("#media-shortcuts-overlay svg") as SVGElement;
+    icon = document.querySelector("#media-hotkeys-overlay svg") as SVGElement;
     expect(icon.style.width).toBe("32px");
     expect(icon.style.height).toBe("32px");
 
     const largeVideo = makeVideo(800);
     showActionOverlay("togglePlayPause", largeVideo, "center", advancedSettings);
-    icon = document.querySelector("#media-shortcuts-overlay svg") as SVGElement;
+    icon = document.querySelector("#media-hotkeys-overlay svg") as SVGElement;
     expect(icon.style.width).toBe("80px");
     expect(icon.style.height).toBe("80px");
   });

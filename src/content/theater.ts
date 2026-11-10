@@ -16,7 +16,7 @@ type TheaterSession = {
 };
 
 export type FrameTheaterMessage = {
-  source: "media-shortcuts-extension";
+  source: "media-hotkeys-extension";
   type: "MEDIA_HOTKEYS_THEATER";
   active: boolean;
   // Present on promotion requests: the execute requestId the parent routed
