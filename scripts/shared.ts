@@ -66,6 +66,11 @@ export function resolveBrowsers(args: string[]): SupportedBrowser[] {
   return browsers.length > 0 ? browsers : supportedBrowsers;
 }
 
+// Builds are minified unless --no-minify asks for a readable one to debug.
+export function resolveMinify(args: string[]): boolean {
+  return !args.includes("--no-minify");
+}
+
 export function assertBrowser(browser: string): SupportedBrowser {
   if (!supportedBrowsers.includes(browser as SupportedBrowser)) {
     throw new Error(
