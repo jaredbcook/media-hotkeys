@@ -8,7 +8,6 @@ export const THEATER_TYPE = "MEDIA_HOTKEYS_THEATER";
 export const MEDIA_PRESENCE_TYPE = "MEDIA_HOTKEYS_MEDIA_PRESENCE";
 export const MEDIA_PRESENCE_REQUEST_TYPE = "MEDIA_HOTKEYS_MEDIA_PRESENCE_REQUEST";
 
-export const FRAME_ACTION_TIMEOUT_MS = 150;
 // Total time budget for the cross-frame scoring phase; nested frames receive a
 // smaller budget so their responses can still arrive within the parent's window.
 export const SCORE_BUDGET_MS = 150;

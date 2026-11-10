@@ -3,7 +3,6 @@ import {
   type ConfigurableMediaAction,
   type MediaAction,
   resolveActionOverlaySettings,
-  saveSettings,
 } from "../storage.js";
 import { showActionOverlay } from "../overlay.js";
 import { debugLog, isPictureInPictureSupported } from "./dom-utils.js";
@@ -87,15 +86,6 @@ function isConfigurableMediaAction(action: MediaAction): action is ConfigurableM
   return action in state.settings.quickSettings.actionKeyBindings;
 }
 
-export function toggleOverlayVisibility(): void {
-  state.settings.advancedSettings.showOverlays = !state.settings.advancedSettings.showOverlays;
-  void saveSettings({
-    advancedSettings: {
-      showOverlays: state.settings.advancedSettings.showOverlays,
-    },
-  });
-}
-
 function getSeekOverlayDisplay(
   action: MediaAction,
   media: HTMLMediaElement,
@@ -158,7 +148,8 @@ function getSeekOverlayDisplay(
 function getOverlayDisplayOptions(
   action: MediaAction,
   media: HTMLMediaElement,
-  previousTime?: number,
+  previousTime: number,
+  overlaysEnabled: boolean,
 ): {
   seekSeconds?: number;
   animateSkipDirection?: SeekDirection;
@@ -169,7 +160,7 @@ function getOverlayDisplayOptions(
   if (action === "toggleOverlays") {
     clearSeekOverlayState();
     return {
-      overlayEnabled: state.settings.advancedSettings.showOverlays,
+      overlayEnabled: overlaysEnabled,
     };
   }
 
@@ -196,7 +187,16 @@ function getOverlayDisplayOptions(
   return getSeekOverlayDisplay(action, media);
 }
 
-export function handleAction(action: MediaAction, media: HTMLMediaElement): void {
+/**
+ * `overlaysEnabled` is the value the overlay toggle's confirmation reports. A
+ * frame executing the toggle for another frame gets it with the request,
+ * because its own settings still hold the old value until storage notifies it.
+ */
+export function handleAction(
+  action: MediaAction,
+  media: HTMLMediaElement,
+  overlaysEnabled = state.settings.advancedSettings.showOverlays,
+): void {
   const advancedSettings = state.settings.advancedSettings;
   const previousTime = media.currentTime;
   actionedMedia.add(media);
@@ -218,7 +218,8 @@ export function handleAction(action: MediaAction, media: HTMLMediaElement): void
       break;
 
     case "toggleOverlays":
-      toggleOverlayVisibility();
+      // The frame that got the key already flipped and saved the setting
+      // (handleGlobalAction); this frame only shows the confirmation.
       break;
 
     case "toggleFullscreen":
@@ -351,7 +352,7 @@ export function handleAction(action: MediaAction, media: HTMLMediaElement): void
       media,
       overlaySettings.overlayPosition,
       advancedSettings,
-      getOverlayDisplayOptions(action, media, previousTime),
+      getOverlayDisplayOptions(action, media, previousTime, overlaysEnabled),
     );
   } else if (getSeekDirection(action)) {
     getSeekOverlayDisplay(action, media);
@@ -362,10 +363,13 @@ export function handleAction(action: MediaAction, media: HTMLMediaElement): void
   debugLog("Handled media action", media, { action });
 }
 
-export function handleLocalTargetMediaAction(action: MediaAction): boolean {
+export function handleLocalTargetMediaAction(
+  action: MediaAction,
+  overlaysEnabled?: boolean,
+): boolean {
   const media = getTargetMedia();
   if (media) {
-    handleAction(action, media);
+    handleAction(action, media, overlaysEnabled);
     return true;
   }
 

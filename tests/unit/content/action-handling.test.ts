@@ -5,6 +5,7 @@ import {
   resetContentTestState,
   showActionOverlayMock,
   storageGetMock,
+  storageSetMock,
 } from "./helpers.js";
 import { handleAction, setSettingsForTests } from "../../../src/content.js";
 import { DEFAULT_SETTINGS } from "../../../src/storage.js";
@@ -435,10 +436,10 @@ describe("media action handling", () => {
     );
   });
 
-  it("shows an overlay confirmation when overlays are toggled off", () => {
+  it("shows an overlay confirmation with the value it is given, without saving", () => {
     const video = makeVideo();
 
-    handleAction("toggleOverlays", video);
+    handleAction("toggleOverlays", video, false);
 
     expect(showActionOverlayMock).toHaveBeenCalledWith(
       "toggleOverlays",
@@ -447,6 +448,7 @@ describe("media action handling", () => {
       expect.anything(),
       { overlayEnabled: false },
     );
+    expect(storageSetMock).not.toHaveBeenCalled();
   });
 
   it("requests fullscreen on an existing player container when available", () => {
