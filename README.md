@@ -65,6 +65,8 @@ Click the toolbar icon for **Quick Settings**: disable the extension on all page
 
 With **Sum skips** on, pressing skip repeatedly shows the running total (for example "+15s") instead of restarting the overlay each time.
 
+**Restore Defaults** in Quick Settings resets the key bindings, and in Advanced Settings it resets the settings in the table above and keeps your site rules. Both ask you to confirm first, because a restore can't be undone.
+
 ### Site rules
 
 Some sites, such as YouTube, have their own shortcuts. Add a site rule in Advanced Settings, or use the checkboxes in Quick Settings, to let the site's shortcuts win:

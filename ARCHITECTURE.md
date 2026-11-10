@@ -71,6 +71,7 @@ Every file under `src/` is listed here; `tests/unit/docs/docs-consistency.test.t
 | `src/advanced-settings-page.ts`   | Options page logic: debounced autosave, validation, site-policy list, version and report-issue link.           |
 | `src/advanced-settings.ts`        | Populate/collect helpers for the advanced settings form.                                                       |
 | `src/status-toast.ts`             | Transient "Settings saved." / error toasts used by both settings UIs.                                          |
+| `src/confirm-dialog.ts`           | Modal confirmation dialog (native `<dialog>`) both settings UIs show before Restore Defaults.                  |
 | `src/ui.css`                      | Shared styles for popup and options page (light and dark).                                                     |
 
 ### Build and tests

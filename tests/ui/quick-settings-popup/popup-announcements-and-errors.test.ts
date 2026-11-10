@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { answerConfirmDialog, getConfirmDialog, installDialogStub } from "../dialog-stub.js";
 import {
+  findRowByLabel,
   getSettingsMock,
   loadQuickSettingsModule,
   openOptionsPageMock,
@@ -10,6 +12,8 @@ import {
 import { DEFAULT_SETTINGS } from "../../../src/storage.js";
 
 beforeEach(() => {
+  installDialogStub();
+  getConfirmDialog()?.close();
   resetQuickSettingsTestState();
 });
 
@@ -25,6 +29,12 @@ describe("quick settings popup: status, reset, and error handling", () => {
     document.getElementById("reset")?.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
+    expect(getConfirmDialog()?.textContent).toContain("Restore default key bindings?");
+    expect(saveSettingsMock).not.toHaveBeenCalled();
+
+    await answerConfirmDialog("confirm");
+
+    expect(getConfirmDialog()).toBeNull();
     expect(saveSettingsMock).toHaveBeenCalledOnce();
     expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
       quickSettings: DEFAULT_SETTINGS.quickSettings,
@@ -37,6 +47,57 @@ describe("quick settings popup: status, reset, and error handling", () => {
     expect(document.getElementById("announcements")?.textContent).toContain(
       "Quick settings reset to default values.",
     );
+  });
+
+  it("keeps the key bindings when the confirmation is canceled", async () => {
+    const settings = structuredClone(DEFAULT_SETTINGS);
+    settings.quickSettings.actionKeyBindings.togglePlayPause.keys = ["x"];
+
+    await loadQuickSettingsModule(settings);
+
+    document.getElementById("reset")?.click();
+    await answerConfirmDialog("cancel");
+
+    expect(getConfirmDialog()).toBeNull();
+    expect(saveSettingsMock).not.toHaveBeenCalled();
+    expect(findRowByLabel("Play/Pause").querySelector(".key-chip-label")?.textContent).toBe("x");
+    expect(document.getElementById("announcements")?.textContent).not.toContain(
+      "Quick settings reset to default values.",
+    );
+  });
+
+  it("keeps the key bindings when the confirmation is dismissed without an answer", async () => {
+    const settings = structuredClone(DEFAULT_SETTINGS);
+    settings.quickSettings.actionKeyBindings.togglePlayPause.keys = ["x"];
+
+    await loadQuickSettingsModule(settings);
+
+    document.getElementById("reset")?.click();
+    getConfirmDialog()?.close();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(saveSettingsMock).not.toHaveBeenCalled();
+    expect(findRowByLabel("Play/Pause").querySelector(".key-chip-label")?.textContent).toBe("x");
+  });
+
+  it("stops a pending key capture so the confirmation can be operated by keyboard", async () => {
+    await loadQuickSettingsModule();
+
+    const addButton = findRowByLabel("Play/Pause").querySelector(
+      ".add-key-button",
+    ) as HTMLButtonElement;
+    addButton.click();
+    expect(addButton.classList.contains("listening")).toBe(true);
+
+    document.getElementById("reset")?.click();
+    expect(addButton.classList.contains("listening")).toBe(false);
+
+    const keydown = new KeyboardEvent("keydown", { key: "z", bubbles: true, cancelable: true });
+    document.dispatchEvent(keydown);
+    expect(keydown.defaultPrevented).toBe(false);
+
+    await answerConfirmDialog("cancel");
+    expect(saveSettingsMock).not.toHaveBeenCalled();
   });
 
   it("fades out the active status announcement when a new one is shown", async () => {

@@ -492,6 +492,39 @@ body.options-page .settings-sections {
   border-left: 4px solid var(--text-color-danger);
 }
 
+.confirm-dialog {
+  background: var(--section-bg-color);
+  border: 1px solid var(--border-color-primary);
+  border-radius: 10px;
+  box-shadow: var(--toast-shadow);
+  color: var(--text-color-primary);
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 16px;
+}
+
+.confirm-dialog:modal {
+  overscroll-behavior: contain;
+}
+
+.confirm-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.confirm-dialog h2 {
+  margin: 0 0 8px;
+}
+
+.confirm-dialog p {
+  margin: 0;
+}
+
+.confirm-dialog .button-group {
+  justify-content: flex-end;
+  margin: 16px 0 0;
+}
+
 .screen-reader {
   position: absolute;
   width: 1px;
