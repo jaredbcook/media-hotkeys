@@ -182,4 +182,4 @@ Breaking one of these is a bug even if tests pass:
 - Theater promotion of an iframe requires a route grant or iframe focus.
 - Pressing play on a placeholder never navigates the page.
 - `player-bridge.ts` imports nothing and only runs whitelisted operations.
-- Extension-created DOM is tagged with `data-media-hotkeys-*` / `data-media-shortcuts-*` attributes (see `constants.ts`) so the mutation observer ignores it.
+- Extension-created DOM is tagged with `data-media-hotkeys-*` attributes or the `media-hotkeys-overlay` id (see `constants.ts`) so the mutation observer ignores it.

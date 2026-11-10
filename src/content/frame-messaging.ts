@@ -23,30 +23,30 @@ import { state } from "./state.js";
 import type { FrameTheaterMessage } from "./theater.js";
 
 export type FrameActionRequestMessage = {
-  source: "media-shortcuts-extension";
-  type: "MEDIA_SHORTCUTS_HANDLE_ACTION";
+  source: "media-hotkeys-extension";
+  type: "MEDIA_HOTKEYS_HANDLE_ACTION";
   action: MediaAction;
   requestId: string;
   allowPlaceholder?: boolean;
 };
 
 export type FrameActionResponseMessage = {
-  source: "media-shortcuts-extension";
-  type: "MEDIA_SHORTCUTS_ACTION_RESULT";
+  source: "media-hotkeys-extension";
+  type: "MEDIA_HOTKEYS_ACTION_RESULT";
   requestId: string;
   handled: boolean;
 };
 
 export type FrameScoreRequestMessage = {
-  source: "media-shortcuts-extension";
-  type: "MEDIA_SHORTCUTS_SCORE_REQUEST";
+  source: "media-hotkeys-extension";
+  type: "MEDIA_HOTKEYS_SCORE_REQUEST";
   requestId: string;
   budgetMs: number;
 };
 
 export type FrameScoreResponseMessage = {
-  source: "media-shortcuts-extension";
-  type: "MEDIA_SHORTCUTS_SCORE_RESPONSE";
+  source: "media-hotkeys-extension";
+  type: "MEDIA_HOTKEYS_SCORE_RESPONSE";
   requestId: string;
   bestScore: number | null;
   // Visible-area component of bestScore, in the responding frame's viewport.
@@ -54,14 +54,14 @@ export type FrameScoreResponseMessage = {
 };
 
 export type FrameSitePolicyMessage = {
-  source: "media-shortcuts-extension";
+  source: "media-hotkeys-extension";
   type: "MEDIA_HOTKEYS_SITE_POLICY";
   disabled: boolean;
 };
 
 // Child to parent: whether the child's frame subtree has controllable media.
 export type FrameMediaPresenceMessage = {
-  source: "media-shortcuts-extension";
+  source: "media-hotkeys-extension";
   type: "MEDIA_HOTKEYS_MEDIA_PRESENCE";
   hasMedia: boolean;
 };
@@ -69,7 +69,7 @@ export type FrameMediaPresenceMessage = {
 // Parent to child: asks for a presence report, for children whose initial
 // report arrived before the parent's content script was listening.
 export type FrameMediaPresenceRequestMessage = {
-  source: "media-shortcuts-extension";
+  source: "media-hotkeys-extension";
   type: "MEDIA_HOTKEYS_MEDIA_PRESENCE_REQUEST";
 };
 

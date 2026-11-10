@@ -3,7 +3,7 @@ import { makeVideo } from "./helpers.js";
 import { showActionOverlay } from "../../../src/overlay.js";
 import { DEFAULT_ADVANCED_SETTINGS } from "../../../src/storage.js";
 
-const OVERLAY_STYLE_SELECTOR = 'style[data-media-shortcuts-overlay="true"]';
+const OVERLAY_STYLE_SELECTOR = 'style[data-media-hotkeys-overlay="true"]';
 
 let removedHead: HTMLHeadElement | null = null;
 
@@ -36,7 +36,7 @@ describe("overlay styles", () => {
 
     const styles = document.head.querySelectorAll(OVERLAY_STYLE_SELECTOR);
     expect(styles).toHaveLength(1);
-    expect(styles[0]?.textContent).toContain("media-shortcuts-skip-slide");
+    expect(styles[0]?.textContent).toContain("media-hotkeys-skip-slide");
   });
 
   it("shows the overlay in a document without a head", () => {

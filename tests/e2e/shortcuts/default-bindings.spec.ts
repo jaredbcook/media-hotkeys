@@ -496,7 +496,7 @@ test("shows overlays while a video is fullscreen", async ({ page }) => {
   await expect
     .poll(() =>
       page.evaluate(() => {
-        const overlay = document.getElementById("media-shortcuts-overlay");
+        const overlay = document.getElementById("media-hotkeys-overlay");
         const parent = overlay?.parentElement;
         return {
           display: overlay ? getComputedStyle(overlay).display : "none",

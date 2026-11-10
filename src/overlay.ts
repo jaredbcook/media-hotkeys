@@ -2,7 +2,7 @@ import type { MediaAction, OverlayPosition, AdvancedSettings } from "./storage.j
 import * as icons from "./icons.js";
 import { isTheaterMedia } from "./content/theater.js";
 
-const OVERLAY_ID = "media-shortcuts-overlay";
+const OVERLAY_ID = "media-hotkeys-overlay";
 const INSET_PX = 16;
 const OVERLAY_ICON_SIZE_RATIO = 0.1;
 const MIN_OVERLAY_ICON_SIZE_PX = 32;
@@ -313,8 +313,8 @@ function positionOverAnchor(
   el.style.top = `${top}px`;
   el.style.position = anchor.position;
   el.style.transform = `translate(${translateX}, ${translateY})`;
-  el.style.setProperty("--media-shortcuts-translate-x", translateX);
-  el.style.setProperty("--media-shortcuts-translate-y", translateY);
+  el.style.setProperty("--media-hotkeys-translate-x", translateX);
+  el.style.setProperty("--media-hotkeys-translate-y", translateY);
 }
 
 function buildContent(
@@ -415,20 +415,20 @@ function resizeOverlayText(el: HTMLElement, media: HTMLMediaElement): void {
   el.style.fontSize = `${getOverlayTextSizePx(media)}px`;
 }
 
-const OVERLAY_STYLE_SELECTOR = 'style[data-media-shortcuts-overlay="true"]';
+const OVERLAY_STYLE_SELECTOR = 'style[data-media-hotkeys-overlay="true"]';
 
 const OVERLAY_STYLES = `
-  @keyframes media-shortcuts-skip-slide {
+  @keyframes media-hotkeys-skip-slide {
     from {
       transform: translate(
-        calc(var(--media-shortcuts-translate-x, 0%) + var(--media-shortcuts-slide-from-x, 0px)),
-        var(--media-shortcuts-translate-y, 0%)
+        calc(var(--media-hotkeys-translate-x, 0%) + var(--media-hotkeys-slide-from-x, 0px)),
+        var(--media-hotkeys-translate-y, 0%)
       );
     }
     to {
       transform: translate(
-        var(--media-shortcuts-translate-x, 0%),
-        var(--media-shortcuts-translate-y, 0%)
+        var(--media-hotkeys-translate-x, 0%),
+        var(--media-hotkeys-translate-y, 0%)
       );
     }
   }
@@ -443,7 +443,7 @@ function ensureOverlayStyles(): void {
   }
 
   const style = document.createElement("style");
-  style.dataset.mediaShortcutsOverlay = "true";
+  style.dataset.mediaHotkeysOverlay = "true";
   style.textContent = OVERLAY_STYLES;
   parent.appendChild(style);
 }
@@ -483,8 +483,8 @@ export function showActionOverlay(
 
   if (options.animateSkipDirection) {
     const deltaX = options.animateSkipDirection === "forward" ? "-20%" : "20%";
-    el.style.animation = `media-shortcuts-skip-slide 150ms ease-out`;
-    el.style.setProperty("--media-shortcuts-slide-from-x", deltaX);
+    el.style.animation = `media-hotkeys-skip-slide 150ms ease-out`;
+    el.style.setProperty("--media-hotkeys-slide-from-x", deltaX);
   }
 
   hideTimeout = setTimeout(() => {

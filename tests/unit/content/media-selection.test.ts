@@ -221,7 +221,7 @@ describe("media target selection", () => {
     expect(getTargetMedia()).toBe(second);
 
     const overlay = document.createElement("div");
-    overlay.id = "media-shortcuts-overlay";
+    overlay.id = "media-hotkeys-overlay";
     document.body.appendChild(overlay);
     await Promise.resolve();
 
