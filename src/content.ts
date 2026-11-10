@@ -15,7 +15,6 @@ import { handleStorageChanged, loadSettings } from "./content/settings-sync.js";
 
 export type { MediaAction };
 export { handleAction } from "./content/actions.js";
-export { delegateActionToChildFrames } from "./content/frame-messaging.js";
 export { getBestLocalCandidate, getTargetMedia } from "./content/media-scoring.js";
 export { setSettingsForTests } from "./content/settings-sync.js";
 

@@ -1,10 +1,5 @@
 import type { MediaAction } from "../storage.js";
-import {
-  handleAction,
-  handleLocalTargetMediaAction,
-  isGlobalAction,
-  toggleOverlayVisibility,
-} from "./actions.js";
+import { handleAction, handleLocalTargetMediaAction } from "./actions.js";
 import {
   ACTION_REQUEST_TYPE,
   ACTION_RESPONSE_TYPE,
@@ -21,7 +16,6 @@ import {
   applyParentSitePolicy,
   broadcastPlaceholderExecute,
   collectChildFrameScores,
-  delegateActionToChildFrames,
   findIframeForWindow,
   grantTheaterPromotion,
   handleIncomingScoreRequest,
@@ -37,13 +31,10 @@ import {
   takeExecuteRoute,
   takeTheaterGrant,
 } from "./frame-messaging.js";
-import {
-  STRONG_LOCAL_TARGET_SCORE,
-  getBestLocalCandidate,
-  getTargetMedia,
-} from "./media-scoring.js";
+import { STRONG_LOCAL_TARGET_SCORE, getBestLocalCandidate } from "./media-scoring.js";
 import { handleMediaPresenceMessage } from "./media-presence.js";
 import { activatePlayablePlaceholder } from "./placeholder.js";
+import { toggleOverlayVisibility } from "./settings-sync.js";
 import { state } from "./state.js";
 import {
   enterFrameTheater,
@@ -106,35 +97,70 @@ function handleLocalDispatchedAction(action: MediaAction, media: HTMLMediaElemen
   }
 }
 
+// Counts overlay toggles started in this frame, so a confirmation still in
+// arbitration can tell that a newer keypress has replaced it.
+let overlayToggleCount = 0;
+
+/**
+ * The overlay toggle, in the frame that received the keypress. This frame
+ * alone flips and saves the setting. The confirmation overlay then goes to
+ * one frame through the same score/execute arbitration as a media action,
+ * carrying the new value, since that frame may not have reloaded settings yet.
+ */
 export async function handleGlobalAction(action: "toggleOverlays"): Promise<boolean> {
-  const media = getTargetMedia();
-  if (media) {
-    handleAction(action, media);
-  } else {
-    toggleOverlayVisibility();
+  const overlaysEnabled = toggleOverlayVisibility();
+  overlayToggleCount += 1;
+  const toggleNumber = overlayToggleCount;
+  // After a newer toggle, showing this one's value would report a stale state.
+  const isSuperseded = (): boolean => toggleNumber !== overlayToggleCount;
+
+  const localBest = getBestLocalCandidate();
+  if (localBest && localBest.score >= STRONG_LOCAL_TARGET_SCORE) {
+    handleAction(action, localBest.media, overlaysEnabled);
+    return true;
   }
 
-  const handledByChildFrame = await delegateActionToChildFrames(action);
-  return Boolean(media) || handledByChildFrame;
+  const childBest = await collectChildFrameScores(SCORE_BUDGET_MS);
+  if (isSuperseded()) {
+    return true;
+  }
+
+  if (childBest && (!localBest || childBest.score > localBest.score)) {
+    const handled = await sendExecuteToFrame(
+      childBest.frameWindow,
+      action,
+      childBest.requestId,
+      false,
+      overlaysEnabled,
+    );
+    if (handled || isSuperseded()) {
+      return true;
+    }
+  }
+
+  if (localBest) {
+    handleAction(action, localBest.media, overlaysEnabled);
+    return true;
+  }
+
+  return false;
 }
 
 /**
- * Execute phase, receiving side. Global actions keep their broadcast cascade.
- * Media actions follow the route recorded during the scoring phase; if the
- * routed descendant fails (or no route exists), fall back to the best local
- * candidate, then to placeholder activation when permitted.
+ * Execute phase, receiving side. Actions follow the route recorded during the
+ * scoring phase; if the routed descendant fails (or no route exists), fall
+ * back to the best local candidate, then to placeholder activation when
+ * permitted. For the overlay toggle this only shows the confirmation with the
+ * value the request carries: a request never changes or saves the setting.
  */
 async function handleIncomingFrameAction(
   action: MediaAction,
   requestId: string,
   allowPlaceholder: boolean,
+  overlaysEnabled?: boolean,
 ): Promise<boolean> {
   if (!state.settings.quickSettings.hotkeysEnabled || isSiteDisabledByPolicy()) {
     return false;
-  }
-
-  if (isGlobalAction(action)) {
-    return handleGlobalAction(action);
   }
 
   const route = takeExecuteRoute(requestId);
@@ -147,13 +173,14 @@ async function handleIncomingFrameAction(
       action,
       route.requestId,
       allowPlaceholder,
+      overlaysEnabled,
     );
     if (handled) {
       return true;
     }
   }
 
-  if (handleLocalTargetMediaAction(action)) {
+  if (handleLocalTargetMediaAction(action, overlaysEnabled)) {
     if (action === "toggleTheater" && isTheaterActive()) {
       requestParentTheater(requestId);
     }
@@ -261,6 +288,7 @@ export function handleFrameMessage(event: MessageEvent): void {
           data.action,
           data.requestId,
           data.allowPlaceholder === true,
+          data.overlaysEnabled,
         ).then((handled) => {
           respondToFrameAction(source as Window, data.requestId, handled);
         });
