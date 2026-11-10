@@ -1,4 +1,5 @@
 import browser from "webextension-polyfill";
+import { confirmWithDialog } from "./confirm-dialog.js";
 import { collectAdvancedSettings, populateAdvancedSettings } from "./advanced-settings.js";
 import { DELETE } from "./icons.js";
 import {
@@ -419,6 +420,16 @@ function handleAddSitePolicy(): void {
 }
 
 async function handleReset(): Promise<void> {
+  const confirmed = await confirmWithDialog({
+    title: "Restore default advanced settings?",
+    message:
+      "Every setting on this page except your site policies will be reset to its default. This can't be undone.",
+    confirmLabel: "Restore Defaults",
+  });
+  if (!confirmed) {
+    return;
+  }
+
   const nextSettings = structuredClone(currentSettings);
   nextSettings.advancedSettings = structuredClone(DEFAULT_ADVANCED_SETTINGS);
   populateAdvancedSettings(nextSettings.advancedSettings);

@@ -35,14 +35,14 @@ The pre-commit hook refuses commits on `main` and runs `npm run check`. CI (`.gi
 
 ## Testing
 
-| Suite | Location                                                  | Runner               | Use for                                                     |
-| ----- | --------------------------------------------------------- | -------------------- | ----------------------------------------------------------- |
-| Unit  | `tests/unit/{content,overlay,storage,scripts,docs}/`      | Vitest + jsdom       | Logic in `src/` and `scripts/`, plus doc consistency        |
-| UI    | `tests/ui/{quick-settings-popup,advanced-settings-page}/` | Vitest + jsdom       | Settings popup and options page behavior                    |
-| E2E   | `tests/e2e/{shortcuts,settings}/`                         | Playwright, Chromium | Real keypresses against real media with the built extension |
+| Suite | Location                                                                 | Runner               | Use for                                                     |
+| ----- | ------------------------------------------------------------------------ | -------------------- | ----------------------------------------------------------- |
+| Unit  | `tests/unit/{content,overlay,storage,scripts,docs}/`                     | Vitest + jsdom       | Logic in `src/` and `scripts/`, plus doc consistency        |
+| UI    | `tests/ui/{quick-settings-popup,advanced-settings-page,confirm-dialog}/` | Vitest + jsdom       | Settings popup and options page behavior                    |
+| E2E   | `tests/e2e/{shortcuts,settings}/`                                        | Playwright, Chromium | Real keypresses against real media with the built extension |
 
 - `webextension-polyfill` is mocked with `vi.mock` in unit and UI tests; reuse the `helpers.ts` in each folder rather than writing new mocks.
-- jsdom has no layout, media playback, or Popover API. Tests stub these explicitly (see `mockRect` in `tests/unit/content/helpers.ts` and the popover stub in `theater-mode.test.ts`). Anything that depends on real layout, focus, or playback needs an E2E test.
+- jsdom has no layout, media playback, Popover API, or `<dialog>` methods. Tests stub these explicitly (see `mockRect` in `tests/unit/content/helpers.ts`, the popover stub in `theater-mode.test.ts`, and `tests/ui/dialog-stub.ts`). Anything that depends on real layout, focus, or playback needs an E2E test.
 - E2E tests load `dist/chrome`, so **rebuild before running them**. They run with one worker because the extension context is shared. Page fixtures and media helpers are in `tests/e2e/setup.ts` and `tests/e2e/fixtures.ts`.
 - Coverage thresholds (80%) are configured in `vitest.config.ts`. CI enforces them with `npm run test:coverage`; the pre-commit hook does not, so run it yourself when you remove or add a lot of code.
 
