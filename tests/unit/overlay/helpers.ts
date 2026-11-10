@@ -69,7 +69,7 @@ export function makeVideo(
 }
 
 export function getOverlayElement(): HTMLElement | null {
-  return document.getElementById("media-shortcuts-overlay");
+  return document.getElementById("media-hotkeys-overlay");
 }
 
 beforeEach(() => {

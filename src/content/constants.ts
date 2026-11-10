@@ -1,8 +1,8 @@
-export const MESSAGE_SOURCE = "media-shortcuts-extension";
-export const ACTION_REQUEST_TYPE = "MEDIA_SHORTCUTS_HANDLE_ACTION";
-export const ACTION_RESPONSE_TYPE = "MEDIA_SHORTCUTS_ACTION_RESULT";
-export const SCORE_REQUEST_TYPE = "MEDIA_SHORTCUTS_SCORE_REQUEST";
-export const SCORE_RESPONSE_TYPE = "MEDIA_SHORTCUTS_SCORE_RESPONSE";
+export const MESSAGE_SOURCE = "media-hotkeys-extension";
+export const ACTION_REQUEST_TYPE = "MEDIA_HOTKEYS_HANDLE_ACTION";
+export const ACTION_RESPONSE_TYPE = "MEDIA_HOTKEYS_ACTION_RESULT";
+export const SCORE_REQUEST_TYPE = "MEDIA_HOTKEYS_SCORE_REQUEST";
+export const SCORE_RESPONSE_TYPE = "MEDIA_HOTKEYS_SCORE_RESPONSE";
 export const SITE_POLICY_TYPE = "MEDIA_HOTKEYS_SITE_POLICY";
 export const THEATER_TYPE = "MEDIA_HOTKEYS_THEATER";
 export const MEDIA_PRESENCE_TYPE = "MEDIA_HOTKEYS_MEDIA_PRESENCE";
@@ -24,8 +24,8 @@ export const FULLSCREEN_WRAPPER_ATTR = "data-media-hotkeys-fullscreen-wrapper";
 export const FULLSCREEN_STYLE_ATTR = "data-media-hotkeys-fullscreen";
 export const THEATER_ATTR = "data-media-hotkeys-theater";
 export const THEATER_STYLE_ATTR = "data-media-hotkeys-theater-style";
-export const OVERLAY_STYLE_ATTR = "data-media-shortcuts-overlay";
-export const OVERLAY_ID = "media-shortcuts-overlay";
+export const OVERLAY_STYLE_ATTR = "data-media-hotkeys-overlay";
+export const OVERLAY_ID = "media-hotkeys-overlay";
 
 // Dispatched by src/player-bridge.ts (main world) on a host that just attached
 // a shadow root. Keep the value in sync with the bridge, which can't import it.
