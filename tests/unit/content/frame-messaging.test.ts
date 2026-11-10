@@ -7,7 +7,7 @@ import {
   resetContentTestState,
   storageSetMock,
 } from "./helpers.js";
-import { delegateActionToChildFrames, setSettingsForTests } from "../../../src/content.js";
+import { setSettingsForTests } from "../../../src/content.js";
 import { DEFAULT_SETTINGS } from "../../../src/storage.js";
 
 beforeEach(() => {
@@ -38,84 +38,6 @@ function sendActionRequest(source: Window, action: string, requestId: string): v
     }),
   );
 }
-
-describe("frame action delegation", () => {
-  it("returns false when no child iframes exist", async () => {
-    await expect(delegateActionToChildFrames("toggleMute")).resolves.toBe(false);
-  });
-
-  it("resolves true when a child frame reports handling the action", async () => {
-    const iframe = document.createElement("iframe");
-    document.body.appendChild(iframe);
-
-    const frameWindow = iframe.contentWindow;
-    expect(frameWindow).toBeTruthy();
-
-    vi.spyOn(frameWindow!, "postMessage").mockImplementation((message: unknown) => {
-      const request = message as {
-        requestId: string;
-        type: string;
-      };
-
-      if (request.type !== "MEDIA_HOTKEYS_HANDLE_ACTION") {
-        return;
-      }
-
-      window.dispatchEvent(
-        new MessageEvent("message", {
-          data: {
-            source: "media-hotkeys-extension",
-            type: "MEDIA_HOTKEYS_ACTION_RESULT",
-            requestId: request.requestId,
-            handled: true,
-          },
-          source: frameWindow!,
-        }),
-      );
-    });
-
-    await expect(delegateActionToChildFrames("toggleMute")).resolves.toBe(true);
-  });
-
-  it("resolves false when the frame responds with handled=false", async () => {
-    const iframe = document.createElement("iframe");
-    document.body.appendChild(iframe);
-    const frameWindow = iframe.contentWindow!;
-
-    let capturedRequestId = "";
-    vi.spyOn(frameWindow, "postMessage").mockImplementation((message: unknown) => {
-      capturedRequestId = (message as { requestId: string }).requestId;
-    });
-
-    const delegatePromise = delegateActionToChildFrames("toggleMute");
-
-    window.dispatchEvent(
-      new MessageEvent("message", {
-        data: {
-          source: "media-hotkeys-extension",
-          type: "MEDIA_HOTKEYS_ACTION_RESULT",
-          requestId: capturedRequestId,
-          handled: false,
-        },
-        source: frameWindow,
-      }),
-    );
-
-    await expect(delegatePromise).resolves.toBe(false);
-  });
-
-  it("resolves false when postMessage throws for all frames", async () => {
-    const iframe = document.createElement("iframe");
-    document.body.appendChild(iframe);
-    const frameWindow = iframe.contentWindow!;
-
-    vi.spyOn(frameWindow, "postMessage").mockImplementation(() => {
-      throw new Error("cross-origin frame");
-    });
-
-    await expect(delegateActionToChildFrames("toggleMute")).resolves.toBe(false);
-  });
-});
 
 describe("frame message handling", () => {
   afterEach(() => {
@@ -206,29 +128,54 @@ describe("frame message handling", () => {
   });
 
   it("ignores action results from windows that are not its child frames", async () => {
+    // A small local video loses to a child frame filling the viewport.
+    const localVideo = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    mockRect(localVideo, rect(0, 0, 512, 384));
+    const playSpy = vi.spyOn(localVideo, "play").mockResolvedValue(undefined);
     const iframe = document.createElement("iframe");
     document.body.appendChild(iframe);
+    mockRect(iframe, rect(0, 0, 1024, 768));
     const frameWindow = iframe.contentWindow!;
-    let capturedRequestId = "";
+    let executeRequestId = "";
     vi.spyOn(frameWindow, "postMessage").mockImplementation((message: unknown) => {
-      capturedRequestId = (message as { requestId: string }).requestId;
+      const request = message as { type: string; requestId: string };
+      if (request.type === "MEDIA_HOTKEYS_SCORE_REQUEST") {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            source: frameWindow,
+            data: {
+              source: "media-hotkeys-extension",
+              type: "MEDIA_HOTKEYS_SCORE_RESPONSE",
+              requestId: request.requestId,
+              bestScore: 210,
+              areaScore: 200,
+            },
+          }),
+        );
+      } else if (request.type === "MEDIA_HOTKEYS_HANDLE_ACTION") {
+        executeRequestId = request.requestId;
+      }
     });
     const strangerWindow = { postMessage: vi.fn() } as unknown as Window;
 
-    const delegatePromise = delegateActionToChildFrames("toggleMute");
+    await dispatchMappedKey("k");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(executeRequestId).not.toBe("");
     window.dispatchEvent(
       new MessageEvent("message", {
         data: {
           source: "media-hotkeys-extension",
           type: "MEDIA_HOTKEYS_ACTION_RESULT",
-          requestId: capturedRequestId,
+          requestId: executeRequestId,
           handled: true,
         },
         source: strangerWindow,
       }),
     );
 
-    await expect(delegatePromise).resolves.toBe(false);
+    // The stranger's result doesn't settle the request, so it times out and
+    // the action falls back to the local video.
+    await vi.waitFor(() => expect(playSpy).toHaveBeenCalledOnce());
   });
 
   it("ignores site policy messages in the top frame", async () => {

@@ -5,7 +5,6 @@ import {
   EXECUTE_PLACEHOLDER_TIMEOUT_MS,
   EXECUTE_ROUTE_TTL_MS,
   EXECUTE_TIMEOUT_MS,
-  FRAME_ACTION_TIMEOUT_MS,
   MEDIA_PRESENCE_REQUEST_TYPE,
   MEDIA_PRESENCE_TYPE,
   MESSAGE_SOURCE,
@@ -28,6 +27,9 @@ export type FrameActionRequestMessage = {
   action: MediaAction;
   requestId: string;
   allowPlaceholder?: boolean;
+  // Sent with toggleOverlays: the value the initiating frame saved, for the
+  // confirmation overlay. The receiving frame never flips or saves it.
+  overlaysEnabled?: boolean;
 };
 
 export type FrameActionResponseMessage = {
@@ -221,7 +223,13 @@ export function isFrameActionMessage(data: unknown): data is FrameMessage {
 
   if (message.type === ACTION_REQUEST_TYPE) {
     const actionRequest = message as Partial<FrameActionRequestMessage>;
-    return typeof actionRequest.requestId === "string" && isMediaAction(actionRequest.action);
+    return (
+      typeof actionRequest.requestId === "string" &&
+      isMediaAction(actionRequest.action) &&
+      (actionRequest.action === "toggleOverlays"
+        ? typeof actionRequest.overlaysEnabled === "boolean"
+        : actionRequest.overlaysEnabled === undefined)
+    );
   }
 
   if (message.type === ACTION_RESPONSE_TYPE) {
@@ -237,7 +245,7 @@ export function isFrameActionMessage(data: unknown): data is FrameMessage {
 /**
  * Requests flow down the frame tree, so only this frame's parent may send
  * them. Without this, any embedded frame, such as an ad, could make this frame
- * act on its media or change saved settings (the overlay toggle).
+ * act on its media.
  */
 export function isFromParentFrame(source: MessageEventSource | null): boolean {
   return !isTopWindow() && source === window.parent;
@@ -252,15 +260,6 @@ export function isFromChildFrame(source: MessageEventSource | null): source is W
 
 function createRequestId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function createFrameActionRequest(action: MediaAction): FrameActionRequestMessage {
-  return {
-    source: MESSAGE_SOURCE,
-    type: ACTION_REQUEST_TYPE,
-    action,
-    requestId: createRequestId(),
-  };
 }
 
 function getChildFrameWindows(): Window[] {
@@ -284,34 +283,6 @@ function postMessageToFrames(frameWindows: Window[], message: FrameMessage): boo
   }
 
   return posted;
-}
-
-export function delegateActionToChildFrames(action: MediaAction): Promise<boolean> {
-  const childFrames = getChildFrameWindows();
-  if (childFrames.length === 0) {
-    return Promise.resolve(false);
-  }
-
-  const request = createFrameActionRequest(action);
-  return new Promise((resolve) => {
-    const timeoutId = window.setTimeout(() => {
-      pendingFrameActionRequests.delete(request.requestId);
-      resolve(false);
-    }, FRAME_ACTION_TIMEOUT_MS);
-
-    pendingFrameActionRequests.set(request.requestId, (handled) => {
-      window.clearTimeout(timeoutId);
-      pendingFrameActionRequests.delete(request.requestId);
-      resolve(handled);
-    });
-
-    const posted = postMessageToFrames(childFrames, request);
-    if (!posted) {
-      window.clearTimeout(timeoutId);
-      pendingFrameActionRequests.delete(request.requestId);
-      resolve(false);
-    }
-  });
 }
 
 export function findIframeForWindow(frameWindow: Window): HTMLIFrameElement | undefined {
@@ -455,6 +426,7 @@ export function sendExecuteToFrame(
   action: MediaAction,
   requestId: string,
   allowPlaceholder = false,
+  overlaysEnabled?: boolean,
 ): Promise<boolean> {
   const request: FrameActionRequestMessage = {
     source: MESSAGE_SOURCE,
@@ -462,6 +434,7 @@ export function sendExecuteToFrame(
     action,
     requestId,
     allowPlaceholder,
+    ...(overlaysEnabled === undefined ? {} : { overlaysEnabled }),
   };
 
   return new Promise((resolve) => {

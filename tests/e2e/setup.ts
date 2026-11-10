@@ -382,6 +382,14 @@ export const test = base.extend<Fixtures>({
           `<iframe id="outer-frame" src="/page-with-video-iframe" style="width: 640px; height: 400px; border: 0;"></iframe>`,
         ),
       },
+      "/page-with-frame-tree": {
+        body: createFixturePage(
+          "Page With Frame Tree",
+          `<iframe id="video-frame" src="/iframe-video" style="width: 480px; height: 270px; border: 0;"></iframe>
+           <iframe id="audio-frame" src="/iframe-media"></iframe>
+           <iframe id="outer-frame" src="/page-with-video-iframe" style="width: 640px; height: 400px; border: 0;"></iframe>`,
+        ),
+      },
       "/late-shadow-frame": {
         body: createFixturePage(
           "Late Shadow Frame",
