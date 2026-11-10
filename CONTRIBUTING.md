@@ -43,6 +43,7 @@ The pre-commit hook refuses commits on `main` and runs `npm run check`. CI (`.gi
 
 - `webextension-polyfill` is mocked with `vi.mock` in unit and UI tests; reuse the `helpers.ts` in each folder rather than writing new mocks.
 - jsdom has no layout, media playback, Popover API, or `<dialog>` methods. Tests stub these explicitly (see `mockRect` in `tests/unit/content/helpers.ts`, the popover stub in `theater-mode.test.ts`, and `tests/ui/dialog-stub.ts`). Anything that depends on real layout, focus, or playback needs an E2E test.
+- Vitest keeps Node's timers, which outlive the jsdom environment; one that fires after teardown fails the run with `window is not defined`. After each test, `tests/unit/content/helpers.ts` runs the content script's leftover timeouts and cancels its leftover intervals, so the next test starts from settled state.
 - E2E tests load `dist/chrome`, so **rebuild before running them**. They run with one worker because the extension context is shared. Page fixtures and media helpers are in `tests/e2e/setup.ts` and `tests/e2e/fixtures.ts`.
 - Coverage thresholds (80%) are configured in `vitest.config.ts`. CI enforces them with `npm run test:coverage`; the pre-commit hook does not, so run it yourself when you remove or add a lot of code.
 
