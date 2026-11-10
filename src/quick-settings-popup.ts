@@ -1,4 +1,5 @@
 import browser from "webextension-polyfill";
+import { confirmWithDialog } from "./confirm-dialog.js";
 import { DELETE } from "./icons.js";
 import {
   type ConfigurableMediaAction,
@@ -606,6 +607,20 @@ function startKeyCapture(action: ConfigurableMediaAction, button: HTMLButtonElem
 }
 
 async function handleReset(): Promise<void> {
+  // A pending key capture swallows every key, including the ones that operate the dialog.
+  clearActiveKeyCapture();
+
+  // The button sits in the key bindings section, which is hidden while hotkeys are disabled everywhere, so
+  // key bindings are the only quick setting a visible button can change.
+  const confirmed = await confirmWithDialog({
+    title: "Restore default key bindings?",
+    message: "Your custom key bindings will be replaced with the defaults. This can't be undone.",
+    confirmLabel: "Restore Defaults",
+  });
+  if (!confirmed) {
+    return;
+  }
+
   const nextSettings = structuredClone(currentSettings);
   nextSettings.quickSettings = structuredClone(DEFAULT_QUICK_SETTINGS);
   await persistSettings(nextSettings, {
