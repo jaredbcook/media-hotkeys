@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { makeVideo, mockRect, rect, resetContentTestState } from "./helpers.js";
+import {
+  makeVideo,
+  mockRect,
+  rect,
+  resetContentTestState,
+  settleLeftoverTimers,
+} from "./helpers.js";
 import { setSettingsForTests } from "../../../src/content.js";
 import { DEFAULT_SETTINGS } from "../../../src/storage.js";
 
@@ -406,5 +412,63 @@ describe("reporting media presence to the parent frame", () => {
     );
 
     expect(presenceReports()).toEqual([true]);
+  });
+
+  // The tests below guard the test helpers: timers and the promise
+  // continuations they resume must be settled when a test ends.
+  it("settles a pending presence report so subsequent changes still schedule reports", async () => {
+    makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    // Let the mutation observer schedule the report, then settle before it runs.
+    await Promise.resolve();
+    Object.defineProperty(window, "parent", { configurable: true, value: window });
+    await settleLeftoverTimers();
+
+    resetContentTestState();
+    parentWindow.postMessage.mockClear();
+    Object.defineProperty(window, "parent", { configurable: true, value: parentWindow });
+
+    const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    await waitForReport();
+    video.remove();
+    await waitForReport();
+
+    expect(presenceReports().at(-1)).toBe(false);
+  });
+
+  it("settles follow-up timers started by promise continuations when a test ends", async () => {
+    const child = addChildFrame();
+    reportFromChild(child.childWindow, true);
+    // Starts collectChildFrameScores; when its timeout is flushed, the
+    // continuation runs broadcastPlaceholderExecute and schedules its 1,400 ms
+    // timeout. Both must finish inside settleLeftoverTimers().
+    pressKey("k");
+
+    const clearTimeoutSpy = vi.spyOn(window, "clearTimeout");
+    await settleLeftoverTimers();
+
+    expect(child.posted.map((message) => message.type)).toEqual([
+      "MEDIA_HOTKEYS_SITE_POLICY",
+      "MEDIA_HOTKEYS_SCORE_REQUEST",
+      "MEDIA_HOTKEYS_HANDLE_ACTION",
+    ]);
+    // Both the 180 ms score timeout and the 1,400 ms placeholder-execute
+    // timeout ran their callbacks and cleared themselves during the flush.
+    expect(clearTimeoutSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+
+    // A timeout whose callback triggers a multi-step promise chain before
+    // scheduling another timeout is also drained before returning.
+    let chainedTimeoutRan = false;
+    window.setTimeout(() => {
+      void Promise.resolve()
+        .then(() => Promise.resolve())
+        .then(() => {
+          window.setTimeout(() => {
+            chainedTimeoutRan = true;
+          }, 1000);
+        });
+    }, 1000);
+
+    await settleLeftoverTimers();
+    expect(chainedTimeoutRan).toBe(true);
   });
 });
