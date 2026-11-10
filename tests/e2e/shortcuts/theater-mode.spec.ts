@@ -92,7 +92,7 @@ test("theater mode fills the viewport above page chrome and Esc restores the vid
   await expect
     .poll(() =>
       page.evaluate(() =>
-        document.getElementById("media-shortcuts-overlay")?.matches(":popover-open"),
+        document.getElementById("media-hotkeys-overlay")?.matches(":popover-open"),
       ),
     )
     .toBe(true);
@@ -218,7 +218,7 @@ test("an unfocused iframe cannot ask to be enlarged without a routed theater act
   await frame.evaluate(() => {
     window.parent.postMessage(
       {
-        source: "media-shortcuts-extension",
+        source: "media-hotkeys-extension",
         type: "MEDIA_HOTKEYS_THEATER",
         active: true,
         requestId: "forged",

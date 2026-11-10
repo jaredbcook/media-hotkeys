@@ -44,7 +44,7 @@ function reportFromChild(childWindow: Window, hasMedia: boolean): void {
   window.dispatchEvent(
     new MessageEvent("message", {
       source: childWindow,
-      data: { source: "media-shortcuts-extension", type: PRESENCE_TYPE, hasMedia },
+      data: { source: "media-hotkeys-extension", type: PRESENCE_TYPE, hasMedia },
     }),
   );
 }
@@ -239,7 +239,7 @@ describe("keys on pages whose media may be in child frames", () => {
     expect(event.defaultPrevented).toBe(false);
     expect(reachedPage).toBe(true);
     expect(child.posted.map((message) => message.type)).not.toContain(
-      "MEDIA_SHORTCUTS_SCORE_REQUEST",
+      "MEDIA_HOTKEYS_SCORE_REQUEST",
     );
   });
 
@@ -251,7 +251,7 @@ describe("keys on pages whose media may be in child frames", () => {
 
     expect(event.defaultPrevented).toBe(true);
     expect(reachedPage).toBe(false);
-    expect(child.posted.map((message) => message.type)).toContain("MEDIA_SHORTCUTS_SCORE_REQUEST");
+    expect(child.posted.map((message) => message.type)).toContain("MEDIA_HOTKEYS_SCORE_REQUEST");
   });
 
   it("leaves keys to the page when the frame reporting media is hidden", () => {
@@ -401,7 +401,7 @@ describe("reporting media presence to the parent frame", () => {
     window.dispatchEvent(
       new MessageEvent("message", {
         source: parentWindow,
-        data: { source: "media-shortcuts-extension", type: PRESENCE_REQUEST_TYPE },
+        data: { source: "media-hotkeys-extension", type: PRESENCE_REQUEST_TYPE },
       }),
     );
 

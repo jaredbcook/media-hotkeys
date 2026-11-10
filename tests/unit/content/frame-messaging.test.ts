@@ -29,8 +29,8 @@ function sendActionRequest(source: Window, action: string, requestId: string): v
   window.dispatchEvent(
     new MessageEvent("message", {
       data: {
-        source: "media-shortcuts-extension",
-        type: "MEDIA_SHORTCUTS_HANDLE_ACTION",
+        source: "media-hotkeys-extension",
+        type: "MEDIA_HOTKEYS_HANDLE_ACTION",
         action,
         requestId,
       },
@@ -57,15 +57,15 @@ describe("frame action delegation", () => {
         type: string;
       };
 
-      if (request.type !== "MEDIA_SHORTCUTS_HANDLE_ACTION") {
+      if (request.type !== "MEDIA_HOTKEYS_HANDLE_ACTION") {
         return;
       }
 
       window.dispatchEvent(
         new MessageEvent("message", {
           data: {
-            source: "media-shortcuts-extension",
-            type: "MEDIA_SHORTCUTS_ACTION_RESULT",
+            source: "media-hotkeys-extension",
+            type: "MEDIA_HOTKEYS_ACTION_RESULT",
             requestId: request.requestId,
             handled: true,
           },
@@ -92,8 +92,8 @@ describe("frame action delegation", () => {
     window.dispatchEvent(
       new MessageEvent("message", {
         data: {
-          source: "media-shortcuts-extension",
-          type: "MEDIA_SHORTCUTS_ACTION_RESULT",
+          source: "media-hotkeys-extension",
+          type: "MEDIA_HOTKEYS_ACTION_RESULT",
           requestId: capturedRequestId,
           handled: false,
         },
@@ -126,8 +126,8 @@ describe("frame message handling", () => {
     window.dispatchEvent(
       new MessageEvent("message", {
         data: {
-          source: "media-shortcuts-extension",
-          type: "MEDIA_SHORTCUTS_HANDLE_ACTION",
+          source: "media-hotkeys-extension",
+          type: "MEDIA_HOTKEYS_HANDLE_ACTION",
           action: "togglePlayPause",
           requestId: "test-null-src",
         },
@@ -184,7 +184,7 @@ describe("frame message handling", () => {
     expect(playSpy).not.toHaveBeenCalled();
     expect(storageSetMock).not.toHaveBeenCalled();
     expect(childPostMessage).not.toHaveBeenCalledWith(
-      expect.objectContaining({ type: "MEDIA_SHORTCUTS_ACTION_RESULT" }),
+      expect.objectContaining({ type: "MEDIA_HOTKEYS_ACTION_RESULT" }),
       "*",
     );
   });
@@ -219,8 +219,8 @@ describe("frame message handling", () => {
     window.dispatchEvent(
       new MessageEvent("message", {
         data: {
-          source: "media-shortcuts-extension",
-          type: "MEDIA_SHORTCUTS_ACTION_RESULT",
+          source: "media-hotkeys-extension",
+          type: "MEDIA_HOTKEYS_ACTION_RESULT",
           requestId: capturedRequestId,
           handled: true,
         },
@@ -239,7 +239,7 @@ describe("frame message handling", () => {
     window.dispatchEvent(
       new MessageEvent("message", {
         data: {
-          source: "media-shortcuts-extension",
+          source: "media-hotkeys-extension",
           type: "MEDIA_HOTKEYS_SITE_POLICY",
           disabled: true,
         },
@@ -263,7 +263,7 @@ describe("frame message handling", () => {
       window.dispatchEvent(
         new MessageEvent("message", {
           data: {
-            source: "media-shortcuts-extension",
+            source: "media-hotkeys-extension",
             type: "MEDIA_HOTKEYS_SITE_POLICY",
             disabled: true,
           },
@@ -274,8 +274,8 @@ describe("frame message handling", () => {
       window.dispatchEvent(
         new MessageEvent("message", {
           data: {
-            source: "media-shortcuts-extension",
-            type: "MEDIA_SHORTCUTS_HANDLE_ACTION",
+            source: "media-hotkeys-extension",
+            type: "MEDIA_HOTKEYS_HANDLE_ACTION",
             action: "togglePlayPause",
             requestId,
           },
@@ -309,7 +309,7 @@ describe("frame message handling", () => {
       window.dispatchEvent(
         new MessageEvent("message", {
           data: {
-            source: "media-shortcuts-extension",
+            source: "media-hotkeys-extension",
             type: "MEDIA_HOTKEYS_SITE_POLICY",
             disabled: true,
           },
@@ -409,8 +409,8 @@ describe("frame message handling", () => {
     window.dispatchEvent(
       new MessageEvent("message", {
         data: {
-          source: "media-shortcuts-extension",
-          type: "MEDIA_SHORTCUTS_SCORE_REQUEST",
+          source: "media-hotkeys-extension",
+          type: "MEDIA_HOTKEYS_SCORE_REQUEST",
           requestId: "score-req-empty",
           budgetMs: 0,
         },
@@ -423,7 +423,7 @@ describe("frame message handling", () => {
 
     expect(mockSource.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: "MEDIA_SHORTCUTS_SCORE_RESPONSE",
+        type: "MEDIA_HOTKEYS_SCORE_RESPONSE",
         requestId: "score-req-empty",
         bestScore: null,
       }),
@@ -439,8 +439,8 @@ describe("frame message handling", () => {
     window.dispatchEvent(
       new MessageEvent("message", {
         data: {
-          source: "media-shortcuts-extension",
-          type: "MEDIA_SHORTCUTS_SCORE_REQUEST",
+          source: "media-hotkeys-extension",
+          type: "MEDIA_HOTKEYS_SCORE_REQUEST",
           requestId: "score-req-media",
           budgetMs: 0,
         },
@@ -453,7 +453,7 @@ describe("frame message handling", () => {
 
     expect(mockSource.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: "MEDIA_SHORTCUTS_SCORE_RESPONSE",
+        type: "MEDIA_HOTKEYS_SCORE_RESPONSE",
         requestId: "score-req-media",
         bestScore: expect.any(Number),
         areaScore: expect.any(Number),
@@ -472,8 +472,8 @@ describe("frame message handling", () => {
     window.dispatchEvent(
       new MessageEvent("message", {
         data: {
-          source: "media-shortcuts-extension",
-          type: "MEDIA_SHORTCUTS_SCORE_REQUEST",
+          source: "media-hotkeys-extension",
+          type: "MEDIA_HOTKEYS_SCORE_REQUEST",
           requestId,
           budgetMs: 0,
         },
@@ -487,8 +487,8 @@ describe("frame message handling", () => {
     window.dispatchEvent(
       new MessageEvent("message", {
         data: {
-          source: "media-shortcuts-extension",
-          type: "MEDIA_SHORTCUTS_HANDLE_ACTION",
+          source: "media-hotkeys-extension",
+          type: "MEDIA_HOTKEYS_HANDLE_ACTION",
           action: "togglePlayPause",
           requestId,
         },
@@ -526,8 +526,8 @@ describe("frame message handling", () => {
       window.dispatchEvent(
         new MessageEvent("message", {
           data: {
-            source: "media-shortcuts-extension",
-            type: "MEDIA_SHORTCUTS_HANDLE_ACTION",
+            source: "media-hotkeys-extension",
+            type: "MEDIA_HOTKEYS_HANDLE_ACTION",
             action: "togglePlayPause",
             requestId,
           },
@@ -568,20 +568,20 @@ describe("cross-frame area scaling", () => {
 
     vi.spyOn(childWindow, "postMessage").mockImplementation((message: unknown) => {
       const request = message as { type: string; requestId: string };
-      if (request.type === "MEDIA_SHORTCUTS_SCORE_REQUEST") {
+      if (request.type === "MEDIA_HOTKEYS_SCORE_REQUEST") {
         window.dispatchEvent(
           new MessageEvent("message", {
             source: childWindow,
             data: {
-              source: "media-shortcuts-extension",
-              type: "MEDIA_SHORTCUTS_SCORE_RESPONSE",
+              source: "media-hotkeys-extension",
+              type: "MEDIA_HOTKEYS_SCORE_RESPONSE",
               requestId: request.requestId,
               bestScore,
               areaScore,
             },
           }),
         );
-      } else if (request.type === "MEDIA_SHORTCUTS_HANDLE_ACTION") {
+      } else if (request.type === "MEDIA_HOTKEYS_HANDLE_ACTION") {
         executeRequests.push(request);
       }
     });
@@ -646,7 +646,7 @@ describe("cross-frame area scaling", () => {
       new MessageEvent("message", {
         source: child.childWindow,
         data: {
-          source: "media-shortcuts-extension",
+          source: "media-hotkeys-extension",
           type: "MEDIA_HOTKEYS_MEDIA_PRESENCE",
           hasMedia: true,
         },

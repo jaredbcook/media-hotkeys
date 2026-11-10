@@ -240,7 +240,7 @@ describe("theater mode across frames", () => {
       new MessageEvent("message", {
         source: childWindow,
         data: {
-          source: "media-shortcuts-extension",
+          source: "media-hotkeys-extension",
           type: "MEDIA_HOTKEYS_MEDIA_PRESENCE",
           hasMedia: true,
         },
@@ -254,25 +254,25 @@ describe("theater mode across frames", () => {
         window.dispatchEvent(
           new MessageEvent("message", {
             source: childWindow,
-            data: { source: "media-shortcuts-extension", ...data },
+            data: { source: "media-hotkeys-extension", ...data },
           }),
         );
       };
 
-      if (request.type === "MEDIA_SHORTCUTS_SCORE_REQUEST") {
+      if (request.type === "MEDIA_HOTKEYS_SCORE_REQUEST") {
         reply({
-          type: "MEDIA_SHORTCUTS_SCORE_RESPONSE",
+          type: "MEDIA_HOTKEYS_SCORE_RESPONSE",
           requestId: request.requestId,
           bestScore: 210,
           areaScore: 200,
         });
-      } else if (request.type === "MEDIA_SHORTCUTS_HANDLE_ACTION") {
+      } else if (request.type === "MEDIA_HOTKEYS_HANDLE_ACTION") {
         executeRequests.push(request);
         if (entersTheater && request.action === "toggleTheater") {
           reply({ type: "MEDIA_HOTKEYS_THEATER", active: true, requestId: request.requestId });
         }
         reply({
-          type: "MEDIA_SHORTCUTS_ACTION_RESULT",
+          type: "MEDIA_HOTKEYS_ACTION_RESULT",
           requestId: request.requestId,
           handled: true,
         });
@@ -286,7 +286,7 @@ describe("theater mode across frames", () => {
     window.dispatchEvent(
       new MessageEvent("message", {
         source: child.childWindow,
-        data: { source: "media-shortcuts-extension", type: "MEDIA_HOTKEYS_THEATER", ...data },
+        data: { source: "media-hotkeys-extension", type: "MEDIA_HOTKEYS_THEATER", ...data },
       }),
     );
   }
@@ -395,15 +395,15 @@ describe("theater mode across frames", () => {
         window.dispatchEvent(
           new MessageEvent("message", {
             source: parentWindow,
-            data: { source: "media-shortcuts-extension", ...data },
+            data: { source: "media-hotkeys-extension", ...data },
           }),
         );
       };
 
-      send({ type: "MEDIA_SHORTCUTS_SCORE_REQUEST", requestId: "theater-req", budgetMs: 0 });
+      send({ type: "MEDIA_HOTKEYS_SCORE_REQUEST", requestId: "theater-req", budgetMs: 0 });
       await flushArbitration();
       send({
-        type: "MEDIA_SHORTCUTS_HANDLE_ACTION",
+        type: "MEDIA_HOTKEYS_HANDLE_ACTION",
         action: "toggleTheater",
         requestId: "theater-req",
       });
@@ -412,7 +412,7 @@ describe("theater mode across frames", () => {
       expect(getTheaterMedia()).toBe(video);
       expect(parentWindow.postMessage).toHaveBeenCalledWith(
         {
-          source: "media-shortcuts-extension",
+          source: "media-hotkeys-extension",
           type: "MEDIA_HOTKEYS_THEATER",
           active: true,
           requestId: "theater-req",
@@ -424,7 +424,7 @@ describe("theater mode across frames", () => {
 
       expect(getTheaterMedia()).toBeNull();
       expect(parentWindow.postMessage).toHaveBeenCalledWith(
-        { source: "media-shortcuts-extension", type: "MEDIA_HOTKEYS_THEATER", active: false },
+        { source: "media-hotkeys-extension", type: "MEDIA_HOTKEYS_THEATER", active: false },
         "*",
       );
     } finally {
@@ -445,7 +445,7 @@ describe("theater mode across frames", () => {
 
       expect(getTheaterMedia()).toBe(video);
       expect(parentWindow.postMessage).toHaveBeenCalledWith(
-        { source: "media-shortcuts-extension", type: "MEDIA_HOTKEYS_THEATER", active: true },
+        { source: "media-hotkeys-extension", type: "MEDIA_HOTKEYS_THEATER", active: true },
         "*",
       );
     } finally {
