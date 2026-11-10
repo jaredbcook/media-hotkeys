@@ -1,4 +1,4 @@
-import { afterAll, vi } from "vitest";
+import { vi } from "vitest";
 import defaults from "../../../src/settings/defaults.json";
 import type { ExtensionSettings } from "../../../src/storage.js";
 
@@ -48,31 +48,97 @@ import { setSettingsForTests } from "../../../src/content.js";
 
 const DEFAULT_SETTINGS = defaults as ExtensionSettings;
 
-// Placeholder activation polls for media for up to a second after its click.
-// Stop leftover polling after every test, so it can't act on the next test's
-// page or run after the test environment is torn down.
+// Vitest leaves Node's timers in place, so a timer the content script starts
+// (a presence report, a cross-frame timeout, placeholder polling) outlives the
+// test that started it, and can fire after the environment is torn down, when
+// `window` no longer exists. After every test, leftover intervals are
+// cancelled and leftover timeouts run at once rather than being dropped: the
+// content script resets state in them (the pending presence report, a skip
+// streak), and the next test must not inherit it.
+type StartTimer = (handler: TimerHandler, timeout?: number, ...args: unknown[]) => number;
+type StopTimer = (id?: number) => void;
+type TimerStarters = typeof window.setTimeout & typeof window.setInterval;
+type TimerStoppers = typeof window.clearTimeout & typeof window.clearInterval;
+
+const MAX_TIMEOUT_FLUSH_ROUNDS = 10;
+const MICROTASK_DRAIN_TURNS = 10;
+const pendingTimeouts = new Map<number, () => void>();
 const pendingIntervals = new Set<number>();
-const originalSetInterval = window.setInterval.bind(window);
-window.setInterval = ((...args: Parameters<typeof window.setInterval>) => {
-  const id = originalSetInterval(...args);
+const startTimeout = window.setTimeout.bind(window) as StartTimer;
+const startInterval = window.setInterval.bind(window) as StartTimer;
+const stopTimeout = window.clearTimeout.bind(window) as StopTimer;
+const stopInterval = window.clearInterval.bind(window) as StopTimer;
+
+window.setTimeout = ((handler, timeout, ...args) => {
+  const run = (): void => {
+    pendingTimeouts.delete(id);
+    if (typeof handler === "function") {
+      (handler as (...handlerArgs: unknown[]) => void)(...args);
+    }
+  };
+  const id = startTimeout(run, timeout);
+  pendingTimeouts.set(id, run);
+  return id;
+}) as StartTimer as TimerStarters;
+
+window.setInterval = ((...args) => {
+  const id = startInterval(...args);
   pendingIntervals.add(id);
   return id;
-}) as typeof window.setInterval;
+}) as StartTimer as TimerStarters;
 
-afterEach(() => {
-  for (const id of pendingIntervals) {
-    window.clearInterval(id);
+// Either function stops either kind of timer, in Node as in browsers.
+function forgetAndStop(stop: StopTimer): StopTimer {
+  return (id) => {
+    if (id !== undefined) {
+      pendingTimeouts.delete(id);
+      pendingIntervals.delete(id);
+    }
+    stop(id);
+  };
+}
+
+window.clearTimeout = forgetAndStop(stopTimeout) as TimerStoppers;
+window.clearInterval = forgetAndStop(stopInterval) as TimerStoppers;
+
+export async function settleLeftoverTimers(): Promise<void> {
+  const clearPendingIntervals = (): void => {
+    for (const id of pendingIntervals) {
+      stopInterval(id);
+    }
+    pendingIntervals.clear();
+  };
+
+  const drainMicrotasks = async (): Promise<void> => {
+    for (let turn = 0; turn < MICROTASK_DRAIN_TURNS; turn += 1) {
+      await Promise.resolve();
+    }
+  };
+
+  await drainMicrotasks();
+  clearPendingIntervals();
+
+  // A timeout or a chain of promise continuations it resumes may start another
+  // timer, so drain microtasks between rounds, within reason.
+  for (let round = 0; round < MAX_TIMEOUT_FLUSH_ROUNDS && pendingTimeouts.size > 0; round += 1) {
+    for (const [id, run] of [...pendingTimeouts]) {
+      // An earlier callback in this round may have cancelled this one.
+      if (pendingTimeouts.has(id)) {
+        stopTimeout(id);
+        run();
+      }
+    }
+    await drainMicrotasks();
+    clearPendingIntervals();
   }
-  pendingIntervals.clear();
-});
 
-// jsdom empties the body when Vitest tears the environment down, after the
-// window globals are gone. Empty it first so the content script's mutation
-// observer doesn't run without a window.
-afterAll(async () => {
-  document.body.replaceChildren();
-  await Promise.resolve();
-});
+  for (const id of pendingTimeouts.keys()) {
+    stopTimeout(id);
+  }
+  pendingTimeouts.clear();
+}
+
+afterEach(settleLeftoverTimers);
 
 export function makeVideo(overrides: Partial<HTMLVideoElement> = {}): HTMLVideoElement {
   const video = document.createElement("video");
