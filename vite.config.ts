@@ -6,13 +6,16 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = __dirname;
 
-export function createViteConfigs(outDir: string): UserConfig[] {
+export function createViteConfigs(outDir: string, minify = true): UserConfig[] {
+  // Vite keeps whitespace in ES-format library output unless Rolldown is told to minify it too.
+  const esOutput = minify ? { output: { minify: true } } : {};
+
   return [
     {
       publicDir: false,
       build: {
         emptyOutDir: false,
-        minify: false,
+        minify,
         outDir,
         sourcemap: false,
         lib: {
@@ -27,7 +30,7 @@ export function createViteConfigs(outDir: string): UserConfig[] {
       publicDir: false,
       build: {
         emptyOutDir: false,
-        minify: false,
+        minify,
         outDir,
         sourcemap: false,
         lib: {
@@ -42,7 +45,7 @@ export function createViteConfigs(outDir: string): UserConfig[] {
       publicDir: false,
       build: {
         emptyOutDir: false,
-        minify: false,
+        minify,
         outDir,
         sourcemap: false,
         lib: {
@@ -50,13 +53,14 @@ export function createViteConfigs(outDir: string): UserConfig[] {
           formats: ["es"],
           fileName: () => "quick-settings-popup.js",
         },
+        rolldownOptions: esOutput,
       },
     },
     {
       publicDir: false,
       build: {
         emptyOutDir: false,
-        minify: false,
+        minify,
         outDir,
         sourcemap: false,
         lib: {
@@ -64,6 +68,7 @@ export function createViteConfigs(outDir: string): UserConfig[] {
           formats: ["es"],
           fileName: () => "advanced-settings-page.js",
         },
+        rolldownOptions: esOutput,
       },
     },
   ];
