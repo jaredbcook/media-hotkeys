@@ -1,10 +1,12 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { createManifest } from "../../../scripts/build.js";
+import { createViteConfigs } from "../../../vite.config.js";
 import {
   type ManifestTemplate,
   assertBrowser,
   resolveBrowsers,
+  resolveMinify,
   supportedBrowsers,
 } from "../../../scripts/shared.js";
 
@@ -31,6 +33,37 @@ describe("browser target resolution", () => {
     expect(() => assertBrowser("safari")).toThrow(
       'Unsupported browser "safari". Expected one of: chrome, edge, firefox',
     );
+  });
+});
+
+describe("minification", () => {
+  it("minifies unless --no-minify is passed", () => {
+    expect(resolveMinify([])).toBe(true);
+    expect(resolveMinify(["--browser", "chrome"])).toBe(true);
+    expect(resolveMinify(["--browser", "chrome", "--no-minify"])).toBe(false);
+  });
+
+  it("minifies every bundle by default, including whitespace in the ES module bundles", () => {
+    const configs = createViteConfigs("dist/test");
+
+    expect(configs).toHaveLength(4);
+    for (const config of configs) {
+      const lib = config.build?.lib;
+      const formats = lib ? lib.formats : undefined;
+
+      expect(config.build?.minify).toBe(true);
+      expect(config.build?.sourcemap).toBe(false);
+      if (formats?.includes("es")) {
+        expect(config.build?.rolldownOptions?.output).toEqual({ minify: true });
+      }
+    }
+  });
+
+  it("leaves every bundle unminified for a debug build", () => {
+    for (const config of createViteConfigs("dist/test", false)) {
+      expect(config.build?.minify).toBe(false);
+      expect(config.build?.rolldownOptions?.output).toBeUndefined();
+    }
   });
 });
 

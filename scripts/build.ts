@@ -13,12 +13,13 @@ import {
   projectRoot,
   readJsonFile,
   resolveBrowsers,
+  resolveMinify,
   type ManifestTemplate,
   type PackageJson,
   type SupportedBrowser,
 } from "./shared.js";
 
-export async function buildBrowsers(browsers: SupportedBrowser[]): Promise<void> {
+export async function buildBrowsers(browsers: SupportedBrowser[], minify = true): Promise<void> {
   const [packageJson, manifestTemplate] = await Promise.all([
     readJsonFile<PackageJson>(getPackageJsonPath()),
     readJsonFile<ManifestTemplate>(getManifestTemplatePath()),
@@ -27,7 +28,7 @@ export async function buildBrowsers(browsers: SupportedBrowser[]): Promise<void>
   await mkdir(distRoot, { recursive: true });
 
   for (const browser of browsers) {
-    await buildBrowser(browser, packageJson, manifestTemplate);
+    await buildBrowser(browser, packageJson, manifestTemplate, minify);
   }
 }
 
@@ -35,13 +36,14 @@ async function buildBrowser(
   browser: SupportedBrowser,
   packageJson: PackageJson,
   manifestTemplate: ManifestTemplate,
+  minify: boolean,
 ): Promise<void> {
   const outDir = getBrowserDistDir(browser);
 
   await rm(outDir, { recursive: true, force: true });
   await mkdir(outDir, { recursive: true });
 
-  for (const viteConfig of createViteConfigs(outDir)) {
+  for (const viteConfig of createViteConfigs(outDir, minify)) {
     await viteBuild({
       ...viteConfig,
       mode: browser,
@@ -129,8 +131,8 @@ export function createManifest({
 }
 
 async function run(): Promise<void> {
-  const browsers = resolveBrowsers(getScriptArgv());
-  await buildBrowsers(browsers);
+  const args = getScriptArgv();
+  await buildBrowsers(resolveBrowsers(args), resolveMinify(args));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

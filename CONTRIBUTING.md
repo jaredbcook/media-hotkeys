@@ -19,7 +19,7 @@ Load `dist/<browser>` in your browser as described in [README.md](README.md#inst
 | -------------------------------------------- | -------------------------------------------------------------------- |
 | `npm run check`                              | Format check, lint, typecheck, and unit/UI tests (the commit gate)   |
 | `npm run build`                              | Build Chrome, Edge, and Firefox into `dist/`                         |
-| `npm run build:chrome` (`:edge`, `:firefox`) | Build one browser                                                    |
+| `npm run build:chrome` (`:edge`, `:firefox`) | Build one browser; add `-- --no-minify` for a readable debug build   |
 | `npm test` / `npm run test:watch`            | Vitest unit and UI tests                                             |
 | `npm run test:coverage`                      | Unit and UI tests with the 80% coverage thresholds enforced          |
 | `npm run test:e2e`                           | Playwright end-to-end tests (run `npm run build:chrome` first)       |
@@ -49,7 +49,7 @@ The pre-commit hook refuses commits on `main` and runs `npm run check`. CI (`.gi
 ## Debugging
 
 - Turn on **Debug Logging** in Advanced Settings. The content script then logs matched keys, handled actions, tracked interactions, placeholder scans, and theater-mode failures to each frame's DevTools console via `debugLog` in `src/content/dom-utils.ts`.
-- The build isn't minified, so `dist/<browser>/content.js` is readable in DevTools.
+- Builds are minified, and there are no source maps. To read or step through the bundles in DevTools, make an unminified build with `npm run build:chrome -- --no-minify` (the flag works with `npm run build` and every `build:<browser>` script), then reload the extension. `npm run package` ignores the flag, so packages are always minified. Rebuild without the flag before running the E2E suite, so it tests the code that ships.
 - To debug cross-frame behavior, pick the iframe's context in the DevTools console dropdown. Each frame runs its own content script.
 
 ## Issues and pull requests
@@ -99,7 +99,7 @@ Each fact has one home. Update that file in the same change that alters the beha
 4. Merge the version bump through a pull request, then tag the merged commit on `main` and push the tag: `git switch main && git pull && git tag vX.Y.Z && git push origin vX.Y.Z`. The tag must match the `package.json` version, or CI fails.
 5. CI runs the full test suite, packages every browser, and creates a GitHub Release for the tag with the archives attached and notes generated from the commits since the last tag. Edit the notes on the release page if needed.
 6. Upload the archives from the release to each browser store. Stores reject a version they have already seen, so every upload needs a new version.
-7. addons.mozilla.org also requires the source code, because the Firefox build is bundled by Vite. Upload an archive of the tagged commit as the source code: `git archive --format=zip -o media-hotkeys-source-vX.Y.Z.zip vX.Y.Z`. In the reviewer notes, say that it builds with Node.js 24 and `npm ci && npm run build:firefox`, which writes the extension to `dist/firefox`.
+7. addons.mozilla.org also requires the source code, because the Firefox build is bundled and minified by Vite. Upload an archive of the tagged commit as the source code: `git archive --format=zip -o media-hotkeys-source-vX.Y.Z.zip vX.Y.Z`. In the reviewer notes, say that it builds with Node.js 24 and `npm ci && npm run build:firefox`, which writes the extension to `dist/firefox`.
 
 The Firefox package on the release, `media-hotkeys-firefox-vX.Y.Z-unsigned.xpi`, is unsigned. Firefox only installs it permanently after Mozilla signs it through addons.mozilla.org.
 
