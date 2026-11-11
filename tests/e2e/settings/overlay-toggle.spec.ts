@@ -1,6 +1,7 @@
 import type { Frame, Page } from "@playwright/test";
 import { expect, test } from "../setup.js";
 import { createMedia, waitForMediaState } from "../fixtures.js";
+import { openOverlayReader } from "../overlay.js";
 
 test.beforeEach(async ({ page, server }) => {
   await page.goto(server.getUrl("/"));
@@ -86,11 +87,12 @@ async function countSyncWrites(
   };
 }
 
-function readOverlayText(frame: Frame): Promise<string | null> {
-  return frame.evaluate(() => {
-    const overlay = document.getElementById("media-hotkeys-overlay");
-    return overlay && getComputedStyle(overlay).display !== "none" ? overlay.textContent : null;
-  });
+async function readVisibleOverlayText(
+  overlay: Awaited<ReturnType<typeof openOverlayReader>>,
+  frame: Frame,
+): Promise<string | null> {
+  const snapshot = await overlay.read(frame);
+  return snapshot?.visible ? snapshot.text : null;
 }
 
 test("saves the overlay toggle once per keypress on a page with many frames", async ({
@@ -98,6 +100,7 @@ test("saves the overlay toggle once per keypress on a page with many frames", as
   server,
 }) => {
   await page.goto(server.getUrl("/page-with-frame-tree"));
+  const overlay = await openOverlayReader(page);
   await createMedia(page, "primary", {}, "video");
   const outerFrame = await (await page.locator("#outer-frame").elementHandle())?.contentFrame();
   const nestedFrame = await (
@@ -116,14 +119,14 @@ test("saves the overlay toggle once per keypress on a page with many frames", as
   // Key in the top frame, whose focused video shows the confirmation.
   await page.locator("#primary").focus();
   await page.keyboard.press("o");
-  await expect.poll(() => readOverlayText(page.mainFrame())).toBe("Overlays off");
+  await expect.poll(() => readVisibleOverlayText(overlay, page.mainFrame())).toBe("Overlays off");
   await expect.poll(() => writes.readShowOverlays()).toBe(false);
   expect(await totalWrites()).toBe(1);
 
   // Key inside the nested frame, which saves and confirms by itself.
   await nestedFrame!.locator("#frame-video").focus();
   await page.keyboard.press("o");
-  await expect.poll(() => readOverlayText(nestedFrame!)).toBe("Overlays on");
+  await expect.poll(() => readVisibleOverlayText(overlay, nestedFrame!)).toBe("Overlays on");
   await expect.poll(() => writes.readShowOverlays()).toBe(true);
 
   // Three quick presses in the top frame end on the third value.
@@ -131,7 +134,7 @@ test("saves the overlay toggle once per keypress on a page with many frames", as
   await page.keyboard.press("o");
   await page.keyboard.press("o");
   await page.keyboard.press("o");
-  await expect.poll(() => readOverlayText(page.mainFrame())).toBe("Overlays off");
+  await expect.poll(() => readVisibleOverlayText(overlay, page.mainFrame())).toBe("Overlays off");
   await expect.poll(() => writes.readShowOverlays()).toBe(false);
 
   // Give a late or repeated write from any frame time to show up.

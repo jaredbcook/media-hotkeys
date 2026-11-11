@@ -6,6 +6,7 @@ import {
   readMediaState,
   waitForMediaState,
 } from "../fixtures.js";
+import { openOverlayReader } from "../overlay.js";
 
 test.beforeEach(async ({ page, server }) => {
   await page.goto(server.getUrl("/"));
@@ -164,6 +165,7 @@ test("plays media inside a custom element shadow root via a play button fallback
 });
 
 test("uses custom element host APIs for shadow-root media actions", async ({ page }) => {
+  const overlay = await openOverlayReader(page);
   await page.evaluate(() => {
     const counts = {
       play: 0,
@@ -313,21 +315,15 @@ test("uses custom element host APIs for shadow-root media actions", async ({ pag
       ),
     )
     .toBe(1);
-  await expect(page.locator("#media-hotkeys-overlay svg path")).toHaveAttribute(
-    "d",
-    expect.stringContaining("M320-273v-414"),
-  );
+  await expect.poll(async () => (await overlay.read())?.iconPath).toContain("M320-273v-414");
 
   await page.keyboard.press("k");
   await waitForMediaState(page, "custom-api-media", (state) => state.paused);
-  await expect(page.locator("#media-hotkeys-overlay svg path")).toHaveAttribute(
-    "d",
-    expect.stringContaining("M640-200q-33 0"),
-  );
+  await expect.poll(async () => (await overlay.read())?.iconPath).toContain("M640-200q-33 0");
 
   await page.keyboard.press("m");
   await waitForMediaState(page, "custom-api-media", (state) => state.muted);
-  await expect(page.locator("#media-hotkeys-overlay")).toHaveText("0%");
+  await expect.poll(async () => (await overlay.read())?.text).toBe("0%");
 
   await page.keyboard.press("ArrowUp");
   await waitForMediaState(
@@ -335,7 +331,7 @@ test("uses custom element host APIs for shadow-root media actions", async ({ pag
     "custom-api-media",
     (state) => !state.muted && Math.abs(state.volume - 0.05) < 0.0001,
   );
-  await expect(page.locator("#media-hotkeys-overlay")).toHaveText("5%");
+  await expect.poll(async () => (await overlay.read())?.text).toBe("5%");
 
   await markPlaying(page, "custom-api-media");
   await waitForMediaState(page, "custom-api-media", (state) => !state.paused);
@@ -353,7 +349,7 @@ test("uses custom element host APIs for shadow-root media actions", async ({ pag
     "custom-api-media",
     (state) => Math.abs(state.playbackRate - 1.25) < 0.0001,
   );
-  await expect(page.locator("#media-hotkeys-overlay")).toHaveText("1.25x");
+  await expect.poll(async () => (await overlay.read())?.text).toBe("1.25x");
 
   await expect
     .poll(() =>
@@ -544,7 +540,7 @@ test("shows overlays while a video is fullscreen", async ({ page }) => {
       }),
     )
     .toEqual({
-      display: "flex",
+      display: "block",
       parentIsFullscreenHost: true,
     });
 });

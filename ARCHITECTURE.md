@@ -63,7 +63,7 @@ Every file under `src/` is listed here; `tests/unit/docs/docs-consistency.test.t
 | `src/storage.ts`                  | Settings types, `MediaAction`, normalization, site-policy matching (no tldts), load/save.                      |
 | `src/site-patterns.ts`            | Turns entered rules and page URLs into saved site patterns with tldts. Popup and options page only.            |
 | `src/settings/defaults.json`      | Single source of truth for default settings and key bindings.                                                  |
-| `src/overlay.ts`                  | The on-screen action indicator: anchoring, sizing, top-layer promotion, fade.                                  |
+| `src/overlay.ts`                  | The on-screen action indicator: closed shadow root, anchoring, sizing, top-layer promotion, fade.              |
 | `src/icons.ts`                    | Inline SVG strings for overlay and settings UI icons (sourced from `assets/material-icons/`).                  |
 | `src/player-bridge.ts`            | Main-world bridge for whitelisted custom-player host operations. Must stay import-free.                        |
 | `src/quick-settings-popup.html`   | Popup markup.                                                                                                  |
@@ -157,6 +157,17 @@ Theater mode promotes the target `<video>` into the browser's top layer as a man
 
 For a video inside an iframe, each ancestor frame promotes the hosting `<iframe>` the same way. A child asks its parent with a `MEDIA_HOTKEYS_THEATER` message, and **the parent only honors it when it has a reason to trust the request**: it routed `toggleTheater` to that exact frame under the message's `requestId` within the route TTL, or that iframe is the focused element in the parent (following focus into open shadow roots). The parent then repeats the request upward under the same rules. Without these checks any embedded frame, such as an ad, could cover the page. Exit notices need no trust; each side ignores notices that don't match its state.
 
+## Overlay
+
+The action overlay is split in two so page CSS can't restyle it:
+
+- **Host.** A `div#media-hotkeys-overlay` in the page's DOM (the `body`, or the fullscreen element so it shows above fullscreen video). It carries only position, visibility, and the fade, and in theater mode the `popover` attribute that promotes it to the top layer. Because the page can select the host, its styles start from `all: initial` and are all set inline with `!important` (`setHostStyle` in `src/overlay.ts`), which outranks page rules of either importance. That also neutralizes the UA popover box.
+- **Shadow root.** The host's closed shadow root holds a single box with the icon, text, and everything that makes it look like an overlay, plus the skip-slide `@keyframes`. Page selectors for `div`, `span`, or `svg` can't reach it, and page scripts get `null` from `host.shadowRoot`. The box, not the host, animates the skip slide, so the host's `transform` can keep positioning.
+
+The overlay is built on the first `showActionOverlay`, so pages that never show one are untouched. A host that the page removes is rebuilt, and a leftover one from an earlier content script (after an extension update) is removed, because the new script can't reach into its closed root. Only an element carrying the `data-media-hotkeys-overlay` attribute counts as ours, both for that cleanup and for the mutation observer, which ignores the host and never sees inside the root; a page element that merely shares the id is left alone. (A hidden host from a build before the attribute existed stays in the page, since it can't be told from a page's own element.)
+
+Tests can't see into a closed root either. Unit tests record the root as it is attached; E2E tests read it from the content script's isolated world (see [CONTRIBUTING.md](CONTRIBUTING.md#testing)).
+
 ## Settings and site policies
 
 - **Schema.** `ExtensionSettings` in `src/storage.ts` has three groups: `quickSettings` (enabled toggle, key bindings), `advancedSettings` (playback, skip, volume, overlay, debug), and `siteSettings` (`sitePolicies`). Defaults come only from `src/settings/defaults.json`.
@@ -186,3 +197,4 @@ Breaking one of these is a bug even if tests pass:
 - Pressing play on a placeholder never navigates the page.
 - `player-bridge.ts` imports nothing and only runs whitelisted operations.
 - Extension-created DOM is tagged with `data-media-hotkeys-*` attributes or the `media-hotkeys-overlay` id (see `constants.ts`) so the mutation observer ignores it.
+- What the overlay shows lives in a closed shadow root, and its host's styles are inline and `!important`.

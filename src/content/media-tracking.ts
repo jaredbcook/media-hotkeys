@@ -1,8 +1,8 @@
 import {
   FULLSCREEN_STYLE_ATTR,
   FULLSCREEN_WRAPPER_ATTR,
+  OVERLAY_ATTR,
   OVERLAY_ID,
-  OVERLAY_STYLE_ATTR,
   SHADOW_ROOT_ATTACHED_EVENT,
 } from "./constants.js";
 import { type Box, debugLog, getVisibleBox, isEmptyBox } from "./dom-utils.js";
@@ -173,8 +173,7 @@ function isExtensionManagedNode(node: Node): boolean {
   return Boolean(
     element.closest(
       [
-        `#${OVERLAY_ID}`,
-        `style[${OVERLAY_STYLE_ATTR}="true"]`,
+        `#${OVERLAY_ID}[${OVERLAY_ATTR}]`,
         `style[${FULLSCREEN_STYLE_ATTR}="true"]`,
         `[${FULLSCREEN_WRAPPER_ATTR}]`,
       ].join(", "),
