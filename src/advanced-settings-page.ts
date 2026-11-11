@@ -6,8 +6,6 @@ import {
   DEFAULT_ADVANCED_SETTINGS,
   findMatchingSitePolicy,
   getSettings,
-  normalizeDisabledUrlPattern,
-  normalizeSitePolicies,
   saveSettings,
   settingsEqual,
   type ExtensionSettings,
@@ -15,6 +13,7 @@ import {
   type SitePolicyEmbedsPolicy,
   type SitePolicyMode,
 } from "./storage.js";
+import { normalizeDisabledUrlPattern, normalizeSitePolicies } from "./site-patterns.js";
 import { showStatusToast, type StatusToastTone } from "./status-toast.js";
 
 let currentSettings: ExtensionSettings;

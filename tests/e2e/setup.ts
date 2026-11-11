@@ -13,6 +13,11 @@ type TestServer = {
 };
 
 const extensionPath = path.resolve("dist/chrome");
+const TEST_HOST_RESOLVER_RULES = [
+  "MAP example.co.uk 127.0.0.1",
+  "MAP *.example.co.uk 127.0.0.1",
+  "MAP *.github.io 127.0.0.1",
+].join(", ");
 
 function createFixturePage(title: string, body: string): string {
   return `<!doctype html>
@@ -246,7 +251,12 @@ export const test = base.extend<Fixtures>({
     const context = await chromium.launchPersistentContext("", {
       channel: "chromium",
       headless: true,
-      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
+      args: [
+        `--disable-extensions-except=${extensionPath}`,
+        `--load-extension=${extensionPath}`,
+        // Site-rule tests visit these hosts by name; they all reach the local test server.
+        `--host-resolver-rules=${TEST_HOST_RESOLVER_RULES}`,
+      ],
     });
 
     await use(context);
