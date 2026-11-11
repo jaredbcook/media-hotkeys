@@ -358,6 +358,17 @@ export const test = base.extend<Fixtures>({
         contentType: "text/vtt; charset=utf-8",
         body: "WEBVTT\n\n00:00:00.000 --> 00:00:10.000\nHello\n",
       },
+      // An SVG document has no <head> and no <body>; the video sits in a foreignObject.
+      "/svg-document": {
+        contentType: "image/svg+xml; charset=utf-8",
+        body: `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <foreignObject x="20" y="20" width="400" height="300">
+    <video xmlns="http://www.w3.org/1999/xhtml" id="svg-video" src="/silence.wav" controls="controls"
+      preload="auto" tabindex="0" style="width: 320px; height: 180px; background: #222;"></video>
+  </foreignObject>
+</svg>`,
+      },
       "/iframe-media": {
         body: createFixturePage(
           "Iframe Media",

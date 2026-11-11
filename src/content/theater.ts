@@ -1,6 +1,8 @@
 import { MESSAGE_SOURCE, THEATER_ATTR, THEATER_STYLE_ATTR, THEATER_TYPE } from "./constants.js";
 import { debugLog } from "./dom-utils.js";
 
+const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
+
 type TheaterElement = HTMLVideoElement | HTMLIFrameElement;
 
 type TheaterSession = {
@@ -101,12 +103,17 @@ function postTheaterMessage(target: Window, active: boolean, requestId?: string)
 
 function ensureTheaterStyles(element: TheaterElement): void {
   const root = element.getRootNode();
-  const styleParent = root instanceof ShadowRoot ? root : document.head;
-  if (styleParent.querySelector(`style[${THEATER_STYLE_ATTR}="true"]`)) {
+  // SVG documents, and XML documents without a <head>, have no document.head,
+  // so fall back to the root element.
+  const styleParent =
+    root instanceof ShadowRoot ? root : (document.head ?? document.documentElement);
+  if (!styleParent || styleParent.querySelector(`style[${THEATER_STYLE_ATTR}="true"]`)) {
     return;
   }
 
-  const style = document.createElement("style");
+  // Outside HTML documents, createElement makes a namespaceless element, which
+  // is not a style sheet, so name the HTML namespace.
+  const style = document.createElementNS(HTML_NAMESPACE, "style");
   style.setAttribute(THEATER_STYLE_ATTR, "true");
   style.textContent = THEATER_STYLES;
   styleParent.appendChild(style);

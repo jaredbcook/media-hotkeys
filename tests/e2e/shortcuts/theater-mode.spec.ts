@@ -124,6 +124,49 @@ test("pressing t again exits theater mode", async ({ page }) => {
   expect((await readTheaterSnapshot(page)).open).toBe(false);
 });
 
+test("theater mode works in a document without a head", async ({ page, server }) => {
+  await page.goto(server.getUrl("/svg-document"));
+  await page.waitForFunction(() => {
+    const video = document.getElementById("svg-video") as HTMLVideoElement | null;
+    return Boolean(video && video.readyState >= 1);
+  });
+  expect(await page.evaluate(() => document.head)).toBeNull();
+  await page.locator("#svg-video").focus();
+
+  await page.keyboard.press("t");
+
+  const theater = await page.evaluate(() => {
+    const video = document.getElementById("svg-video")!;
+    const rect = video.getBoundingClientRect();
+    return {
+      open: video.matches(":popover-open"),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+      viewport: {
+        width: document.documentElement.clientWidth,
+        height: document.documentElement.clientHeight,
+      },
+      styles: document.querySelectorAll("style[data-media-hotkeys-theater-style]").length,
+    };
+  });
+  expect(theater.open).toBe(true);
+  expect(theater.styles).toBe(1);
+  expect({ width: theater.width, height: theater.height }).toEqual(theater.viewport);
+
+  await page.keyboard.press("Escape");
+
+  const restored = await page.evaluate(() => {
+    const video = document.getElementById("svg-video")!;
+    const rect = video.getBoundingClientRect();
+    return {
+      open: video.matches(":popover-open"),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+    };
+  });
+  expect(restored).toEqual({ open: false, width: 320, height: 180 });
+});
+
 type PromotionState = { promoted: boolean; width: number; height: number };
 
 async function readPromotion(
