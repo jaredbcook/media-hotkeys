@@ -4,6 +4,7 @@ import {
   resolveActionOverlaySettings,
 } from "../storage.js";
 import { showActionOverlay } from "../overlay.js";
+import { type CaptionsToggle, hasCaptionTracks, toggleCaptions } from "./captions.js";
 import { debugLog, isPictureInPictureSupported } from "./dom-utils.js";
 import { getFullscreenHost, unwrapManagedFullscreenMedia } from "./fullscreen.js";
 import { getTargetMedia } from "./media-scoring.js";
@@ -193,7 +194,15 @@ export function handleAction(
   overlaysEnabled = state.settings.advancedSettings.showOverlays,
 ): void {
   const advancedSettings = state.settings.advancedSettings;
+  // The key reaches this media only when it was thought to have captions, but
+  // arbitration can pick another one. Leave an unrelated media's standing alone.
+  if (action === "toggleCaptions" && !hasCaptionTracks(media)) {
+    debugLog("No caption tracks to toggle", media, { action });
+    return;
+  }
+
   const previousTime = media.currentTime;
+  let captions: CaptionsToggle | null = null;
   actionedMedia.add(media);
   state.lastActionedMedia = media;
   trackInteraction(media, `action:${action}`);
@@ -268,6 +277,10 @@ export function handleAction(
       }
       break;
 
+    case "toggleCaptions":
+      captions = toggleCaptions(media);
+      break;
+
     case "volumeUp":
       setPlayerVolume(media, Math.min(1, getEffectiveVolume(media) + advancedSettings.volumeStep));
       setPlayerMuted(media, false);
@@ -339,13 +352,10 @@ export function handleAction(
 
   const overlaySettings = resolveActionOverlaySettings(action, advancedSettings);
   if (overlaySettings.overlayVisible) {
-    showActionOverlay(
-      action,
-      media,
-      overlaySettings.overlayPosition,
-      advancedSettings,
-      getOverlayDisplayOptions(action, media, previousTime, overlaysEnabled),
-    );
+    showActionOverlay(action, media, overlaySettings.overlayPosition, advancedSettings, {
+      ...getOverlayDisplayOptions(action, media, previousTime, overlaysEnabled),
+      ...(captions && { captions }),
+    });
   } else if (getSeekDirection(action)) {
     getSeekOverlayDisplay(action, media);
   } else {
@@ -360,6 +370,12 @@ export function handleLocalTargetMediaAction(
   overlaysEnabled?: boolean,
 ): boolean {
   const media = getTargetMedia();
+  // Reporting "not handled" lets the frame that routed the action here fall
+  // back to media of its own that does have a track.
+  if (media && action === "toggleCaptions" && !hasCaptionTracks(media)) {
+    return false;
+  }
+
   if (media) {
     handleAction(action, media, overlaysEnabled);
     return true;

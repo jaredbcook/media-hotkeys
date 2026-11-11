@@ -156,6 +156,15 @@ export function makeVideo(overrides: Partial<HTMLVideoElement> = {}): HTMLVideoE
   return video;
 }
 
+// jsdom has no text tracks, so give the video a list of its own. Like the real
+// one it is array-like and fires `change` when a track's mode changes.
+export function setTextTracks(video: HTMLVideoElement, tracks: object[]): EventTarget {
+  const list = Object.assign(new EventTarget(), tracks);
+  Object.defineProperty(list, "length", { value: tracks.length });
+  Object.defineProperty(video, "textTracks", { configurable: true, value: list });
+  return list;
+}
+
 export function makeInvalidVideo(): HTMLVideoElement {
   const video = document.createElement("video");
   document.body.appendChild(video);

@@ -6,7 +6,7 @@ Works in Chrome and Edge 114 or newer and Firefox 128 or newer. Safari is possib
 
 ## Features
 
-- **Hotkeys for common media actions:** play/pause, mute, speed, volume, three skip sizes, restart, jump to a percentage, fullscreen, picture-in-picture, theater mode, and overlay toggle. Every key binding can be changed.
+- **Hotkeys for common media actions:** play/pause, mute, speed, volume, three skip sizes, restart, jump to a percentage, fullscreen, picture-in-picture, theater mode, closed captions, and overlay toggle. Every key binding can be changed.
 - **Picks the right media.** On pages with several videos, the extension targets the one you're using: fullscreen or focused first, then audible playback, then what you last clicked, then what's most visible. Muted looping videos without controls (hero backgrounds, hover previews) and videos hidden in collapsed menus or closed dialogs are ignored unless you interact with them, so the page keeps its keys.
 - **Works through iframes and custom players.** Embedded players, shadow-DOM web components, and click-to-load thumbnails (pressing play activates them) are all supported.
 - **Theater mode** fills the browser window with the video without going fullscreen.
@@ -17,6 +17,8 @@ Works in Chrome and Edge 114 or newer and Firefox 128 or newer. Safari is possib
 ## Default hotkeys
 
 Hotkeys only take effect when the page (or a frame inside it) has media to control. Elsewhere, keys keep their normal behavior, so arrow keys still scroll and a site's own shortcuts still work. The play key also counts a click-to-play thumbnail or an embedded video player (an iframe allowed to go fullscreen or autoplay) that hasn't loaded its video yet, but not a plain iframe such as an ad. On a page that scrolls, keys that scroll it (`ArrowUp`, `ArrowDown`, `Space`, `PageUp`, `PageDown`, `Home`, `End`) keep scrolling until you use a video: click or focus it, control it with another hotkey, or play it with sound while it's on screen. Hotkeys are also ignored while you type in a text field or other editable element (a focused slider or radio button keeps its arrow keys too), while Ctrl, Alt, or Meta is held (keys typed with AltGr still work), and on sites disabled by a site rule.
+
+The captions key switches the `<track>` captions and subtitles a video carries on or off, bringing back the track you last showed (otherwise one in the page's or browser's language, otherwise the first). Most sites, such as YouTube, Vimeo, and Twitch, draw their own captions and have no such track: there `c` stays with the page, so the site's own captions shortcut keeps working. The same goes for a video with a caption track in `hidden` mode, which is how some players read the cues to draw captions themselves. The key only counts a video in the frame where you press it, so click into an embedded player before using it.
 
 Holding a key repeats skip, volume, and speed changes. Toggles such as play/pause and fullscreen happen once per press.
 
@@ -29,6 +31,7 @@ Letter hotkeys follow the character a key types, so on Latin layouts such as AZE
 | Fullscreen             | `f`                 | `Esc` exits                                                   |
 | Picture-in-Picture     | `i`                 | Not in Firefox, which has no picture-in-picture API for pages |
 | Theater Mode           | `t`                 | Fills the window without fullscreen; `Esc` exits              |
+| Captions               | `c`                 | Videos with caption or subtitle tracks only; see below        |
 | Speed Up               | `>`                 |                                                               |
 | Slow Down              | `<`                 |                                                               |
 | Volume Up              | `ArrowUp`, `+`, `=` |                                                               |

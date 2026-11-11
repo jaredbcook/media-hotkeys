@@ -6,6 +6,7 @@ import {
   readPlayerPlaybackRate,
   readPlayerVolume,
 } from "./content/player-control.js";
+import type { CaptionsToggle } from "./content/captions.js";
 import { OVERLAY_ATTR, OVERLAY_ID } from "./content/constants.js";
 import { isTheaterMedia } from "./content/theater.js";
 
@@ -64,6 +65,8 @@ export interface OverlayDisplayOptions {
   timestampSeconds?: number;
   jumpDirection?: SkipAnimationDirection;
   overlayEnabled?: boolean;
+  // What toggling captions did, when the media had a track to switch.
+  captions?: CaptionsToggle | null;
 }
 
 function formatTimestamp(seconds: number, includeHours: boolean): string {
@@ -78,6 +81,15 @@ function formatTimestamp(seconds: number, includeHours: boolean): string {
 
   const totalMinutes = Math.floor(clampedSeconds / 60);
   return `${totalMinutes}:${String(remainingSeconds).padStart(2, "0")}`;
+}
+
+// Track labels come from the page, so they must not be read as markup.
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
+}
+
+function truncate(text: string, maxLength = 40): string {
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
 }
 
 // Pages set rates too, so round for display: 1.1500000000000001 shows as 1.15.
@@ -376,6 +388,15 @@ function buildContent(
     case "togglePip":
     case "toggleTheater":
       return null;
+
+    case "toggleCaptions": {
+      const { captions } = options;
+      if (!captions) {
+        return null;
+      }
+      const label = captions.label ? `<span>${escapeHtml(truncate(captions.label))}</span>` : "";
+      return `${captions.enabled ? icons.CAPTIONS_ON : icons.CAPTIONS_OFF}<span>Captions ${captions.enabled ? "on" : "off"}</span>${label}`;
+    }
 
     case "volumeUp":
     case "volumeDown": {
