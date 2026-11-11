@@ -9,7 +9,7 @@ Works in Chrome and Edge 114 or newer and Firefox 128 or newer. Safari is possib
 - **Hotkeys for common media actions:** play/pause, mute, speed, volume, three skip sizes, restart, jump to a percentage, fullscreen, picture-in-picture, theater mode, closed captions, and overlay toggle. Every key binding can be changed.
 - **Picks the right media.** On pages with several videos, the extension targets the one you're using: fullscreen or focused first, then audible playback, then what you last clicked, then what's most visible. Muted looping videos without controls (hero backgrounds, hover previews) and videos hidden in collapsed menus or closed dialogs are ignored unless you interact with them, so the page keeps its keys.
 - **Works through iframes and custom players.** Embedded players, shadow-DOM web components, and click-to-load thumbnails (pressing play activates them) are all supported.
-- **Theater mode** fills the browser window with the video without going fullscreen.
+- **Theater mode** fills the browser window with the video without going fullscreen. Starting picture-in-picture ends it, and entering theater mode brings a picture-in-picture video back to the page (neither applies in Firefox).
 - **On-screen feedback:** a brief overlay shows each action. It is optional and you can position it.
 - **Per-site rules** let a site's own shortcuts win where you prefer them.
 - **Settings sync** across devices through your browser's extension sync.
