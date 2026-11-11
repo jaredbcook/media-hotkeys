@@ -10,6 +10,8 @@ import {
   getSettings,
   isUrlDisabledBySiteSettings,
   saveSettings,
+  UNUSABLE_HOTKEYS,
+  isUnusableHotkey,
   type ExtensionSettings,
 } from "../../../src/storage.js";
 import {
@@ -344,6 +346,66 @@ describe("settings storage", () => {
     expect(settings.quickSettings.actionKeyBindings.restart.keys).toEqual(["T"]);
     expect(settings.quickSettings.actionKeyBindings.toggleTheater.keys).toEqual([]);
     expect(settings.quickSettings.actionKeyBindings.togglePip.keys).toEqual(["i"]);
+  });
+
+  describe("keys that can't work as hotkeys", () => {
+    it.each(UNUSABLE_HOTKEYS)("drops %s from a saved binding", async (key) => {
+      Object.assign(store, { "keys.toggleMute": ["u", key, "m"] });
+
+      const settings = await getSettings();
+      expect(settings.quickSettings.actionKeyBindings.toggleMute.keys).toEqual(["u", "m"]);
+    });
+
+    it("leaves an action with no key when every saved key was unusable", async () => {
+      Object.assign(store, { "keys.togglePlayPause": ["Tab", "Enter"] });
+
+      const settings = await getSettings();
+      expect(settings.quickSettings.actionKeyBindings.togglePlayPause.keys).toEqual([]);
+    });
+
+    it("keeps usable keys that resemble an unusable one", async () => {
+      const keys = ["tab", "Escape", " ", "PageDown", "\u043b", "F2", "Shift"];
+      Object.assign(store, { "keys.toggleMute": keys });
+
+      const settings = await getSettings();
+      expect(settings.quickSettings.actionKeyBindings.toggleMute.keys).toEqual(keys);
+    });
+
+    it("leaves other actions on their defaults and the stored list as it was", async () => {
+      Object.assign(store, { "keys.toggleMute": ["Tab"] });
+
+      const settings = await getSettings();
+      expect(settings.quickSettings.actionKeyBindings.togglePlayPause).toEqual(
+        DEFAULT_QUICK_SETTINGS.actionKeyBindings.togglePlayPause,
+      );
+      expect(store["keys.toggleMute"]).toEqual(["Tab"]);
+      expect(browser.storage.sync.set).not.toHaveBeenCalled();
+      expect(browser.storage.sync.remove).not.toHaveBeenCalled();
+    });
+
+    it("rewrites the cleaned list only when the user edits that action", async () => {
+      Object.assign(store, { "keys.toggleMute": ["u", "Tab"] });
+
+      const base = await getSettings();
+      const next = structuredClone(base);
+      next.quickSettings.actionKeyBindings.toggleMute.keys.push("m");
+      await saveSettings(diffSettings(base, next)!);
+
+      expect(store["keys.toggleMute"]).toEqual(["u", "m"]);
+    });
+
+    it("recognizes exactly the listed keys", () => {
+      expect(UNUSABLE_HOTKEYS.every(isUnusableHotkey)).toBe(true);
+      expect(isUnusableHotkey("k")).toBe(false);
+      expect(isUnusableHotkey("tab")).toBe(false);
+    });
+
+    it("keeps every default key usable", () => {
+      const defaultKeys = Object.values(DEFAULT_QUICK_SETTINGS.actionKeyBindings).flatMap(
+        (config) => config.keys,
+      );
+      expect(defaultKeys.filter(isUnusableHotkey)).toEqual([]);
+    });
   });
 
   it("stores the site rules as one normalized array, and removes it when there are none", async () => {

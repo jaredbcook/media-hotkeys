@@ -162,6 +162,37 @@ function isDirectionalSkipAction(
   return action.startsWith("seekForward") || action.startsWith("seekBackward");
 }
 
+/**
+ * Keys that can't work as hotkeys: they move focus, activate buttons, or never reach the page as a
+ * character. Quick Settings refuses to bind them (with a reason for each, keyed by this list), and
+ * loading settings drops them from saved bindings, so one that was saved before the popup refused it,
+ * or edited into storage by hand, takes nothing from the page.
+ */
+export const UNUSABLE_HOTKEYS = [
+  "Tab",
+  "Enter",
+  "Dead",
+  "Process",
+  "Unidentified",
+  "CapsLock",
+  "NumLock",
+  "ScrollLock",
+  "Fn",
+  "FnLock",
+  "Hyper",
+  "Super",
+  "Symbol",
+  "SymbolLock",
+  "Compose",
+  "ContextMenu",
+] as const;
+
+export type UnusableHotkey = (typeof UNUSABLE_HOTKEYS)[number];
+
+export function isUnusableHotkey(key: string): key is UnusableHotkey {
+  return UNUSABLE_HOTKEYS.includes(key as UnusableHotkey);
+}
+
 function mergeActionKeyBindings(
   storedKeys: Partial<Record<ConfigurableMediaAction, string[]>>,
 ): Record<ConfigurableMediaAction, ActionConfig> {
@@ -494,7 +525,10 @@ function isValidKeyList(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((key) => typeof key === "string" && key.length > 0);
 }
 
-/** Builds the settings from the stored keys, filling every setting that has no key from the defaults. */
+/**
+ * Builds the settings from the stored keys, filling every setting that has no key from the defaults.
+ * Keys that can't work as hotkeys (`isUnusableHotkey`) are left out of the key bindings.
+ */
 function readStoredSettings(stored: Record<string, unknown>): ExtensionSettings {
   const hotkeysEnabled = stored[HOTKEYS_ENABLED_KEY];
 
@@ -510,7 +544,9 @@ function readStoredSettings(stored: Record<string, unknown>): ExtensionSettings 
   for (const action of CONFIGURABLE_ACTIONS) {
     const keys = stored[ACTION_KEYS_PREFIX + action];
     if (isValidKeyList(keys)) {
-      storedKeys[action] = [...keys];
+      // Dropped only from what is read: the stored list stays until the user edits that action.
+      // An action left with no key is unbound, as it is when the user removes its last key.
+      storedKeys[action] = keys.filter((key) => !isUnusableHotkey(key));
     }
   }
 
