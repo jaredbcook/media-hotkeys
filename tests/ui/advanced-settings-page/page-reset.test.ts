@@ -32,17 +32,8 @@ describe("advanced settings page: reset behavior", () => {
 
     expect(getConfirmDialog()).toBeNull();
     expect(saveSettingsMock).toHaveBeenCalledOnce();
-    expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
-      quickSettings: {
-        hotkeysEnabled: false,
-        actionKeyBindings: {
-          togglePlayPause: {
-            keys: ["x"],
-          },
-        },
-      },
-      advancedSettings: DEFAULT_SETTINGS.advancedSettings,
-    });
+    // Only the setting that differed from the default is sent, and nothing outside this page.
+    expect(saveSettingsMock.mock.calls[0]?.[0]).toEqual({ advancedSettings: { volumeStep: 0.05 } });
     expect((document.getElementById("volumeStep") as HTMLInputElement).value).toBe(
       String(DEFAULT_SETTINGS.advancedSettings.volumeStep * 100),
     );

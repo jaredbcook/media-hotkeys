@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import defaults from "../../../src/settings/defaults.json";
 import {
+  emitStorageChange,
   findRowByLabel,
   flushDomWork,
+  getSettingsMock,
   loadQuickSettingsModule,
   resetQuickSettingsTestState,
   saveSettingsMock,
+  setCheckbox,
 } from "./helpers.js";
 
 beforeEach(() => {
@@ -179,5 +182,160 @@ describe("quick settings popup: key binding editing", () => {
     expect(getChipKeys("Play/Pause")).toEqual(
       defaults.quickSettings.actionKeyBindings.togglePlayPause.keys,
     );
+  });
+});
+
+describe("quick settings popup: settings changed elsewhere while it is open", () => {
+  function getChipKeys(label: string): string[] {
+    return Array.from(findRowByLabel(label).querySelectorAll(".key-chip")).map(
+      (chip) => chip.firstChild?.textContent?.trim() ?? "",
+    );
+  }
+
+  it("shows a key binding changed elsewhere and doesn't write it back on the next edit", async () => {
+    await loadQuickSettingsModule();
+
+    const latest = structuredClone(defaults) as typeof defaults;
+    latest.quickSettings.actionKeyBindings.toggleMute.keys = ["u"];
+    latest.advancedSettings.showOverlays = false;
+    getSettingsMock.mockResolvedValue(latest as never);
+    await emitStorageChange();
+    expect(getChipKeys("Mute/Unmute")).toEqual(["u"]);
+
+    const removeButton = findRowByLabel("Play/Pause").querySelector(
+      ".key-chip button",
+    ) as HTMLButtonElement;
+    removeButton.click();
+    await flushDomWork();
+
+    expect(saveSettingsMock).toHaveBeenCalledOnce();
+    expect(saveSettingsMock.mock.calls[0]?.[0]).toEqual({
+      quickSettings: { actionKeyBindings: { togglePlayPause: { keys: [] } } },
+    });
+  });
+
+  it("doesn't write back a binding changed elsewhere before the popup learned of it", async () => {
+    await loadQuickSettingsModule();
+
+    setCheckbox("disable-everywhere", true);
+    await flushDomWork();
+
+    expect(saveSettingsMock.mock.calls[0]?.[0]).toEqual({
+      quickSettings: { hotkeysEnabled: false },
+    });
+  });
+
+  it("stops a pending key capture when the table is rebuilt for a change made elsewhere", async () => {
+    await loadQuickSettingsModule();
+    (findRowByLabel("Mute/Unmute").querySelector(".add-key-button") as HTMLButtonElement).click();
+
+    const latest = structuredClone(defaults) as typeof defaults;
+    latest.quickSettings.actionKeyBindings.restart.keys = [];
+    getSettingsMock.mockResolvedValue(latest as never);
+    await emitStorageChange();
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "z", bubbles: true }));
+    await flushDomWork();
+
+    expect(saveSettingsMock).not.toHaveBeenCalled();
+    expect(getChipKeys("Restart")).toEqual([]);
+  });
+
+  it("keeps a pending key capture when the change doesn't touch the key bindings", async () => {
+    await loadQuickSettingsModule();
+    (findRowByLabel("Mute/Unmute").querySelector(".add-key-button") as HTMLButtonElement).click();
+
+    const latest = structuredClone(defaults) as typeof defaults;
+    latest.advancedSettings.showOverlays = false;
+    getSettingsMock.mockResolvedValue(latest as never);
+    await emitStorageChange();
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "z", bubbles: true }));
+    await flushDomWork();
+
+    expect(getChipKeys("Mute/Unmute")).toContain("z");
+    expect(saveSettingsMock).toHaveBeenCalledOnce();
+  });
+
+  it("shows the newest settings when an older read finishes last", async () => {
+    await loadQuickSettingsModule();
+    getSettingsMock.mockReset();
+
+    const older = structuredClone(defaults) as typeof defaults;
+    older.quickSettings.actionKeyBindings.toggleMute.keys = ["u"];
+    const newer = structuredClone(defaults) as typeof defaults;
+    newer.quickSettings.actionKeyBindings.toggleMute.keys = ["v"];
+    let finishOlderRead!: () => void;
+    getSettingsMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishOlderRead = () => resolve(older as never);
+        }),
+    );
+    getSettingsMock.mockResolvedValueOnce(newer as never);
+
+    await emitStorageChange();
+    await emitStorageChange();
+    finishOlderRead();
+    await flushDomWork();
+
+    expect(getChipKeys("Mute/Unmute")).toEqual(["v"]);
+  });
+
+  it("shows what is stored when a save fails, so the edit can be retried", async () => {
+    await loadQuickSettingsModule();
+    saveSettingsMock.mockRejectedValueOnce(new Error("quota exceeded"));
+
+    const removeButton = findRowByLabel("Play/Pause").querySelector(
+      ".key-chip button",
+    ) as HTMLButtonElement;
+    removeButton.click();
+    await flushDomWork();
+
+    expect(document.getElementById("announcements")?.textContent).toContain(
+      "Failed to save settings.",
+    );
+    expect(getChipKeys("Play/Pause")).toEqual(["k"]);
+
+    (findRowByLabel("Play/Pause").querySelector(".key-chip button") as HTMLButtonElement).click();
+    await flushDomWork();
+
+    expect(saveSettingsMock).toHaveBeenCalledTimes(2);
+    expect(saveSettingsMock.mock.calls[1]?.[0]).toEqual({
+      quickSettings: { actionKeyBindings: { togglePlayPause: { keys: [] } } },
+    });
+  });
+
+  it("doesn't let the read after a failed save overwrite a newer edit", async () => {
+    await loadQuickSettingsModule();
+    getSettingsMock.mockReset();
+    let finishRecoveryRead!: () => void;
+    getSettingsMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishRecoveryRead = () => resolve(structuredClone(defaults) as never);
+        }),
+    );
+    saveSettingsMock.mockRejectedValueOnce(new Error("quota exceeded"));
+
+    (findRowByLabel("Play/Pause").querySelector(".key-chip button") as HTMLButtonElement).click();
+    await flushDomWork();
+
+    // The user edits another action while the recovery read is still out.
+    (findRowByLabel("Mute/Unmute").querySelector(".key-chip button") as HTMLButtonElement).click();
+    await flushDomWork();
+    finishRecoveryRead();
+    await flushDomWork();
+
+    expect(getChipKeys("Mute/Unmute")).toEqual([]);
+  });
+
+  it("ignores changes in other storage areas", async () => {
+    await loadQuickSettingsModule();
+    getSettingsMock.mockClear();
+
+    await emitStorageChange("local");
+
+    expect(getSettingsMock).not.toHaveBeenCalled();
   });
 });
