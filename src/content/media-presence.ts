@@ -38,6 +38,16 @@ const childFrameHasMedia = new WeakMap<Window, boolean>();
 let lastReportedHasMedia: boolean | null = null;
 let reportTimer: ReturnType<typeof setTimeout> | null = null;
 
+/**
+ * Forgets the last presence this frame reported, so the next report is sent
+ * again. For tests only: that baseline is module state that outlives a test,
+ * and a report that matches it is skipped. Import it from this module, not
+ * from `src/content.ts`, so the content bundle leaves it out.
+ */
+export function resetMediaPresenceForTests(): void {
+  lastReportedHasMedia = null;
+}
+
 function frameHasOwnMedia(): boolean {
   // Ambient loops don't count unless the extension already controls them, so
   // a muted ad or hero video doesn't make the parent take keys from the page.
