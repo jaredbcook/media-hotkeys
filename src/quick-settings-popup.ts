@@ -5,11 +5,13 @@ import {
   type ConfigurableMediaAction,
   type ExtensionSettings,
   type SitePolicy,
+  type UnusableHotkey,
   DEFAULT_QUICK_SETTINGS,
   diffSettings,
   findMatchingSitePolicy,
   getSettings,
   hasReservedModifier,
+  isUnusableHotkey,
   normalizeHotkeyKey,
   saveSettings,
 } from "./storage.js";
@@ -63,25 +65,25 @@ const KEY_ACCESSIBLE_LABELS: Record<string, string> = {
 /** Modifier keys pressed on their own: capture waits for the key they're held with. */
 const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "AltGraph", "Meta"]);
 
-/** Keys that never reach the content script as a usable hotkey, or break keyboard navigation. */
-const UNUSABLE_KEY_REASONS = new Map<string, string>([
-  ["Tab", "Tab can't be a hotkey because it moves keyboard focus."],
-  ["Enter", "Enter can't be a hotkey because it activates buttons and links."],
-  ["Dead", "Accent keys that combine with the next key can't be hotkeys."],
-  ["Process", "Keys typed through an input method can't be hotkeys."],
-  ["Unidentified", "The browser can't identify that key, so it can't be a hotkey."],
-  ["CapsLock", "Caps Lock can't be a hotkey."],
-  ["NumLock", "Num Lock can't be a hotkey."],
-  ["ScrollLock", "Scroll Lock can't be a hotkey."],
-  ["Fn", "Fn can't be a hotkey."],
-  ["FnLock", "Fn Lock can't be a hotkey."],
-  ["Hyper", "Hyper can't be a hotkey."],
-  ["Super", "Super can't be a hotkey."],
-  ["Symbol", "Symbol can't be a hotkey."],
-  ["SymbolLock", "Symbol Lock can't be a hotkey."],
-  ["Compose", "Compose can't be a hotkey."],
-  ["ContextMenu", "The context menu key can't be a hotkey."],
-]);
+/** Why each key in `UNUSABLE_HOTKEYS` can't be bound. `tsc` requires one for every key on that list. */
+const UNUSABLE_KEY_REASONS: Record<UnusableHotkey, string> = {
+  Tab: "Tab can't be a hotkey because it moves keyboard focus.",
+  Enter: "Enter can't be a hotkey because it activates buttons and links.",
+  Dead: "Accent keys that combine with the next key can't be hotkeys.",
+  Process: "Keys typed through an input method can't be hotkeys.",
+  Unidentified: "The browser can't identify that key, so it can't be a hotkey.",
+  CapsLock: "Caps Lock can't be a hotkey.",
+  NumLock: "Num Lock can't be a hotkey.",
+  ScrollLock: "Scroll Lock can't be a hotkey.",
+  Fn: "Fn can't be a hotkey.",
+  FnLock: "Fn Lock can't be a hotkey.",
+  Hyper: "Hyper can't be a hotkey.",
+  Super: "Super can't be a hotkey.",
+  Symbol: "Symbol can't be a hotkey.",
+  SymbolLock: "Symbol Lock can't be a hotkey.",
+  Compose: "Compose can't be a hotkey.",
+  ContextMenu: "The context menu key can't be a hotkey.",
+};
 
 /**
  * Why a captured key can't be bound, or undefined if it can. Any single character is accepted, so letters
@@ -93,10 +95,10 @@ function getUnusableKeyReason(e: KeyboardEvent): string | undefined {
   }
 
   if (e.isComposing) {
-    return UNUSABLE_KEY_REASONS.get("Process");
+    return UNUSABLE_KEY_REASONS.Process;
   }
 
-  return UNUSABLE_KEY_REASONS.get(e.key);
+  return isUnusableHotkey(e.key) ? UNUSABLE_KEY_REASONS[e.key] : undefined;
 }
 
 // The settings as this popup last knew them, kept current by the user's own edits and by
