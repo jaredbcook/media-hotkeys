@@ -11,14 +11,31 @@ import {
   parseHttpUrl,
 } from "./storage.js";
 
-// Private suffixes (github.io, vercel.app, ...) count as public suffixes, so a rule for
-// alice.github.io covers only that site instead of every site on the hosting platform.
-function getRegistrableDomain(hostname: string): string | null {
-  const normalizedHostname = hostname.toLowerCase();
-  return (
-    getDomain(normalizedHostname, { allowPrivateDomains: true }) ??
-    (isLocalHostname(normalizedHostname) ? normalizedHostname : null)
-  );
+// A rule names the host the user chose, so `music.youtube.com` stays a rule for that host
+// and its subdomains. The suffix list only rejects hosts that could never be one site:
+// a bare public suffix from the ICANN list (`com`, `co.uk`) or a single label. Private
+// suffixes (`github.io`, `vercel.app`) are accepted, and a rule for one covers every site
+// hosted under it.
+function isValidSiteHost(hostname: string): boolean {
+  return isLocalHostname(hostname) || getDomain(hostname, { allowPrivateDomains: false }) !== null;
+}
+
+// Leading `www.` labels are dropped, because `www.youtube.com` is the same site as
+// `youtube.com`, and a rule for the shorter host covers the longer one anyway. Dropping all
+// of them keeps normalizing a saved rule again (every edit and popup save does) from
+// changing it. Every other subdomain, `m.` included, is kept. `www.localhost` stays as it
+// is, because a rule for localhost matches only localhost itself.
+function getSiteHost(hostname: string): string | null {
+  let host = hostname.toLowerCase().replace(/\.$/, "");
+  while (host.startsWith("www.")) {
+    const withoutWww = host.slice("www.".length);
+    if (isLocalHostname(withoutWww) || !isValidSiteHost(withoutWww)) {
+      break;
+    }
+    host = withoutWww;
+  }
+
+  return isValidSiteHost(host) ? host : null;
 }
 
 export function normalizeDisabledUrlPattern(value: string): string | null {
@@ -27,12 +44,12 @@ export function normalizeDisabledUrlPattern(value: string): string | null {
     return null;
   }
 
-  const domain = getRegistrableDomain(parsedUrl.hostname);
-  if (!domain) {
+  const host = getSiteHost(parsedUrl.hostname);
+  if (!host) {
     return null;
   }
 
-  return `${domain}${normalizePath(parsedUrl.pathname)}`;
+  return `${host}${normalizePath(parsedUrl.pathname)}`;
 }
 
 /** Normalizes rules entered by the user before they are saved. */
@@ -40,9 +57,10 @@ export function normalizeSitePolicies(policies: Partial<SitePolicy>[]): SitePoli
   return normalizeSitePoliciesWith(policies, normalizeDisabledUrlPattern);
 }
 
+/** The host rule for a page: its host with `www.` removed. */
 export function getDisabledSitePrefillForUrl(url: string): string | null {
   const parsedUrl = parseHttpUrl(url);
-  return parsedUrl ? getRegistrableDomain(parsedUrl.hostname) : null;
+  return parsedUrl ? getSiteHost(parsedUrl.hostname) : null;
 }
 
 export function getSitePolicySectionPatternForUrl(url: string): string | null {
@@ -51,12 +69,12 @@ export function getSitePolicySectionPatternForUrl(url: string): string | null {
     return null;
   }
 
-  const domain = getRegistrableDomain(parsedUrl.hostname);
-  if (!domain) {
+  const host = getSiteHost(parsedUrl.hostname);
+  if (!host) {
     return null;
   }
 
   // Only a first segment followed by a slash is a section (/shorts/abc); /watch?v=abc is a page.
   const firstSegment = /^\/+([^/]+)\//.exec(parsedUrl.pathname)?.[1];
-  return firstSegment ? `${domain}/${firstSegment}` : domain;
+  return firstSegment ? `${host}/${firstSegment}` : host;
 }
