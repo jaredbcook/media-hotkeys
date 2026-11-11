@@ -1,5 +1,11 @@
 import type { MediaAction, OverlayPosition, AdvancedSettings } from "./storage.js";
 import * as icons from "./icons.js";
+import {
+  readPlayerMuted,
+  readPlayerPaused,
+  readPlayerPlaybackRate,
+  readPlayerVolume,
+} from "./content/player-control.js";
 import { isTheaterMedia } from "./content/theater.js";
 
 const OVERLAY_ID = "media-hotkeys-overlay";
@@ -325,10 +331,12 @@ function buildContent(
 ): string | null {
   switch (action) {
     case "togglePlayPause":
-      return media.paused ? icons.PAUSE : icons.PLAY;
+      return readPlayerPaused(media) ? icons.PAUSE : icons.PLAY;
 
-    case "toggleMute":
-      return `${media.muted ? icons.MUTE : icons.UNMUTE}<span>${media.muted ? 0 : Math.round(media.volume * 100)}%</span>`;
+    case "toggleMute": {
+      const muted = readPlayerMuted(media);
+      return `${muted ? icons.MUTE : icons.UNMUTE}<span>${muted ? 0 : Math.round(readPlayerVolume(media) * 100)}%</span>`;
+    }
 
     case "toggleOverlays":
       return `<span>Overlays ${options.overlayEnabled ? "on" : "off"}</span>`;
@@ -340,21 +348,18 @@ function buildContent(
 
     case "volumeUp":
     case "volumeDown": {
+      const volume = readPlayerVolume(media);
       const icon =
-        action === "volumeUp"
-          ? icons.VOLUME_UP
-          : media.volume <= 0
-            ? icons.MUTE
-            : icons.VOLUME_DOWN;
-      const pct = Math.round(media.volume * 100);
+        action === "volumeUp" ? icons.VOLUME_UP : volume <= 0 ? icons.MUTE : icons.VOLUME_DOWN;
+      const pct = Math.round(volume * 100);
       return `${icon}<span>${pct}%</span>`;
     }
 
     case "speedUp":
-      return `${icons.SPEED_UP}<span>${formatPlaybackRate(media.playbackRate)}x</span>`;
+      return `${icons.SPEED_UP}<span>${formatPlaybackRate(readPlayerPlaybackRate(media))}x</span>`;
 
     case "slowDown":
-      return `${icons.SPEED_DOWN}<span>${formatPlaybackRate(media.playbackRate)}x</span>`;
+      return `${icons.SPEED_DOWN}<span>${formatPlaybackRate(readPlayerPlaybackRate(media))}x</span>`;
 
     case "seekForwardLarge":
       return `${icons.SEEK_FWD_LARGE}<span>+${options.seekSeconds ?? advancedSettings.seekStepLarge}s</span>`;

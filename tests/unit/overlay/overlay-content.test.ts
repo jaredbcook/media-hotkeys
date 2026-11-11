@@ -108,6 +108,74 @@ describe("overlay content", () => {
     expect(getOverlayElement()?.innerHTML).toContain("M480-120q-138 0-240.5-91.5");
   });
 
+  it("reads paused, muted, volume, and playbackRate from a custom-element player host", () => {
+    const host = document.createElement("custom-player");
+    const shadowRoot = host.attachShadow({ mode: "open" });
+    const video = document.createElement("video");
+    shadowRoot.appendChild(video);
+    document.body.appendChild(host);
+
+    video.volume = 1;
+    video.muted = false;
+    video.playbackRate = 1;
+    Object.defineProperty(video, "paused", { configurable: true, value: true, writable: true });
+
+    let hostPaused = false;
+    let hostMuted = true;
+    let hostVolume = 0.35;
+    let hostPlaybackRate = 1.75;
+
+    Object.defineProperties(host, {
+      paused: {
+        configurable: true,
+        get: () => hostPaused,
+      },
+      muted: {
+        configurable: true,
+        get: () => hostMuted,
+      },
+      volume: {
+        configurable: true,
+        get: () => hostVolume,
+      },
+      playbackRate: {
+        configurable: true,
+        get: () => hostPlaybackRate,
+      },
+    });
+
+    showActionOverlay("togglePlayPause", video, "center", advancedSettings);
+    expect(getOverlayElement()?.innerHTML).toContain("M320-273v-414");
+
+    hostPaused = true;
+    showActionOverlay("togglePlayPause", video, "center", advancedSettings);
+    expect(getOverlayElement()?.innerHTML).toContain("M640-200q-33 0");
+
+    showActionOverlay("toggleMute", video, "center", advancedSettings);
+    expect(getOverlayElement()?.textContent).toBe("0%");
+    expect(getOverlayElement()?.innerHTML).toContain("M671-177q-11 7-22 13");
+
+    hostMuted = false;
+    showActionOverlay("toggleMute", video, "center", advancedSettings);
+    expect(getOverlayElement()?.textContent).toBe("35%");
+    expect(getOverlayElement()?.innerHTML).toContain("M760-481q0-83");
+
+    showActionOverlay("volumeUp", video, "center", advancedSettings);
+    expect(getOverlayElement()?.textContent).toBe("35%");
+
+    hostVolume = 0;
+    showActionOverlay("volumeDown", video, "center", advancedSettings);
+    expect(getOverlayElement()?.textContent).toBe("0%");
+    expect(getOverlayElement()?.innerHTML).toContain("M671-177q-11 7-22 13");
+
+    showActionOverlay("speedUp", video, "center", advancedSettings);
+    expect(getOverlayElement()?.textContent).toBe("1.75x");
+
+    hostPlaybackRate = 0.75;
+    showActionOverlay("slowDown", video, "center", advancedSettings);
+    expect(getOverlayElement()?.textContent).toBe("0.75x");
+  });
+
   it("does not render overlays for fullscreen or picture-in-picture toggles", () => {
     const video = makeVideo();
 
