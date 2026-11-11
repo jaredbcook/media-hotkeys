@@ -1,6 +1,7 @@
 import { getVisibleBox, getVisibleViewportArea } from "./dom-utils.js";
 import { findMedia, isAmbientMediaElement, isDecorativeLoop } from "./media-discovery.js";
 import { isPointerOverRect } from "./media-tracking.js";
+import { getEffectiveVolume, readPlayerPlaying } from "./player-control.js";
 import { actionedMedia, state } from "./state.js";
 import { isTheaterMedia } from "./theater.js";
 
@@ -33,15 +34,13 @@ export const SCORE_HIDDEN_PENALTY = -250;
 // arbitration entirely — the user's intent is unambiguous.
 export const STRONG_LOCAL_TARGET_SCORE = 800;
 
-function isMediaPlaying(media: HTMLMediaElement): boolean {
-  // Stalled playback (buffering) drops readyState to HAVE_CURRENT_DATA or
-  // HAVE_METADATA while the media is still logically playing; users often
-  // press keys exactly then, so only require metadata (readyState >= 1).
-  return !media.paused && !media.ended && media.readyState >= 1;
-}
-
-function isMediaAudible(media: HTMLMediaElement): boolean {
-  return isMediaPlaying(media) && !media.muted && media.volume > 0;
+// Playback state is read through player-control, like the media actions do, so
+// a custom player's host decides when it differs from its inner element. Each
+// value is read at most once per candidate per pass: a host-managed player costs
+// a synchronous bridge round trip per read, and scoring runs on every matched key.
+// Callers check `readPlayerPlaying` first, so this reads only the sound state.
+function hasSound(media: HTMLMediaElement): boolean {
+  return getEffectiveVolume(media) > 0;
 }
 
 function scoreMediaCandidate(media: HTMLMediaElement): { score: number; areaScore: number } {
@@ -69,8 +68,9 @@ function scoreMediaCandidate(media: HTMLMediaElement): { score: number; areaScor
     score += SCORE_FOCUSED;
   }
 
-  if (isMediaPlaying(media) && !isDecorative) {
-    score += isMediaAudible(media) ? SCORE_PLAYING_AUDIBLE : SCORE_PLAYING_MUTED;
+  // A decorative loop gets no credit for playback, so skip reading it.
+  if (!isDecorative && readPlayerPlaying(media)) {
+    score += hasSound(media) ? SCORE_PLAYING_AUDIBLE : SCORE_PLAYING_MUTED;
   }
 
   if (media === state.lastInteractedMedia) {
@@ -157,7 +157,7 @@ function isMediaInUse(media: HTMLMediaElement): boolean {
   return (
     (media === state.lastInteractedMedia ||
       media === state.lastActionedMedia ||
-      isMediaAudible(media)) &&
+      (readPlayerPlaying(media) && hasSound(media))) &&
     isOnScreen(media)
   );
 }

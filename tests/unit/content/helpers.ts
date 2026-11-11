@@ -160,6 +160,23 @@ export function makeVideo(overrides: Partial<HTMLVideoElement> = {}): HTMLVideoE
   return video;
 }
 
+// A video inside the open shadow root of a custom element, the shape that
+// player-control treats as a host-managed player.
+export function makeCustomPlayerVideo(): {
+  host: HTMLElement;
+  shadowRoot: ShadowRoot;
+  video: HTMLVideoElement;
+} {
+  const host = document.createElement("custom-player");
+  const shadowRoot = host.attachShadow({ mode: "open" });
+  const video = document.createElement("video");
+  video.setAttribute("src", "https://example.com/test.mp4");
+  shadowRoot.appendChild(video);
+  document.body.appendChild(host);
+
+  return { host, shadowRoot, video };
+}
+
 // jsdom has no text tracks, so give the video a list of its own. Like the real
 // one it is array-like and fires `change` when a track's mode changes.
 export function setTextTracks(video: HTMLVideoElement, tracks: object[]): EventTarget {

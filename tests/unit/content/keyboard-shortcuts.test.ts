@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   dispatchMappedKey,
+  makeCustomPlayerVideo,
   makeVideo,
   mockRect,
   rect,
@@ -9,6 +10,7 @@ import {
   storageSetMock,
 } from "./helpers.js";
 import { setSettingsForTests } from "../../../src/content.js";
+import { state } from "../../../src/content/state.js";
 import { DEFAULT_SETTINGS } from "../../../src/storage.js";
 
 beforeEach(() => {
@@ -22,7 +24,7 @@ function makePlaceholder({
   playIconRect = rect(128, 67, 64, 46),
 }: {
   id: string;
-  nextMedia?: HTMLMediaElement;
+  nextMedia?: HTMLElement;
   placeholderRect?: DOMRect;
   playIconRect?: DOMRect;
 }): HTMLDivElement {
@@ -553,6 +555,46 @@ describe("playable placeholder activation", () => {
 
     expect(clickSpy).toHaveBeenCalledOnce();
     expect(playSpy).toHaveBeenCalledOnce();
+  });
+
+  describe("with a custom player host", () => {
+    // The click adds the player; the placeholder only reaches it through
+    // target selection, then decides from the host's state whether to play.
+    function makeHostPlayer(hostPaused: boolean, innerPaused: boolean) {
+      const { host, video } = makeCustomPlayerVideo();
+      host.remove();
+      Object.defineProperty(video, "paused", { configurable: true, value: innerPaused });
+      Object.defineProperty(host, "paused", { configurable: true, get: () => hostPaused });
+      const hostPlay = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(host, "play", { configurable: true, value: hostPlay });
+      const innerPlay = vi.spyOn(video, "play").mockResolvedValue(undefined);
+      return { host, hostPlay, innerPlay, video };
+    }
+
+    it("does not play again when the host is already playing", async () => {
+      const { host, hostPlay, innerPlay, video } = makeHostPlayer(false, true);
+      const placeholder = makePlaceholder({ id: "placeholder", nextMedia: host });
+      const clickSpy = vi.spyOn(placeholder, "click");
+
+      await dispatchMappedKey("k");
+      await settleHotkey();
+
+      expect(clickSpy).toHaveBeenCalledOnce();
+      expect(hostPlay).not.toHaveBeenCalled();
+      expect(innerPlay).not.toHaveBeenCalled();
+      expect(state.lastInteractedMedia).not.toBe(video);
+    });
+
+    it("plays through the host when it is paused although the inner media is playing", async () => {
+      const { host, hostPlay, innerPlay } = makeHostPlayer(true, false);
+      makePlaceholder({ id: "placeholder", nextMedia: host });
+
+      await dispatchMappedKey("k");
+      await settleHotkey();
+
+      expect(hostPlay).toHaveBeenCalledOnce();
+      expect(innerPlay).not.toHaveBeenCalled();
+    });
   });
 
   it("uses the most visible matching placeholder", async () => {

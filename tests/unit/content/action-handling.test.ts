@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   emitStorageChange,
+  makeCustomPlayerVideo,
   makeVideo,
   resetContentTestState,
   showActionOverlayMock,
@@ -13,21 +14,6 @@ import { DEFAULT_SETTINGS } from "../../../src/storage.js";
 beforeEach(() => {
   resetContentTestState();
 });
-
-function makeCustomPlayerVideo(): {
-  host: HTMLElement;
-  shadowRoot: ShadowRoot;
-  video: HTMLVideoElement;
-} {
-  const host = document.createElement("custom-player");
-  const shadowRoot = host.attachShadow({ mode: "open" });
-  const video = document.createElement("video");
-  video.setAttribute("src", "https://example.com/test.mp4");
-  shadowRoot.appendChild(video);
-  document.body.appendChild(host);
-
-  return { host, shadowRoot, video };
-}
 
 describe("media action handling", () => {
   it("logs handled actions when debug logging is enabled", () => {
