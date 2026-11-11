@@ -1,5 +1,4 @@
 import browser from "webextension-polyfill";
-import { getDomain } from "tldts";
 import defaults from "./settings/defaults.json";
 
 // #region Types
@@ -182,13 +181,14 @@ function mergeActionKeyBindings(
   return normalizedBindings;
 }
 
-function isLocalHostname(hostname: string): boolean {
+/** localhost and IP addresses, which have no registrable domain and match only themselves. */
+export function isLocalHostname(hostname: string): boolean {
   return (
     hostname === "localhost" || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname) || hostname.includes(":")
   );
 }
 
-function normalizePath(pathname: string): string {
+export function normalizePath(pathname: string): string {
   if (!pathname || pathname === "/") {
     return "";
   }
@@ -196,184 +196,147 @@ function normalizePath(pathname: string): string {
   return pathname.replace(/\/+$/, "");
 }
 
-// Private suffixes (github.io, vercel.app, ...) count as public suffixes, so a rule for
-// alice.github.io covers only that site instead of every site on the hosting platform.
-function getRegistrableDomain(hostname: string): string | null {
-  const normalizedHostname = hostname.toLowerCase();
-  return (
-    getDomain(normalizedHostname, { allowPrivateDomains: true }) ??
-    (isLocalHostname(normalizedHostname) ? normalizedHostname : null)
-  );
-}
-
-function parseUrlishValue(value: string): URL | null {
+/** Parses a URL or bare `host/path` entry, and returns it only if it is http(s). */
+export function parseHttpUrl(value: string): URL | null {
   const trimmedValue = value.trim();
   if (!trimmedValue || /\s/.test(trimmedValue)) {
     return null;
   }
 
+  let parsedUrl: URL;
   try {
-    return new URL(trimmedValue);
+    parsedUrl = new URL(trimmedValue);
   } catch {
     try {
-      return new URL(`https://${trimmedValue}`);
+      parsedUrl = new URL(`https://${trimmedValue}`);
     } catch {
       return null;
     }
   }
+
+  return ["http:", "https:"].includes(parsedUrl.protocol) ? parsedUrl : null;
 }
 
-export function normalizeDisabledUrlPattern(value: string): string | null {
-  const parsedUrl = parseUrlishValue(value);
-  if (!parsedUrl || !["http:", "https:"].includes(parsedUrl.protocol)) {
+// Saved patterns are already reduced to a registrable domain (or local host) plus an
+// optional path by `normalizeDisabledUrlPattern` in `src/site-patterns.ts`, which the
+// popup and options page run before saving. This module only checks their shape, so
+// the content script, which imports it, doesn't load the public suffix list.
+const SITE_PATTERN_DOMAIN = /^(?:[a-z0-9_-]+(?:\.[a-z0-9_-]+)*|\[[0-9a-f:.]+\])$/;
+
+function splitSitePattern(pattern: string): { domain: string; path: string } | null {
+  const trimmedPattern = pattern.trim();
+  if (!trimmedPattern || /\s/.test(trimmedPattern)) {
     return null;
   }
 
-  const domain = getRegistrableDomain(parsedUrl.hostname);
-  if (!domain) {
+  // Hostnames are case-insensitive, but URL paths are not, so only the domain is lowercased.
+  const slashIndex = trimmedPattern.indexOf("/");
+  const domain = (
+    slashIndex === -1 ? trimmedPattern : trimmedPattern.slice(0, slashIndex)
+  ).toLowerCase();
+  if (!SITE_PATTERN_DOMAIN.test(domain)) {
     return null;
-  }
-
-  return `${domain}${normalizePath(parsedUrl.pathname)}`;
-}
-
-function parseNormalizedSitePattern(pattern: string): { domain: string; path: string } | null {
-  const normalizedPattern = normalizeDisabledUrlPattern(pattern);
-  if (!normalizedPattern) {
-    return null;
-  }
-
-  const slashIndex = normalizedPattern.indexOf("/");
-  if (slashIndex === -1) {
-    return {
-      domain: normalizedPattern,
-      path: "",
-    };
   }
 
   return {
-    domain: normalizedPattern.slice(0, slashIndex),
-    path: normalizedPattern.slice(slashIndex),
+    domain,
+    path: slashIndex === -1 ? "" : normalizePath(trimmedPattern.slice(slashIndex)),
   };
 }
 
-function getSitePatternSpecificity(pattern: string): number {
-  const parsedPattern = parseNormalizedSitePattern(pattern);
-  if (!parsedPattern) {
-    return -1;
-  }
-
-  return parsedPattern.path.length;
+function normalizeStoredSitePattern(pattern: string): string | null {
+  const parsedPattern = splitSitePattern(pattern);
+  return parsedPattern ? `${parsedPattern.domain}${parsedPattern.path}` : null;
 }
 
-function normalizeSitePolicy(policy: Partial<SitePolicy>): SitePolicy | null {
-  const pattern = normalizeDisabledUrlPattern(policy.pattern ?? "");
-  if (!pattern || !["disabled", "enabled"].includes(policy.policy ?? "")) {
-    return null;
-  }
-
-  const embedsPolicy =
-    policy.embedsPolicy === "ignore" || policy.embedsPolicy === "inherit"
-      ? policy.embedsPolicy
-      : "inherit";
-
-  return {
-    pattern,
-    policy: policy.policy as SitePolicyMode,
-    embedsPolicy,
-  };
-}
-
-export function normalizeSitePolicies(policies: Partial<SitePolicy>[]): SitePolicy[] {
+/**
+ * Validates, deduplicates (the first rule for a pattern wins), and sorts site policies.
+ * `normalizePattern` turns each entry into its saved pattern, or null to drop it.
+ */
+export function normalizeSitePoliciesWith(
+  policies: Partial<SitePolicy>[],
+  normalizePattern: (pattern: string) => string | null,
+): SitePolicy[] {
   const seen = new Set<string>();
   const normalizedPolicies: SitePolicy[] = [];
 
   for (const policy of policies) {
-    const normalizedPolicy = normalizeSitePolicy(policy);
-    if (!normalizedPolicy) {
+    const pattern = normalizePattern(policy.pattern ?? "");
+    if (!pattern || !["disabled", "enabled"].includes(policy.policy ?? "")) {
       continue;
     }
 
-    if (seen.has(normalizedPolicy.pattern)) {
+    if (seen.has(pattern)) {
       continue;
     }
 
-    seen.add(normalizedPolicy.pattern);
-    normalizedPolicies.push(normalizedPolicy);
+    seen.add(pattern);
+    normalizedPolicies.push({
+      pattern,
+      policy: policy.policy as SitePolicyMode,
+      embedsPolicy: policy.embedsPolicy === "ignore" ? "ignore" : "inherit",
+    });
   }
 
-  return [...normalizedPolicies].sort((left, right) => left.pattern.localeCompare(right.pattern));
+  return normalizedPolicies.sort((left, right) => left.pattern.localeCompare(right.pattern));
 }
 
-export function getDisabledSitePrefillForUrl(url: string): string | null {
-  const parsedUrl = parseUrlishValue(url);
-  if (!parsedUrl || !["http:", "https:"].includes(parsedUrl.protocol)) {
-    return null;
+// A saved domain is a registrable domain, so every host under it belongs to that
+// site: www.youtube.com matches youtube.com, and alice.github.io matches only
+// alice.github.io and its subdomains because github.io itself is never saved.
+function hostnameMatchesSiteDomain(hostname: string, domain: string): boolean {
+  if (hostname === domain) {
+    return true;
   }
 
-  return getRegistrableDomain(parsedUrl.hostname);
-}
-
-export function getSitePolicySectionPatternForUrl(url: string): string | null {
-  const parsedUrl = parseUrlishValue(url);
-  if (!parsedUrl || !["http:", "https:"].includes(parsedUrl.protocol)) {
-    return null;
-  }
-
-  const domain = getRegistrableDomain(parsedUrl.hostname);
-  if (!domain) {
-    return null;
-  }
-
-  // Only a first segment followed by a slash is a section (/shorts/abc); /watch?v=abc is a page.
-  const firstSegment = /^\/+([^/]+)\//.exec(parsedUrl.pathname)?.[1];
-  return firstSegment ? `${domain}/${firstSegment}` : domain;
+  return !isLocalHostname(hostname) && !isLocalHostname(domain) && hostname.endsWith(`.${domain}`);
 }
 
 export function findMatchingSitePolicy(
   url: string,
   siteSettings: SiteSettings,
 ): SitePolicy | undefined {
-  const parsedUrl = parseUrlishValue(url);
-  if (!parsedUrl || !["http:", "https:"].includes(parsedUrl.protocol)) {
+  const parsedUrl = parseHttpUrl(url);
+  if (!parsedUrl) {
     return undefined;
   }
 
-  const targetDomain = getRegistrableDomain(parsedUrl.hostname);
-  if (!targetDomain) {
+  const targetHostname = parsedUrl.hostname.toLowerCase().replace(/\.$/, "");
+  if (!targetHostname) {
     return undefined;
   }
 
   const targetPath = normalizePath(parsedUrl.pathname);
-  const matches: { policy: SitePolicy; index: number }[] = [];
+  const matches: { domain: string; path: string; policy: SitePolicy; index: number }[] = [];
 
-  normalizeSitePolicies(siteSettings.sitePolicies).forEach((policy, index) => {
-    const parsedPattern = parseNormalizedSitePattern(policy.pattern);
-    if (!parsedPattern || parsedPattern.domain !== targetDomain) {
-      return;
-    }
+  normalizeSitePoliciesWith(siteSettings.sitePolicies, normalizeStoredSitePattern).forEach(
+    (policy, index) => {
+      const parsedPattern = splitSitePattern(policy.pattern);
+      if (!parsedPattern || !hostnameMatchesSiteDomain(targetHostname, parsedPattern.domain)) {
+        return;
+      }
 
-    if (
-      parsedPattern.path &&
-      targetPath !== parsedPattern.path &&
-      !targetPath.startsWith(`${parsedPattern.path}/`)
-    ) {
-      return;
-    }
+      if (
+        parsedPattern.path &&
+        targetPath !== parsedPattern.path &&
+        !targetPath.startsWith(`${parsedPattern.path}/`)
+      ) {
+        return;
+      }
 
-    matches.push({ policy, index });
-  });
+      matches.push({ ...parsedPattern, policy, index });
+    },
+  );
 
-  matches.sort((left, right) => {
-    const specificityDifference =
-      getSitePatternSpecificity(right.policy.pattern) -
-      getSitePatternSpecificity(left.policy.pattern);
-    if (specificityDifference !== 0) {
-      return specificityDifference;
-    }
-
-    return left.index - right.index;
-  });
+  // The most specific rule wins: the longest domain, then the longest path. Two saved
+  // domains can only nest when a public suffix sits between them (amazonaws.com and
+  // bucket.s3.amazonaws.com), and the longer one is then the page's own site.
+  matches.sort(
+    (left, right) =>
+      right.domain.length - left.domain.length ||
+      right.path.length - left.path.length ||
+      left.index - right.index,
+  );
 
   return matches[0]?.policy;
 }
@@ -400,8 +363,9 @@ function normalizeSettings(settings: SettingsUpdate): ExtensionSettings {
   };
 
   const siteSettings: SiteSettings = {
-    sitePolicies: normalizeSitePolicies(
+    sitePolicies: normalizeSitePoliciesWith(
       nestedSiteSettings.sitePolicies ?? DEFAULT_SITE_SETTINGS.sitePolicies,
+      normalizeStoredSitePattern,
     ),
   };
 

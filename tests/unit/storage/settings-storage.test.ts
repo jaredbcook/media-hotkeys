@@ -7,13 +7,15 @@ import {
   DEFAULT_SETTINGS,
   findMatchingSitePolicy,
   getSettings,
-  getDisabledSitePrefillForUrl,
-  getSitePolicySectionPatternForUrl,
   isUrlDisabledBySiteSettings,
-  normalizeDisabledUrlPattern,
-  normalizeSitePolicies,
   saveSettings,
 } from "../../../src/storage.js";
+import {
+  getDisabledSitePrefillForUrl,
+  getSitePolicySectionPatternForUrl,
+  normalizeDisabledUrlPattern,
+  normalizeSitePolicies,
+} from "../../../src/site-patterns.js";
 
 const store: Record<string, unknown> = {};
 
@@ -187,10 +189,10 @@ describe("settings storage", () => {
     expect(settings.quickSettings.actionKeyBindings.togglePip.keys).toEqual(["i"]);
   });
 
-  it("normalizes site policies and drops invalid entries", async () => {
+  it("normalizes site policies entered by the user and drops invalid entries", async () => {
     await saveSettings({
       siteSettings: {
-        sitePolicies: [
+        sitePolicies: normalizeSitePolicies([
           {
             pattern: "https://www.youtube.com/shorts?feature=share#clip",
             policy: "enabled",
@@ -198,7 +200,7 @@ describe("settings storage", () => {
           },
           { pattern: "vimeo.com", policy: "disabled", embedsPolicy: "inherit" },
           { pattern: "not a site", policy: "disabled", embedsPolicy: "inherit" },
-        ],
+        ]),
       },
     });
 
@@ -346,10 +348,10 @@ describe("settings storage", () => {
 
     await saveSettings({
       siteSettings: {
-        sitePolicies: [
+        sitePolicies: normalizeSitePolicies([
           { pattern: "github.io", policy: "disabled", embedsPolicy: "inherit" },
           { pattern: "alice.github.io", policy: "disabled", embedsPolicy: "inherit" },
-        ],
+        ]),
       },
     });
 
@@ -366,5 +368,95 @@ describe("settings storage", () => {
         { pattern: "https://www.youtube.com/", policy: "enabled", embedsPolicy: "ignore" },
       ]),
     ).toEqual([{ pattern: "youtube.com", policy: "disabled", embedsPolicy: "inherit" }]);
+  });
+
+  describe("matching saved rules without the public suffix list", () => {
+    const rule = (pattern: string, policy: "disabled" | "enabled" = "disabled") => ({
+      pattern,
+      policy,
+      embedsPolicy: "inherit" as const,
+    });
+    const match = (url: string, ...patterns: string[]) =>
+      findMatchingSitePolicy(url, { sitePolicies: patterns.map((pattern) => rule(pattern)) })
+        ?.pattern;
+
+    it("matches the registrable domain and every subdomain under it", () => {
+      expect(match("https://youtube.com/", "youtube.com")).toBe("youtube.com");
+      expect(match("https://www.youtube.com/watch?v=1", "youtube.com")).toBe("youtube.com");
+      expect(match("https://m.www.YouTube.com./", "youtube.com")).toBe("youtube.com");
+      expect(match("https://notyoutube.com/", "youtube.com")).toBeUndefined();
+      expect(match("https://youtube.com.evil.example/", "youtube.com")).toBeUndefined();
+    });
+
+    it("matches multi-part public suffixes like co.uk", () => {
+      expect(match("https://www.bbc.co.uk/news/1", "bbc.co.uk/news")).toBe("bbc.co.uk/news");
+      expect(match("https://www.bbc.co.uk/sport", "bbc.co.uk/news")).toBeUndefined();
+      expect(match("https://itv.co.uk/", "bbc.co.uk")).toBeUndefined();
+    });
+
+    it("keeps shared hosting tenants apart", () => {
+      expect(match("https://www.alice.github.io/", "alice.github.io")).toBe("alice.github.io");
+      expect(match("https://bob.github.io/", "alice.github.io")).toBeUndefined();
+      expect(match("https://app.b.vercel.app/", "b.vercel.app")).toBe("b.vercel.app");
+    });
+
+    it("matches localhost and IP addresses exactly", () => {
+      expect(match("http://localhost:3000/video", "localhost")).toBe("localhost");
+      expect(match("http://dev.localhost/", "localhost")).toBeUndefined();
+      expect(match("http://192.168.1.10/", "192.168.1.10")).toBe("192.168.1.10");
+      expect(match("http://192.168.1.10/", "168.1.10")).toBeUndefined();
+    });
+
+    it("prefers the longer domain when saved domains nest across a public suffix", () => {
+      expect(
+        match("https://bucket.s3.amazonaws.com/video", "amazonaws.com", "bucket.s3.amazonaws.com"),
+      ).toBe("bucket.s3.amazonaws.com");
+      expect(
+        match(
+          "https://bucket.s3.amazonaws.com/video",
+          "amazonaws.com/video",
+          "bucket.s3.amazonaws.com",
+        ),
+      ).toBe("bucket.s3.amazonaws.com");
+    });
+
+    it("keeps the case of paths, as URLs do", async () => {
+      expect(match("https://example.com/Video/1", "example.com/Video")).toBe("example.com/Video");
+      expect(match("https://example.com/video/1", "example.com/Video")).toBeUndefined();
+      expect(match("https://example.com/caf%C3%A9", "example.com/caf%C3%A9")).toBe(
+        "example.com/caf%C3%A9",
+      );
+
+      await saveSettings({
+        siteSettings: {
+          sitePolicies: normalizeSitePolicies([rule("https://WWW.Example.com/Video/")]),
+        },
+      });
+      expect((await getSettings()).siteSettings.sitePolicies.map(({ pattern }) => pattern)).toEqual(
+        ["example.com/Video"],
+      );
+    });
+
+    it("ignores non-http URLs", () => {
+      expect(match("chrome://extensions", "extensions")).toBeUndefined();
+      expect(match("file:///tmp/video.mp4", "tmp")).toBeUndefined();
+    });
+
+    it("keeps saved patterns as stored when loading settings", async () => {
+      await saveSettings({
+        siteSettings: {
+          sitePolicies: [
+            rule("youtube.com/shorts/"),
+            rule(" Vimeo.com "),
+            rule("not a site"),
+            rule("https://www.youtube.com/"),
+          ],
+        },
+      });
+
+      expect((await getSettings()).siteSettings.sitePolicies.map(({ pattern }) => pattern)).toEqual(
+        ["vimeo.com", "youtube.com/shorts"],
+      );
+    });
   });
 });
