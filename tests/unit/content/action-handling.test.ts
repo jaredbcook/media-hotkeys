@@ -260,6 +260,80 @@ describe("media action handling", () => {
     expect(playbackRate).toBe(1.25);
   });
 
+  it("pauses through the host when it is playing although the inner media element is paused", () => {
+    const { host, video } = makeCustomPlayerVideo();
+    const hostPlay = vi.fn().mockResolvedValue(undefined);
+    const hostPause = vi.fn();
+    Object.defineProperties(host, {
+      paused: { configurable: true, get: () => false },
+      play: { configurable: true, value: hostPlay },
+      pause: { configurable: true, value: hostPause },
+    });
+    // jsdom media starts paused, which is the state the host disagrees with.
+    expect(video.paused).toBe(true);
+
+    handleAction("togglePlayPause", video);
+
+    expect(hostPause).toHaveBeenCalledOnce();
+    expect(hostPlay).not.toHaveBeenCalled();
+  });
+
+  it("plays through the host when it is paused although the inner media element is playing", () => {
+    const { host, video } = makeCustomPlayerVideo();
+    Object.defineProperty(video, "paused", { configurable: true, value: false });
+    const hostPlay = vi.fn().mockResolvedValue(undefined);
+    const hostPause = vi.fn();
+    Object.defineProperties(host, {
+      paused: { configurable: true, get: () => true },
+      play: { configurable: true, value: hostPlay },
+      pause: { configurable: true, value: hostPause },
+    });
+
+    handleAction("togglePlayPause", video);
+
+    expect(hostPlay).toHaveBeenCalledOnce();
+    expect(hostPause).not.toHaveBeenCalled();
+  });
+
+  it("shows the host's time as the percent-seek timestamp and the direction it jumped", () => {
+    const { host, video } = makeCustomPlayerVideo();
+    // The inner element never moves, so only the host can say which way it jumped.
+    Object.defineProperty(video, "currentTime", { configurable: true, value: 0 });
+    let hostTime = 150;
+    Object.defineProperties(host, {
+      currentTime: {
+        configurable: true,
+        get: () => hostTime,
+        set: (value: number) => {
+          hostTime = value;
+        },
+      },
+      duration: { configurable: true, get: () => 200 },
+    });
+
+    handleAction("seekToPercent50", video);
+
+    expect(hostTime).toBe(100);
+    expect(showActionOverlayMock).toHaveBeenLastCalledWith(
+      "seekToPercent50",
+      video,
+      "center",
+      expect.anything(),
+      { timestampSeconds: 100, jumpDirection: "backward" },
+    );
+
+    handleAction("seekToPercent80", video);
+
+    expect(hostTime).toBe(160);
+    expect(showActionOverlayMock).toHaveBeenLastCalledWith(
+      "seekToPercent80",
+      video,
+      "center",
+      expect.anything(),
+      { timestampSeconds: 160, jumpDirection: "forward" },
+    );
+  });
+
   it("falls back to direct media control when a custom element host has no matching API", () => {
     const { video } = makeCustomPlayerVideo();
     video.volume = 0.5;

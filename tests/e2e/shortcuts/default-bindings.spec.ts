@@ -382,6 +382,103 @@ test("uses custom element host APIs for shadow-root media actions", async ({ pag
     .toBeGreaterThanOrEqual(2);
 });
 
+test("reads playback state from a custom element host that runs ahead of its inner media", async ({
+  page,
+}) => {
+  const overlay = await openOverlayReader(page);
+  await page.evaluate(() => {
+    const counts = { play: 0, pause: 0 };
+    (
+      window as typeof window & { __divergentPlayerCounts?: typeof counts }
+    ).__divergentPlayerCounts = counts;
+
+    // The host keeps its own state and never touches the inner element, like a
+    // player that updates its state before the media element catches up.
+    class MediaHotkeysDivergentPlayer extends HTMLElement {
+      private hostPaused = true;
+      private hostTime = 0;
+
+      connectedCallback(): void {
+        if (this.shadowRoot) {
+          return;
+        }
+
+        const media = document.createElement("audio");
+        media.id = "divergent-media";
+        media.src = "/silence.wav";
+        media.preload = "auto";
+        media.tabIndex = 0;
+        this.attachShadow({ mode: "open" }).appendChild(media);
+      }
+
+      play(): Promise<void> {
+        counts.play += 1;
+        this.hostPaused = false;
+        return Promise.resolve();
+      }
+
+      pause(): void {
+        counts.pause += 1;
+        this.hostPaused = true;
+      }
+
+      get paused(): boolean {
+        return this.hostPaused;
+      }
+
+      get currentTime(): number {
+        return this.hostTime;
+      }
+
+      set currentTime(value: number) {
+        this.hostTime = value;
+      }
+
+      // An hour and a half, where the inner silence file lasts a moment.
+      get duration(): number {
+        return 5400;
+      }
+    }
+
+    customElements.define("media-hotkeys-divergent-player", MediaHotkeysDivergentPlayer);
+    const host = document.createElement("media-hotkeys-divergent-player");
+    document.getElementById("app")?.appendChild(host);
+  });
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const host = document.querySelector("media-hotkeys-divergent-player");
+        const media = host?.shadowRoot?.getElementById(
+          "divergent-media",
+        ) as HTMLMediaElement | null;
+        return media?.readyState ?? 0;
+      }),
+    )
+    .toBeGreaterThan(0);
+
+  const readCounts = (): Promise<{ play: number; pause: number } | undefined> =>
+    page.evaluate(
+      () =>
+        (
+          window as typeof window & {
+            __divergentPlayerCounts?: { play: number; pause: number };
+          }
+        ).__divergentPlayerCounts,
+    );
+
+  await page.keyboard.press("k");
+  await expect.poll(readCounts).toEqual({ play: 1, pause: 0 });
+
+  // The host is playing although its inner element still reports paused, so
+  // the second press has to pause rather than play again.
+  await page.keyboard.press("k");
+  await expect.poll(readCounts).toEqual({ play: 1, pause: 1 });
+
+  await page.keyboard.press("5");
+  await expect.poll(async () => (await overlay.read())?.text).toBe("0:45:00");
+});
+
 test("uses a custom element host fullscreen API for shadow-root video", async ({ page }) => {
   await page.evaluate(() => {
     const counts = {

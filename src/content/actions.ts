@@ -16,6 +16,7 @@ import {
   readPlayerCurrentTime,
   readPlayerDuration,
   readPlayerMuted,
+  readPlayerPaused,
   readPlayerPlaybackRate,
   readPlayerVolume,
   requestCustomPlayerFullscreen,
@@ -78,6 +79,10 @@ function roundPlaybackRate(playbackRate: number): number {
   return Math.round(playbackRate * 100) / 100;
 }
 
+function isSeekToPercent(action: MediaAction): boolean {
+  return /^seekToPercent\d+$/.test(action);
+}
+
 export function isGlobalAction(action: MediaAction): action is "toggleOverlays" {
   return action === "toggleOverlays";
 }
@@ -107,11 +112,11 @@ function getSeekOverlayDisplay(
     clearTimeout(seekOverlayState.resetTimeout);
   }
 
-  const projectedTime =
-    direction === "forward" ? media.currentTime + step : media.currentTime - step;
+  const currentTime = readPlayerCurrentTime(media);
+  const duration = readPlayerDuration(media);
+  const projectedTime = direction === "forward" ? currentTime + step : currentTime - step;
   const wouldExceedBounds =
-    projectedTime < 0 ||
-    (Number.isFinite(media.duration) && media.duration > 0 && projectedTime > media.duration);
+    projectedTime < 0 || (Number.isFinite(duration) && duration > 0 && projectedTime > duration);
   const shouldResetStreak = !isContinuingStreak || wouldExceedBounds;
   const totalSeconds = advancedSettings.sumQuickSkips
     ? (shouldResetStreak ? 0 : (seekOverlayState?.totalSeconds ?? 0)) + step
@@ -144,7 +149,7 @@ function getSeekOverlayDisplay(
 function getOverlayDisplayOptions(
   action: MediaAction,
   media: HTMLMediaElement,
-  previousTime: number,
+  previousTime: number | null,
   overlaysEnabled: boolean,
 ): {
   seekSeconds?: number;
@@ -171,12 +176,11 @@ function getOverlayDisplayOptions(
   const percentMatch = action.match(/^seekToPercent(\d+)$/);
   if (percentMatch) {
     clearSeekOverlayState();
+    const currentTime = readPlayerCurrentTime(media);
     return {
-      timestampSeconds: media.currentTime,
+      timestampSeconds: currentTime,
       jumpDirection:
-        typeof previousTime === "number" && media.currentTime < previousTime
-          ? "backward"
-          : "forward",
+        typeof previousTime === "number" && currentTime < previousTime ? "backward" : "forward",
     };
   }
 
@@ -201,7 +205,8 @@ export function handleAction(
     return;
   }
 
-  const previousTime = media.currentTime;
+  // Only the percent seeks compare against it, so other actions skip the read.
+  const previousTime = isSeekToPercent(action) ? readPlayerCurrentTime(media) : null;
   let captions: CaptionsToggle | null = null;
   actionedMedia.add(media);
   state.lastActionedMedia = media;
@@ -209,7 +214,7 @@ export function handleAction(
 
   switch (action) {
     case "togglePlayPause":
-      media.paused ? playMedia(media) : pauseMedia(media);
+      readPlayerPaused(media) ? playMedia(media) : pauseMedia(media);
       break;
 
     case "toggleMute":
