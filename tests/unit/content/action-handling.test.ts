@@ -145,6 +145,133 @@ describe("media action handling", () => {
     expect(mediaPlaySpy).not.toHaveBeenCalled();
   });
 
+  it("handles a rejected host pause() and logs it", async () => {
+    const consoleInfoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const settings = structuredClone(DEFAULT_SETTINGS);
+    settings.advancedSettings.debugLogging = true;
+    setSettingsForTests(settings);
+    const { host, video } = makeCustomPlayerVideo();
+    const rejection = new Error("Pause refused");
+    const hostPause = vi.fn().mockRejectedValue(rejection);
+    Object.defineProperties(host, {
+      paused: { configurable: true, get: () => false },
+      pause: { configurable: true, value: hostPause },
+    });
+    const mediaPauseSpy = vi.spyOn(video, "pause").mockImplementation(() => undefined);
+
+    expect(() => handleAction("togglePlayPause", video)).not.toThrow();
+    await vi.waitFor(() => {
+      expect(consoleInfoSpy).toHaveBeenCalledWith(
+        "[Media Hotkeys][debug] Host pause() was rejected",
+        expect.objectContaining({ error: rejection }),
+      );
+    });
+
+    expect(hostPause).toHaveBeenCalledOnce();
+    expect(mediaPauseSpy).not.toHaveBeenCalled();
+  });
+
+  it("handles a rejected host play() and falls back to the media element", async () => {
+    const consoleInfoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const settings = structuredClone(DEFAULT_SETTINGS);
+    settings.advancedSettings.debugLogging = true;
+    setSettingsForTests(settings);
+    const { host, video } = makeCustomPlayerVideo();
+    const rejection = new Error("Play refused");
+    Object.defineProperty(host, "play", {
+      configurable: true,
+      value: vi.fn().mockRejectedValue(rejection),
+    });
+    const mediaPlaySpy = vi.spyOn(video, "play").mockResolvedValue(undefined);
+
+    handleAction("togglePlayPause", video);
+    await vi.waitFor(() => {
+      expect(consoleInfoSpy).toHaveBeenCalledWith(
+        "[Media Hotkeys][debug] Host play() was rejected",
+        expect.objectContaining({ error: rejection }),
+      );
+    });
+
+    expect(mediaPlaySpy).toHaveBeenCalledOnce();
+  });
+
+  it("handles a rejected host requestFullscreen() and logs it", async () => {
+    const consoleInfoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const settings = structuredClone(DEFAULT_SETTINGS);
+    settings.advancedSettings.debugLogging = true;
+    setSettingsForTests(settings);
+    const { host, video } = makeCustomPlayerVideo();
+    const rejection = new TypeError("Fullscreen request denied");
+    const hostRequestFullscreen = vi.fn().mockRejectedValue(rejection);
+    Object.defineProperty(host, "requestFullscreen", {
+      configurable: true,
+      value: hostRequestFullscreen,
+    });
+    Object.defineProperty(document, "fullscreenElement", {
+      configurable: true,
+      get: () => null,
+    });
+
+    expect(() => handleAction("toggleFullscreen", video)).not.toThrow();
+    await vi.waitFor(() => {
+      expect(consoleInfoSpy).toHaveBeenCalledWith(
+        "[Media Hotkeys][debug] Host requestFullscreen() was rejected",
+        expect.objectContaining({ error: rejection }),
+      );
+    });
+
+    expect(hostRequestFullscreen).toHaveBeenCalledOnce();
+  });
+
+  it("handles a rejecting thenable from a host method", async () => {
+    const consoleInfoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const settings = structuredClone(DEFAULT_SETTINGS);
+    settings.advancedSettings.debugLogging = true;
+    setSettingsForTests(settings);
+    const { host, video } = makeCustomPlayerVideo();
+    const rejection = new Error("Thenable refused");
+    // A page object from another realm is a thenable, not an instance of our Promise.
+    const thenable = {
+      then: (_resolve?: () => void, reject?: (reason: unknown) => void) => reject?.(rejection),
+    };
+    Object.defineProperties(host, {
+      paused: { configurable: true, get: () => false },
+      pause: { configurable: true, value: vi.fn().mockReturnValue(thenable) },
+    });
+
+    expect(() => handleAction("togglePlayPause", video)).not.toThrow();
+    await vi.waitFor(() => {
+      expect(consoleInfoSpy).toHaveBeenCalledWith(
+        "[Media Hotkeys][debug] Host pause() was rejected",
+        expect.objectContaining({ error: rejection }),
+      );
+    });
+  });
+
+  it("still pauses through the host when its result cannot be inspected", () => {
+    const { host, video } = makeCustomPlayerVideo();
+    const hostPause = vi.fn().mockReturnValue(
+      new Proxy(
+        {},
+        {
+          get: () => {
+            throw new Error("Hostile result");
+          },
+        },
+      ),
+    );
+    Object.defineProperties(host, {
+      paused: { configurable: true, get: () => false },
+      pause: { configurable: true, value: hostPause },
+    });
+    const mediaPauseSpy = vi.spyOn(video, "pause").mockImplementation(() => undefined);
+
+    expect(() => handleAction("togglePlayPause", video)).not.toThrow();
+
+    expect(hostPause).toHaveBeenCalledOnce();
+    expect(mediaPauseSpy).not.toHaveBeenCalled();
+  });
+
   it("clicks a shadow play button before falling back to media.play()", async () => {
     const host = document.createElement("custom-player");
     const shadowRoot = host.attachShadow({ mode: "open" });

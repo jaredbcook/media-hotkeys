@@ -72,13 +72,31 @@ function setProperty(host: HTMLElement, property: string, value: boolean | numbe
   return true;
 }
 
+// A host method may return a promise (play, requestFullscreen) that rejects when
+// the browser or the player refuses. The response can't wait for it, so settle
+// the promise here instead of leaving an unhandled rejection in the page console.
+// This file cannot import debugLog and must not log into the page, so the
+// refusal is dropped silently.
+function swallowRejection(result: unknown): void {
+  if (!result || (typeof result !== "object" && typeof result !== "function")) {
+    return;
+  }
+
+  try {
+    void Promise.resolve(result).catch(() => undefined);
+  } catch {
+    // A hostile thenable can throw while it is read. The method already ran.
+  }
+}
+
 function callMethod(host: HTMLElement, methodName: string): boolean {
   const method = (host as unknown as Record<string, unknown>)[methodName];
   if (typeof method !== "function") {
     return false;
   }
 
-  void method.call(host);
+  const result: unknown = method.call(host);
+  swallowRejection(result);
   return true;
 }
 

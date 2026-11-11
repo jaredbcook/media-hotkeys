@@ -76,14 +76,41 @@ function getHostMember(host: HTMLElement, memberName: string): unknown {
   return (host as unknown as Record<string, unknown>)[memberName];
 }
 
-function tryDirectHostMethodSync(host: HTMLElement, methodName: string): boolean {
+// Host methods such as play() and requestFullscreen() may return a promise that
+// rejects when the browser or the player refuses (no user activation, an iframe
+// without allowfullscreen). The action is best-effort, so settle the promise
+// here instead of leaving an unhandled rejection in the page console. Any
+// thenable counts: the host may be a page object from another realm.
+function handleHostMethodRejection(
+  result: unknown,
+  media: HTMLMediaElement,
+  methodName: string,
+): void {
+  if (!result || (typeof result !== "object" && typeof result !== "function")) {
+    return;
+  }
+
+  try {
+    void Promise.resolve(result).catch((error: unknown) => {
+      debugLog(`Host ${methodName}() was rejected`, media, { error });
+    });
+  } catch {
+    // A hostile thenable can throw while it is read. The method already ran.
+  }
+}
+
+function tryDirectHostMethodSync(
+  host: HTMLElement,
+  methodName: string,
+  media: HTMLMediaElement,
+): boolean {
   const method = getHostMember(host, methodName);
   if (typeof method !== "function") {
     return false;
   }
 
   try {
-    void method.call(host);
+    handleHostMethodRejection(method.call(host), media, methodName);
     return true;
   } catch {
     return false;
@@ -203,7 +230,7 @@ function tryCustomPlayerMethodSync(
     return false;
   }
 
-  return tryDirectHostMethodSync(host, methodName) || tryBridgeMethod(host, command);
+  return tryDirectHostMethodSync(host, methodName, media) || tryBridgeMethod(host, command);
 }
 
 function clickShadowPlayButton(media: HTMLMediaElement): boolean {
@@ -242,8 +269,9 @@ async function tryPlayMedia(media: HTMLMediaElement): Promise<void> {
         try {
           await play.call(host);
           return;
-        } catch {
+        } catch (error) {
           // Fall back to the bridge, play-button click, then native media playback.
+          debugLog("Host play() was rejected", media, { error });
         }
       }
 
@@ -342,6 +370,7 @@ export function requestCustomPlayerFullscreen(media: HTMLMediaElement): boolean 
   }
 
   return (
-    tryBridgeMethod(host, "requestFullscreen") || tryDirectHostMethodSync(host, "requestFullscreen")
+    tryBridgeMethod(host, "requestFullscreen") ||
+    tryDirectHostMethodSync(host, "requestFullscreen", media)
   );
 }
