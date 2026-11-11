@@ -1,5 +1,6 @@
 import { type MockInstance, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  makeCustomPlayerVideo,
   makeInvalidVideo,
   makeVideo,
   mockRect,
@@ -7,8 +8,14 @@ import {
   resetContentTestState,
   settleLeftoverTimers,
 } from "./helpers.js";
-import { getTargetMedia, handleAction, setSettingsForTests } from "../../../src/content.js";
+import {
+  getBestLocalCandidate,
+  getTargetMedia,
+  handleAction,
+  setSettingsForTests,
+} from "../../../src/content.js";
 import { MEDIA_PRESENCE_REPORT_DELAY_MS } from "../../../src/content/constants.js";
+import { hasMediaInUse } from "../../../src/content/media-scoring.js";
 import { state } from "../../../src/content/state.js";
 import { DEFAULT_SETTINGS } from "../../../src/storage.js";
 
@@ -545,6 +552,193 @@ describe("pointer intent signals", () => {
     } as Partial<HTMLVideoElement>);
 
     expect(getTargetMedia()).toBe(buffering);
+  });
+});
+
+describe("custom player hosts", () => {
+  type HostState = { paused?: boolean; muted?: boolean; volume?: number };
+
+  // A host answers from its own state, and counts every read.
+  function defineHostState(host: HTMLElement, hostState: HostState) {
+    const reads = { paused: 0, muted: 0, volume: 0 };
+    for (const key of ["paused", "muted", "volume"] as const) {
+      if (hostState[key] !== undefined) {
+        Object.defineProperty(host, key, {
+          configurable: true,
+          get: () => {
+            reads[key] += 1;
+            return hostState[key];
+          },
+        });
+      }
+    }
+    return reads;
+  }
+
+  function makeNativePlayer(overrides: Partial<HTMLVideoElement> = {}): HTMLVideoElement {
+    return makeVideo({ paused: false, ended: false, readyState: 4, ...overrides });
+  }
+
+  // The inner element is idle and silent, like a player whose state runs ahead
+  // of its media element, or whose media element never loads.
+  function makeIdleInner(video: HTMLVideoElement): void {
+    Object.defineProperties(video, {
+      paused: { configurable: true, value: true },
+      muted: { configurable: true, value: true },
+    });
+  }
+
+  it("targets a host that is playing although its inner media element is paused", () => {
+    makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    const { host, video } = makeCustomPlayerVideo();
+    defineHostState(host, { paused: false, muted: false, volume: 1 });
+    expect(video.paused).toBe(true);
+
+    expect(getTargetMedia()).toBe(video);
+  });
+
+  it("scores a playing host with sound as audible although its inner element is muted", () => {
+    // Ties go to the earliest in the document, so the muted native player
+    // would win if the host's sound were not read.
+    makeNativePlayer({ muted: true } as Partial<HTMLVideoElement>);
+    const { host, video } = makeCustomPlayerVideo();
+    defineHostState(host, { paused: false, muted: false, volume: 1 });
+    makeIdleInner(video);
+
+    expect(getTargetMedia()).toBe(video);
+  });
+
+  it("scores a playing host that is muted as muted although its inner element has sound", () => {
+    const { host, video } = makeCustomPlayerVideo();
+    defineHostState(host, { paused: false, muted: true, volume: 1 });
+    Object.defineProperties(video, {
+      paused: { configurable: true, value: false },
+      readyState: { configurable: true, value: 4 },
+    });
+    const audibleNative = makeNativePlayer();
+
+    expect(getTargetMedia()).toBe(audibleNative);
+  });
+
+  it("scores a playing host with volume zero as muted", () => {
+    const { host, video } = makeCustomPlayerVideo();
+    defineHostState(host, { paused: false, muted: false, volume: 0 });
+    Object.defineProperties(video, {
+      paused: { configurable: true, value: false },
+      readyState: { configurable: true, value: 4 },
+    });
+    const audibleNative = makeNativePlayer();
+
+    expect(getTargetMedia()).toBe(audibleNative);
+  });
+
+  it("does not target a host that is paused although its inner element is playing", () => {
+    const { host, video } = makeCustomPlayerVideo();
+    defineHostState(host, { paused: true });
+    Object.defineProperties(video, {
+      paused: { configurable: true, value: false },
+      readyState: { configurable: true, value: 4 },
+    });
+    const idleNative = makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    mockRect(idleNative, rect(0, 0, 320, 180));
+
+    // Playing audibly would add 500 to the host's score; it scores as idle,
+    // so the larger native video wins on area.
+    expect(getTargetMedia()).toBe(idleNative);
+  });
+
+  it("prefers the host's answer when the inner element has not loaded or has ended", () => {
+    makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    const { host, video } = makeCustomPlayerVideo();
+    defineHostState(host, { paused: false, muted: false, volume: 1 });
+    Object.defineProperties(video, {
+      paused: { configurable: true, value: false },
+      ended: { configurable: true, value: true },
+      readyState: { configurable: true, value: 0 },
+    });
+
+    expect(getTargetMedia()).toBe(video);
+  });
+
+  it("judges a host that reports nothing from its inner element", () => {
+    makeVideo({ paused: true } as Partial<HTMLVideoElement>);
+    const { video } = makeCustomPlayerVideo();
+    Object.defineProperties(video, {
+      paused: { configurable: true, value: false },
+      ended: { configurable: true, value: true },
+      readyState: { configurable: true, value: 4 },
+    });
+
+    // An ended inner element is not playing, so the first video wins the tie.
+    expect(getTargetMedia()).not.toBe(video);
+  });
+
+  it("reads each host value at most once per candidate in a scoring pass", () => {
+    const { host } = makeCustomPlayerVideo();
+    const reads = defineHostState(host, { paused: false, muted: false, volume: 1 });
+
+    getBestLocalCandidate();
+
+    expect(reads).toEqual({ paused: 1, muted: 1, volume: 1 });
+  });
+
+  it("reads no volume from a host that is muted, and nothing from one that is paused", () => {
+    const mutedPlayer = makeCustomPlayerVideo();
+    const mutedReads = defineHostState(mutedPlayer.host, { paused: false, muted: true, volume: 1 });
+    const pausedPlayer = makeCustomPlayerVideo();
+    const pausedReads = defineHostState(pausedPlayer.host, {
+      paused: true,
+      muted: false,
+      volume: 1,
+    });
+
+    getBestLocalCandidate();
+
+    expect(mutedReads).toEqual({ paused: 1, muted: 1, volume: 0 });
+    expect(pausedReads).toEqual({ paused: 1, muted: 0, volume: 0 });
+  });
+
+  it("does not read the playback of a decorative loop", () => {
+    const { host, video } = makeCustomPlayerVideo();
+    const reads = defineHostState(host, { paused: false, muted: true, volume: 1 });
+    video.loop = true;
+    video.muted = true;
+    video.controls = false;
+
+    getBestLocalCandidate();
+
+    expect(reads).toEqual({ paused: 0, muted: 0, volume: 0 });
+  });
+
+  it("counts a host that plays with sound as media in use", () => {
+    const { host, video } = makeCustomPlayerVideo();
+    const reads = defineHostState(host, { paused: false, muted: false, volume: 1 });
+    makeIdleInner(video);
+    mockRect(video, rect(0, 0, 320, 180));
+
+    expect(hasMediaInUse()).toBe(true);
+    expect(reads).toEqual({ paused: 1, muted: 1, volume: 1 });
+  });
+
+  it("does not count a host that is paused or muted as media in use", () => {
+    const paused = makeCustomPlayerVideo();
+    defineHostState(paused.host, { paused: true, muted: false, volume: 1 });
+    Object.defineProperties(paused.video, {
+      paused: { configurable: true, value: false },
+      readyState: { configurable: true, value: 4 },
+    });
+    mockRect(paused.video, rect(0, 0, 320, 180));
+    expect(hasMediaInUse()).toBe(false);
+    paused.host.remove();
+
+    const muted = makeCustomPlayerVideo();
+    defineHostState(muted.host, { paused: false, muted: true, volume: 1 });
+    Object.defineProperties(muted.video, {
+      paused: { configurable: true, value: false },
+      readyState: { configurable: true, value: 4 },
+    });
+    mockRect(muted.video, rect(0, 0, 320, 180));
+    expect(hasMediaInUse()).toBe(false);
   });
 });
 
