@@ -8,6 +8,8 @@ export type MediaState = {
   muted: boolean;
   volume: number;
   currentTime: number;
+  /** The time each seek landed on since `trackSeeks`. Playback never adds one. */
+  seekLandings: number[];
   playbackRate: number;
   duration: number;
 };
@@ -144,6 +146,17 @@ export async function markPlaying(page: Page, id: string): Promise<void> {
         __mediaFixtures: { markPlaying: (id: string) => Promise<void> };
       }
     ).__mediaFixtures.markPlaying(mediaId);
+  }, id);
+}
+
+/** Starts recording where the media's seeks land, read back as `seekLandings`. */
+export async function trackSeeks(page: Page, id: string): Promise<void> {
+  await page.evaluate((mediaId) => {
+    (
+      window as typeof window & {
+        __mediaFixtures: { trackSeeks: (id: string) => void };
+      }
+    ).__mediaFixtures.trackSeeks(mediaId);
   }, id);
 }
 
