@@ -4,10 +4,10 @@ import { collectAdvancedSettings, populateAdvancedSettings } from "./advanced-se
 import { DELETE } from "./icons.js";
 import {
   DEFAULT_ADVANCED_SETTINGS,
+  diffSettings,
   findMatchingSitePolicy,
   getSettings,
   saveSettings,
-  settingsEqual,
   type ExtensionSettings,
   type SitePolicy,
   type SitePolicyEmbedsPolicy,
@@ -16,7 +16,14 @@ import {
 import { normalizeDisabledUrlPattern, normalizeSitePolicies } from "./site-patterns.js";
 import { showStatusToast, type StatusToastTone } from "./status-toast.js";
 
+// The settings as this page last knew them, kept current by the user's own edits and by
+// `storage.onChanged`. Saves send only the difference to it, never the whole object.
 let currentSettings: ExtensionSettings;
+let localEditCount = 0;
+let latestRefreshNumber = 0;
+let changedBeforeLoad = false;
+let showStoredSettingsNext = false;
+let siteRuleRefreshDeferred = false;
 let pendingSave: Promise<void> = Promise.resolve();
 let debouncedInputSaveId: number | undefined;
 
@@ -39,20 +46,117 @@ function persistSettings(nextSettings?: ExtensionSettings): Promise<void> {
     advancedSettings: collectAdvancedSettings(),
   };
 
-  if (settingsEqual(currentSettings, settingsToPersist)) {
+  const update = diffSettings(currentSettings, settingsToPersist);
+  if (!update) {
     return pendingSave;
   }
 
   currentSettings = settingsToPersist;
-  const settingsToSave = structuredClone(settingsToPersist);
+  localEditCount += 1;
   pendingSave = pendingSave
     .catch(() => undefined)
     .then(async () => {
-      await saveSettings(settingsToSave);
-      showStatus();
+      try {
+        await saveSettings(update);
+        showStatus();
+      } catch {
+        showStatus("Failed to save settings. Try again.", "error");
+        // The snapshot already holds the edit, which may not be stored (or only partly). Show
+        // what storage has, so the page doesn't claim a save that never happened.
+        showStoredSettingsNext = true;
+        void refreshFromStorage().catch(() => undefined);
+      }
     });
 
   return pendingSave;
+}
+
+function isEditingSitePolicies(): boolean {
+  // Typing in a rule row (a pending debounce) or merely resting focus in the list. Replacing the
+  // rows takes focus away, which is only worth it to drop an edit that failed to save.
+  return (
+    getSitePoliciesList().contains(document.activeElement) &&
+    (debouncedInputSaveId !== undefined || !showStoredSettingsNext)
+  );
+}
+
+/** Replaces the rule rows with storage's, keeping the new rows the user hasn't filled in yet. */
+function renderStoredSitePolicies(settings: ExtensionSettings): void {
+  const blankRows = Array.from(
+    document.querySelectorAll<HTMLTableRowElement>(".site-policy-row"),
+  ).filter((row) => row.querySelector<HTMLInputElement>(".site-policy-pattern")?.value === "");
+  renderSitePoliciesList({ focusTarget: false, settings });
+  getSitePoliciesList().append(...blankRows);
+}
+
+/**
+ * Picks up settings changed elsewhere (the popup, the overlay hotkey), so a field the user didn't
+ * touch keeps matching storage and the next save sends only what they changed. It waits for this
+ * page's own saves, and skips a read that a newer read or a newer edit overtook: that edit's own
+ * save announces itself. After a failed save (`showStoredSettingsNext`) it also replaces the focused
+ * rule row, so the edit that was not saved is not left on screen; that intent lasts until a read
+ * has applied it.
+ */
+async function refreshFromStorage(): Promise<void> {
+  latestRefreshNumber += 1;
+  const refreshNumber = latestRefreshNumber;
+  const editsBefore = localEditCount;
+  await pendingSave;
+  const latestSettings = await getSettings();
+  const overtaken = refreshNumber !== latestRefreshNumber || localEditCount !== editsBefore;
+  if (overtaken) {
+    return;
+  }
+
+  const changes = diffSettings(currentSettings, latestSettings);
+  const nextSettings = { ...latestSettings };
+  let keepShowingStoredSettings = false;
+
+  if (changes?.advancedSettings) {
+    // Fields the user has typed in since the last save keep their text, and the next save sends it
+    // as their change. The rest, including a focused field whose edit failed to save, show storage.
+    const fields = getEditableInputs();
+    const typedValues = fields.map((input) => input.value);
+    populateAdvancedSettings(currentSettings.advancedSettings);
+    const savedValues = fields.map((input) => input.value);
+    populateAdvancedSettings(latestSettings.advancedSettings);
+    fields.forEach((input, index) => {
+      rememberValidInputValue(input);
+      if (typedValues[index] !== savedValues[index]) {
+        input.value = typedValues[index];
+      }
+    });
+  }
+
+  if (changes?.siteSettings) {
+    // Site rules are one stored list that the page saves whole, so rows being edited are not
+    // replaced; saving them then overwrites a list changed elsewhere meanwhile. The refresh is
+    // retried when focus leaves the list.
+    if (isEditingSitePolicies()) {
+      nextSettings.siteSettings = currentSettings.siteSettings;
+      siteRuleRefreshDeferred = true;
+      keepShowingStoredSettings = showStoredSettingsNext;
+    } else {
+      renderStoredSitePolicies(latestSettings);
+    }
+  }
+
+  showStoredSettingsNext = keepShowingStoredSettings;
+  currentSettings = nextSettings;
+}
+
+function handleStorageChanged(_changes: unknown, areaName: string): void {
+  if (areaName !== "sync") {
+    return;
+  }
+
+  if (!currentSettings) {
+    // The first read may have started before this change; init reads again once it has loaded.
+    changedBeforeLoad = true;
+    return;
+  }
+
+  void refreshFromStorage().catch(() => undefined);
 }
 
 function isDebouncedTextInput(input: HTMLInputElement): boolean {
@@ -305,16 +409,21 @@ function createSitePolicyRow(policy: SitePolicy): HTMLTableRowElement {
   return tableRow;
 }
 
-function renderSitePoliciesList(): void {
+function renderSitePoliciesList(
+  options: { focusTarget: boolean; settings: ExtensionSettings } = {
+    focusTarget: true,
+    settings: currentSettings,
+  },
+): void {
   const searchParams = new URLSearchParams(window.location.search);
   const prefill = searchParams.get(DISABLED_SITE_PREFILL_PARAM);
   const highlightUrl = searchParams.get(DISABLED_SITE_HIGHLIGHT_URL_PARAM);
   const highlightedPattern = highlightUrl
-    ? findMatchingSitePolicy(highlightUrl, currentSettings.siteSettings)?.pattern
+    ? findMatchingSitePolicy(highlightUrl, options.settings.siteSettings)?.pattern
     : undefined;
 
   const list = getSitePoliciesList();
-  const policies = normalizeSitePolicies(currentSettings.siteSettings.sitePolicies);
+  const policies = normalizeSitePolicies(options.settings.siteSettings.sitePolicies);
 
   let prefillPattern: string | undefined;
   if (prefill) {
@@ -332,7 +441,7 @@ function renderSitePoliciesList(): void {
   clearSitePoliciesError();
 
   const targetPattern = prefillPattern || highlightedPattern;
-  if (targetPattern) {
+  if (targetPattern && options.focusTarget) {
     document.getElementById("site-policies-section")?.scrollIntoView();
 
     const targetRow = Array.from(
@@ -473,11 +582,15 @@ function renderVersionAndReportLink(): void {
 
 async function init(): Promise<void> {
   renderVersionAndReportLink();
+  browser.storage.onChanged.addListener(handleStorageChanged);
   currentSettings = await getSettings();
   populateAdvancedSettings(currentSettings.advancedSettings);
   renderSitePoliciesList();
   for (const input of getEditableInputs()) {
     rememberValidInputValue(input);
+  }
+  if (changedBeforeLoad) {
+    void refreshFromStorage().catch(() => undefined);
   }
 
   for (const selector of ["input", "select"]) {
@@ -511,6 +624,12 @@ async function init(): Promise<void> {
 
   document.getElementById("reset")?.addEventListener("click", () => {
     void handleReset();
+  });
+  getSitePoliciesList().addEventListener("focusout", () => {
+    if (siteRuleRefreshDeferred) {
+      siteRuleRefreshDeferred = false;
+      void refreshFromStorage().catch(() => undefined);
+    }
   });
   document.getElementById("add-site-policy")?.addEventListener("click", () => {
     handleAddSitePolicy();

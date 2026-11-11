@@ -3,21 +3,9 @@ import {
   type AdvancedSettings,
   type OverlayPosition,
   type SkipOverlayPosition,
+  OVERLAY_POSITIONS,
+  SKIP_OVERLAY_POSITIONS,
 } from "./storage.js";
-
-const OVERLAY_POSITIONS: OverlayPosition[] = [
-  "top-left",
-  "top",
-  "top-right",
-  "center-left",
-  "center",
-  "center-right",
-  "bottom-left",
-  "bottom",
-  "bottom-right",
-];
-
-const SKIP_OVERLAY_POSITION_OPTIONS: SkipOverlayPosition[] = ["left / right", "same as others"];
 
 function fillOverlayPositionSelect(
   select: HTMLSelectElement,
@@ -40,7 +28,7 @@ function fillSkipOverlayPositionSelect(
 ): void {
   select.innerHTML = "";
 
-  for (const value of SKIP_OVERLAY_POSITION_OPTIONS) {
+  for (const value of SKIP_OVERLAY_POSITIONS) {
     const option = document.createElement("option");
     option.value = value;
     option.textContent = value;

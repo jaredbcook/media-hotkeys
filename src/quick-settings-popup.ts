@@ -6,12 +6,12 @@ import {
   type ExtensionSettings,
   type SitePolicy,
   DEFAULT_QUICK_SETTINGS,
+  diffSettings,
   findMatchingSitePolicy,
   getSettings,
   hasReservedModifier,
   normalizeHotkeyKey,
   saveSettings,
-  settingsEqual,
 } from "./storage.js";
 import {
   getDisabledSitePrefillForUrl,
@@ -99,7 +99,12 @@ function getUnusableKeyReason(e: KeyboardEvent): string | undefined {
   return UNUSABLE_KEY_REASONS.get(e.key);
 }
 
+// The settings as this popup last knew them, kept current by the user's own edits and by
+// `storage.onChanged`. Saves send only the difference to it, never the whole object.
 let currentSettings: ExtensionSettings;
+let localEditCount = 0;
+let latestRefreshNumber = 0;
+let changedBeforeLoad = false;
 let activeKeyCaptureCleanup: (() => void) | undefined;
 let pendingSave: Promise<void> = Promise.resolve();
 let activeBindingAnnouncement: HTMLDivElement | undefined;
@@ -212,26 +217,71 @@ function persistSettings(
     failureMessage?: string;
   },
 ): Promise<void> {
-  if (settingsEqual(currentSettings, nextSettings)) {
+  const update = diffSettings(currentSettings, nextSettings);
+  if (!update) {
     return pendingSave;
   }
 
   currentSettings = nextSettings;
-  const settingsToSave = structuredClone(nextSettings);
+  localEditCount += 1;
   pendingSave = pendingSave
     .catch(() => undefined)
     .then(async () => {
       try {
-        await saveSettings(settingsToSave);
+        await saveSettings(update);
         if (options?.successMessage) {
           showAnnouncement(options.successMessage, "success");
         }
       } catch {
         showAnnouncement(options?.failureMessage ?? "Failed to save settings. Try again.", "error");
+        // The snapshot already holds the edit, which may not be stored (or only partly). Show
+        // what storage has, so the popup doesn't claim a save that never happened.
+        void refreshFromStorage().catch(() => undefined);
       }
     });
 
   return pendingSave;
+}
+
+/**
+ * Picks up settings changed elsewhere (the options page, the overlay hotkey, another popup), so the
+ * next edit is computed from them. It waits for this popup's own saves, and skips a read that a
+ * newer read or a newer edit overtook: that edit's own save announces itself. After a failed save
+ * it shows what storage has instead.
+ */
+async function refreshFromStorage(): Promise<void> {
+  latestRefreshNumber += 1;
+  const refreshNumber = latestRefreshNumber;
+  const editsBefore = localEditCount;
+  await pendingSave;
+  const latestSettings = await getSettings();
+  const overtaken = refreshNumber !== latestRefreshNumber || localEditCount !== editsBefore;
+  const changes = diffSettings(currentSettings, latestSettings);
+  if (overtaken || !changes) {
+    return;
+  }
+
+  currentSettings = latestSettings;
+  if (changes.quickSettings?.actionKeyBindings) {
+    // The table is about to be rebuilt, so a pending key capture would be left listening for nothing.
+    clearActiveKeyCapture();
+    renderActionKeyBindingsTable();
+  }
+  renderSiteControls();
+}
+
+function handleStorageChanged(_changes: unknown, areaName: string): void {
+  if (areaName !== "sync") {
+    return;
+  }
+
+  if (!currentSettings) {
+    // The first read may have started before this change; init reads again once it has loaded.
+    changedBeforeLoad = true;
+    return;
+  }
+
+  void refreshFromStorage().catch(() => undefined);
 }
 
 function renderActionKeyBindingsTable(): void {
@@ -637,7 +687,9 @@ async function handleReset(): Promise<void> {
   }
 
   const nextSettings = structuredClone(currentSettings);
-  nextSettings.quickSettings = structuredClone(DEFAULT_QUICK_SETTINGS);
+  nextSettings.quickSettings.actionKeyBindings = structuredClone(
+    DEFAULT_QUICK_SETTINGS.actionKeyBindings,
+  );
   await persistSettings(nextSettings, {
     successMessage: "Quick settings reset to default values.",
     failureMessage: "Failed to reset quick settings. Try again.",
@@ -654,9 +706,13 @@ async function handleAdvancedSettings(): Promise<void> {
 
 async function init(): Promise<void> {
   renderVersion();
+  browser.storage.onChanged.addListener(handleStorageChanged);
   currentSettings = await getSettings();
   renderActionKeyBindingsTable();
   renderSiteControls();
+  if (changedBeforeLoad) {
+    void refreshFromStorage().catch(() => undefined);
+  }
 
   getElement<HTMLInputElement>("disable-everywhere")?.addEventListener("change", (event) => {
     handleDisableEverywhereChange((event.currentTarget as HTMLInputElement).checked);

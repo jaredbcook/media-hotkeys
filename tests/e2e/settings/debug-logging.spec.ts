@@ -3,9 +3,7 @@ import { createMedia, waitForMediaState } from "../fixtures.js";
 import { expect, test } from "../setup.js";
 
 type StoredExtensionSettings = {
-  advancedSettings?: {
-    debugLogging?: boolean;
-  };
+  "advanced.debugLogging"?: boolean;
 };
 
 type ExtensionStorageGlobal = typeof globalThis & {
@@ -59,7 +57,7 @@ test("persists debug logging and applies it to content scripts", async ({ page, 
         const extensionGlobal = globalThis as ExtensionStorageGlobal;
         return extensionGlobal.chrome.storage.sync
           .get(null)
-          .then((settings) => settings.advancedSettings?.debugLogging);
+          .then((settings) => settings["advanced.debugLogging"]);
       }),
     )
     .toBe(true);

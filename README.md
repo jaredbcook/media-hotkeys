@@ -70,6 +70,8 @@ With **Sum skips** on, pressing skip repeatedly shows the running total (for exa
 
 **Restore Defaults** in Quick Settings resets the key bindings, and in Advanced Settings it resets the settings in the table above and keeps your site rules. Both ask you to confirm first, because a restore can't be undone.
 
+Only the settings you change are saved, so a default improved in a later version reaches everyone who left that setting alone. Changes made in Quick Settings, Advanced Settings, or with the overlay hotkey show up in the other open pages without a reload and don't overwrite each other. The exception is site rules, which are saved as one list: editing them in two places at the same moment can still lose one of the edits.
+
 ### Site rules
 
 Some sites, such as YouTube, have their own shortcuts. Add a site rule in Advanced Settings, or use the checkboxes in Quick Settings, to let the site's shortcuts win:

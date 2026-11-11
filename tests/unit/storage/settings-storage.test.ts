@@ -6,9 +6,11 @@ import {
   DEFAULT_SITE_SETTINGS,
   DEFAULT_SETTINGS,
   findMatchingSitePolicy,
+  diffSettings,
   getSettings,
   isUrlDisabledBySiteSettings,
   saveSettings,
+  type ExtensionSettings,
 } from "../../../src/storage.js";
 import {
   getDisabledSitePrefillForUrl,
@@ -25,6 +27,11 @@ vi.mock("webextension-polyfill", () => ({
       sync: {
         get: vi.fn(async () => ({ ...store })),
         set: vi.fn(async (values: Record<string, unknown>) => Object.assign(store, values)),
+        remove: vi.fn(async (keys: string[]) => {
+          for (const key of keys) {
+            delete store[key];
+          }
+        }),
       },
     },
   },
@@ -51,97 +58,259 @@ describe("settings storage", () => {
     );
   });
 
-  it("ignores unknown top-level and nested keys in storage and drops nested extras on save", async () => {
-    Object.assign(store, {
-      unknownTopLevelKey: "ignored",
-      siteSettings: {
-        sitePolicies: [{ pattern: "youtube.com", policy: "disabled", embedsPolicy: "inherit" }],
-        extraSiteKey: ["youtube.com"],
-      },
+  it("stores only the settings that changed, as flat keys, plus the schema version", async () => {
+    await saveSettings({
+      advancedSettings: { volumeStep: 0.1, debugLogging: true },
+      quickSettings: { actionKeyBindings: { togglePlayPause: { keys: ["k", " "] } } },
     });
+
+    expect(store).toEqual({
+      schemaVersion: 1,
+      "advanced.volumeStep": 0.1,
+      "advanced.debugLogging": true,
+      "keys.togglePlayPause": ["k", " "],
+    });
+    expect(browser.storage.sync.set).toHaveBeenCalledTimes(1);
+  });
+
+  it("fills settings without a stored key from the defaults", async () => {
+    Object.assign(store, { "advanced.volumeStep": 0.1 });
 
     const settings = await getSettings();
 
     expect(settings).toEqual({
-      quickSettings: DEFAULT_QUICK_SETTINGS,
-      advancedSettings: DEFAULT_ADVANCED_SETTINGS,
+      ...DEFAULT_SETTINGS,
+      advancedSettings: { ...DEFAULT_ADVANCED_SETTINGS, volumeStep: 0.1 },
+    });
+  });
+
+  it("resets a setting by removing its key once the value is the default again", async () => {
+    await saveSettings({ advancedSettings: { volumeStep: 0.1, speedStep: 0.5 } });
+    vi.mocked(browser.storage.sync.set).mockClear();
+
+    await saveSettings({
+      advancedSettings: { volumeStep: DEFAULT_ADVANCED_SETTINGS.volumeStep },
+    });
+
+    expect(store).toEqual({ schemaVersion: 1, "advanced.speedStep": 0.5 });
+    expect(browser.storage.sync.remove).toHaveBeenCalledWith(["advanced.volumeStep"]);
+    expect(browser.storage.sync.set).not.toHaveBeenCalled();
+  });
+
+  it("writes nothing for an empty patch", async () => {
+    await saveSettings({});
+    await saveSettings({ advancedSettings: {}, quickSettings: { actionKeyBindings: {} } });
+
+    expect(browser.storage.sync.set).not.toHaveBeenCalled();
+    expect(browser.storage.sync.remove).not.toHaveBeenCalled();
+  });
+
+  it("reads only the schema marker to save, and leaves the keys a patch doesn't name alone", async () => {
+    Object.assign(store, { "advanced.speedStep": 0.5, "keys.toggleMute": ["u"] });
+
+    await saveSettings({ advancedSettings: { volumeStep: 0.1 } });
+
+    expect(browser.storage.sync.get).toHaveBeenCalledTimes(1);
+    expect(browser.storage.sync.get).toHaveBeenCalledWith("schemaVersion");
+    expect(store).toMatchObject({
+      "advanced.speedStep": 0.5,
+      "keys.toggleMute": ["u"],
+      "advanced.volumeStep": 0.1,
+    });
+  });
+
+  it("writes the schema version once, and never lowers one a newer version stored", async () => {
+    await saveSettings({ advancedSettings: { volumeStep: 0.1 } });
+    expect(store.schemaVersion).toBe(1);
+
+    store.schemaVersion = 2;
+    await saveSettings({ advancedSettings: { speedStep: 0.5 } });
+    expect(store.schemaVersion).toBe(2);
+
+    store.schemaVersion = "garbage";
+    await saveSettings({ advancedSettings: { speedMin: 0.5 } });
+    expect(store.schemaVersion).toBe(1);
+  });
+
+  it("keeps both changes when one save is held until the other has landed", async () => {
+    // The advanced page saves the volume step, but its read (the schema marker) is held. The
+    // overlay hotkey saves the overlay toggle and lands first. A save that read the settings and
+    // wrote them back whole would put back the old overlay value when it finally wrote.
+    let releaseRead!: () => void;
+    const readHeld = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    vi.mocked(browser.storage.sync.get).mockImplementationOnce(async () => {
+      const snapshot = { ...store };
+      await readHeld;
+      return snapshot;
+    });
+
+    const volumeSave = saveSettings({ advancedSettings: { volumeStep: 0.1 } });
+    await saveSettings({ advancedSettings: { showOverlays: false } });
+    releaseRead();
+    await volumeSave;
+
+    expect((await getSettings()).advancedSettings).toMatchObject({
+      volumeStep: 0.1,
+      showOverlays: false,
+    });
+  });
+
+  it("keeps both changes when one write is still in flight as the other lands", async () => {
+    let landFirstSet!: () => void;
+    const firstSetHeld = new Promise<void>((resolve) => {
+      landFirstSet = resolve;
+    });
+    vi.mocked(browser.storage.sync.set).mockImplementationOnce(async (values) => {
+      await firstSetHeld;
+      Object.assign(store, values);
+    });
+
+    const volumeSave = saveSettings({ advancedSettings: { volumeStep: 0.1 } });
+    await saveSettings({ advancedSettings: { showOverlays: false } });
+    landFirstSet();
+    await volumeSave;
+
+    expect((await getSettings()).advancedSettings).toMatchObject({
+      volumeStep: 0.1,
+      showOverlays: false,
+    });
+  });
+
+  it("doesn't write back a stale snapshot's values when it saves only what changed", async () => {
+    // A surface loaded its snapshot, then another surface changed two settings.
+    const snapshot = await getSettings();
+    await saveSettings({
+      quickSettings: { actionKeyBindings: { toggleMute: { keys: ["u"] } } },
+      advancedSettings: { showOverlays: false },
+    });
+
+    // The stale surface now changes an unrelated setting and sends just that.
+    const next: ExtensionSettings = structuredClone(snapshot);
+    next.advancedSettings.volumeStep = 0.1;
+    await saveSettings(diffSettings(snapshot, next)!);
+
+    const settings = await getSettings();
+    expect(settings.advancedSettings.volumeStep).toBe(0.1);
+    expect(settings.advancedSettings.showOverlays).toBe(false);
+    expect(settings.quickSettings.actionKeyBindings.toggleMute.keys).toEqual(["u"]);
+  });
+
+  it("ignores keys it doesn't know, including the earlier grouped layout, and leaves them stored", async () => {
+    Object.assign(store, {
+      unknownTopLevelKey: "ignored",
+      "advanced.unknownSetting": 1,
+      "keys.unknownAction": ["x"],
+      quickSettings: { hotkeysEnabled: false },
+      advancedSettings: { volumeStep: 0.5 },
       siteSettings: {
         sitePolicies: [{ pattern: "youtube.com", policy: "disabled", embedsPolicy: "inherit" }],
       },
     });
 
+    expect(await getSettings()).toEqual(DEFAULT_SETTINGS);
+
+    await saveSettings({ advancedSettings: { volumeStep: 0.1 } });
+
+    expect(store).toMatchObject({
+      unknownTopLevelKey: "ignored",
+      quickSettings: { hotkeysEnabled: false },
+      advancedSettings: { volumeStep: 0.5 },
+      "advanced.volumeStep": 0.1,
+    });
+    expect(Object.keys(store)).toContain("siteSettings");
+  });
+
+  it("falls back to the default for stored values of the wrong type", async () => {
+    Object.assign(store, {
+      "quick.hotkeysEnabled": "yes",
+      "advanced.volumeStep": "loud",
+      "advanced.speedMax": Infinity,
+      "advanced.overlayPosition": "nowhere",
+      "advanced.skipOverlayPosition": "diagonal",
+      "advanced.showOverlays": 0,
+      "keys.togglePlayPause": "k",
+      "keys.toggleMute": ["u", ""],
+      "keys.restart": [1],
+      sitePolicies: "youtube.com",
+    });
+
+    expect(await getSettings()).toEqual(DEFAULT_SETTINGS);
+  });
+
+  it("drops invalid values from a save and keeps the valid ones", async () => {
     await saveSettings({
-      siteSettings: {
-        sitePolicies: [{ pattern: "vimeo.com", policy: "disabled", embedsPolicy: "inherit" }],
+      advancedSettings: {
+        volumeStep: Number.NaN,
+        overlayPosition: "nowhere" as "center",
+        debugLogging: true,
+      },
+      quickSettings: {
+        actionKeyBindings: { toggleMute: { keys: "u" as unknown as string[] } },
       },
     });
 
-    expect(store.siteSettings).toEqual({
-      sitePolicies: [{ pattern: "vimeo.com", policy: "disabled", embedsPolicy: "inherit" }],
-    });
+    expect(store).toEqual({ schemaVersion: 1, "advanced.debugLogging": true });
   });
 
   it("keeps a skip of 600 seconds through save and load", async () => {
-    const modified = structuredClone(DEFAULT_SETTINGS);
-    modified.advancedSettings.seekStepLarge = 600;
-    await saveSettings(modified);
+    await saveSettings({ advancedSettings: { seekStepLarge: 600 } });
 
     const settings = await getSettings();
 
     expect(settings.advancedSettings.seekStepLarge).toBe(600);
   });
 
-  it("persists advanced settings changes", async () => {
-    const modified = structuredClone(DEFAULT_SETTINGS);
-    modified.advancedSettings.volumeStep = 0.1;
-    modified.advancedSettings.sumQuickSkips = false;
-    modified.advancedSettings.debugLogging = false;
-    modified.quickSettings.hotkeysEnabled = false;
-    await saveSettings(modified);
+  it("persists advanced and quick settings changes", async () => {
+    await saveSettings({
+      advancedSettings: { volumeStep: 0.1, sumQuickSkips: false, debugLogging: true },
+      quickSettings: { hotkeysEnabled: false },
+    });
 
     const settings = await getSettings();
     expect(settings.advancedSettings.volumeStep).toBe(0.1);
     expect(settings.advancedSettings.sumQuickSkips).toBe(false);
-    expect(settings.advancedSettings.debugLogging).toBe(false);
+    expect(settings.advancedSettings.debugLogging).toBe(true);
     expect(settings.quickSettings.hotkeysEnabled).toBe(false);
+    expect(store["quick.hotkeysEnabled"]).toBe(false);
   });
 
-  it("skips storage writes when a save does not change normalized settings", async () => {
+  it("resets every setting a full settings object names when it equals the defaults", async () => {
+    await saveSettings({
+      advancedSettings: { volumeStep: 0.1 },
+      quickSettings: { actionKeyBindings: { toggleMute: { keys: ["u"] } } },
+      siteSettings: {
+        sitePolicies: [{ pattern: "vimeo.com", policy: "disabled", embedsPolicy: "inherit" }],
+      },
+    });
+
     await saveSettings(DEFAULT_SETTINGS);
 
-    expect(browser.storage.sync.set).not.toHaveBeenCalled();
-  });
-
-  it("persists grouped settings without leaking grouped objects into advanced settings", async () => {
-    const modified = structuredClone(DEFAULT_SETTINGS);
-    modified.advancedSettings.debugLogging = true;
-
-    await saveSettings(modified);
-
-    expect(store.advancedSettings).toEqual({
-      ...DEFAULT_ADVANCED_SETTINGS,
-      debugLogging: true,
-    });
+    expect(store).toEqual({ schemaVersion: 1 });
+    expect(await getSettings()).toEqual(DEFAULT_SETTINGS);
   });
 
   it("persists quick action binding changes", async () => {
-    const modified = structuredClone(DEFAULT_SETTINGS);
-    modified.quickSettings.actionKeyBindings.togglePlayPause.keys = ["k", " "];
-    await saveSettings(modified);
+    await saveSettings({
+      quickSettings: { actionKeyBindings: { togglePlayPause: { keys: ["k", " "] } } },
+    });
 
     const settings = await getSettings();
     expect(settings.quickSettings.actionKeyBindings.togglePlayPause.keys).toEqual(["k", " "]);
+    expect(store["keys.togglePlayPause"]).toEqual(["k", " "]);
   });
 
-  it("deep merges partial action key binding overrides with defaults", async () => {
+  it("keeps an action's keys empty when the user removed them all", async () => {
+    await saveSettings({ quickSettings: { actionKeyBindings: { togglePlayPause: { keys: [] } } } });
+
+    expect(store["keys.togglePlayPause"]).toEqual([]);
+    expect((await getSettings()).quickSettings.actionKeyBindings.togglePlayPause.keys).toEqual([]);
+  });
+
+  it("fills the other actions' defaults around a partial key binding override", async () => {
     await saveSettings({
-      quickSettings: {
-        actionKeyBindings: {
-          togglePlayPause: {
-            keys: [" "],
-          },
-        },
-      },
+      quickSettings: { actionKeyBindings: { togglePlayPause: { keys: [" "] } } },
     });
 
     const settings = await getSettings();
@@ -154,19 +323,11 @@ describe("settings storage", () => {
 
   it("preserves existing custom action key bindings when saving a partial binding update", async () => {
     await saveSettings({
-      quickSettings: {
-        actionKeyBindings: {
-          togglePlayPause: { keys: [" "] },
-        },
-      },
+      quickSettings: { actionKeyBindings: { togglePlayPause: { keys: [" "] } } },
     });
 
     await saveSettings({
-      quickSettings: {
-        actionKeyBindings: {
-          toggleMute: { keys: ["u"] },
-        },
-      },
+      quickSettings: { actionKeyBindings: { toggleMute: { keys: ["u"] } } },
     });
 
     const settings = await getSettings();
@@ -175,18 +336,94 @@ describe("settings storage", () => {
   });
 
   it("does not give a newly added default key to an action when the user already bound it", async () => {
-    Object.assign(store, {
-      quickSettings: {
-        actionKeyBindings: {
-          restart: { keys: ["T"] },
-        },
-      },
-    });
+    // Only `restart` was ever changed, so every other action, including one added in a later
+    // release, has no stored key and starts from its default.
+    Object.assign(store, { "keys.restart": ["T"] });
 
     const settings = await getSettings();
     expect(settings.quickSettings.actionKeyBindings.restart.keys).toEqual(["T"]);
     expect(settings.quickSettings.actionKeyBindings.toggleTheater.keys).toEqual([]);
     expect(settings.quickSettings.actionKeyBindings.togglePip.keys).toEqual(["i"]);
+  });
+
+  it("stores the site rules as one normalized array, and removes it when there are none", async () => {
+    const policy = { pattern: "vimeo.com", policy: "disabled", embedsPolicy: "inherit" } as const;
+    await saveSettings({
+      siteSettings: { sitePolicies: [policy, { ...policy, pattern: "not a site" }] },
+    });
+
+    expect(store.sitePolicies).toEqual([policy]);
+
+    await saveSettings({ siteSettings: { sitePolicies: [] } });
+
+    expect(store).toEqual({ schemaVersion: 1 });
+  });
+
+  describe("diffSettings", () => {
+    it("returns nothing when the settings are the same", () => {
+      expect(diffSettings(DEFAULT_SETTINGS, structuredClone(DEFAULT_SETTINGS))).toBeUndefined();
+    });
+
+    it("names only what changed", () => {
+      const next = structuredClone(DEFAULT_SETTINGS);
+      next.quickSettings.hotkeysEnabled = false;
+      next.quickSettings.actionKeyBindings.toggleMute.keys = ["u"];
+      next.advancedSettings.volumeStep = 0.1;
+      next.siteSettings.sitePolicies = [
+        { pattern: "vimeo.com", policy: "disabled", embedsPolicy: "inherit" },
+      ];
+
+      expect(diffSettings(DEFAULT_SETTINGS, next)).toEqual({
+        quickSettings: {
+          hotkeysEnabled: false,
+          actionKeyBindings: { toggleMute: { keys: ["u"] } },
+        },
+        advancedSettings: { volumeStep: 0.1 },
+        siteSettings: {
+          sitePolicies: [{ pattern: "vimeo.com", policy: "disabled", embedsPolicy: "inherit" }],
+        },
+      });
+    });
+  });
+
+  it("stays inside the storage.sync limits with every setting customized", async () => {
+    const longKeys = ["ArrowRight", "ArrowLeft", "PageDown", "PageUp", "Home", "End", "Escape"];
+    await saveSettings({
+      quickSettings: {
+        hotkeysEnabled: false,
+        actionKeyBindings: Object.fromEntries(
+          Object.keys(DEFAULT_QUICK_SETTINGS.actionKeyBindings).map((action) => [
+            action,
+            { keys: longKeys },
+          ]),
+        ),
+      },
+      advancedSettings: {
+        volumeStep: 0.01,
+        speedMin: 0.1,
+        speedMax: 8,
+        speedStep: 0.05,
+        seekStepSmall: 1,
+        seekStepMedium: 2,
+        seekStepLarge: 600,
+        useNumberKeysToJump: false,
+        sumQuickSkips: false,
+        showOverlays: false,
+        overlayPosition: "bottom-right",
+        skipOverlayPosition: "same as others",
+        overlayVisibleDuration: 1000,
+        overlayFadeDuration: 2000,
+        debugLogging: true,
+      },
+    });
+
+    // Chrome and Firefox: 8,192 bytes per item (key included), 512 items, about 100 KB in total.
+    const itemBytes = Object.entries(store).map(
+      ([key, value]) => new TextEncoder().encode(key + JSON.stringify(value)).length,
+    );
+    expect(itemBytes.length).toBeLessThan(100);
+    expect(Math.max(...itemBytes)).toBeLessThan(1024);
+    expect(itemBytes.reduce((sum, bytes) => sum + bytes, 0)).toBeLessThan(10 * 1024);
   });
 
   it("normalizes site policies entered by the user and drops invalid entries", async () => {

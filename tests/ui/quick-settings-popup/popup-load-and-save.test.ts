@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  emitStorageChange,
   findRowByLabel,
+  getSettingsMock,
   isDisplayed,
   loadQuickSettingsModule,
   resetQuickSettingsTestState,
@@ -25,13 +27,7 @@ function settingsWithPolicies(sitePolicies: SitePolicy[]): ExtensionSettings {
 }
 
 function expectSavedPolicies(sitePolicies: SitePolicy[]): void {
-  expect(saveSettingsMock).toHaveBeenLastCalledWith({
-    quickSettings: DEFAULT_SETTINGS.quickSettings,
-    advancedSettings: DEFAULT_SETTINGS.advancedSettings,
-    siteSettings: {
-      sitePolicies,
-    },
-  });
+  expect(saveSettingsMock).toHaveBeenLastCalledWith({ siteSettings: { sitePolicies } });
 }
 
 function checkbox(id: string): HTMLInputElement {
@@ -97,8 +93,8 @@ describe("quick settings popup: load and save", () => {
     await flush();
 
     expect(saveSettingsMock).toHaveBeenCalledOnce();
-    expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
-      quickSettings: expect.objectContaining({ hotkeysEnabled: false }),
+    expect(saveSettingsMock.mock.calls[0]?.[0]).toEqual({
+      quickSettings: { hotkeysEnabled: false },
     });
     expect(isDisplayed("key-bindings-section")).toBe(false);
 
@@ -106,8 +102,8 @@ describe("quick settings popup: load and save", () => {
     await flush();
 
     expect(saveSettingsMock).toHaveBeenCalledTimes(2);
-    expect(saveSettingsMock.mock.calls[1]?.[0]).toMatchObject({
-      quickSettings: expect.objectContaining({ hotkeysEnabled: true }),
+    expect(saveSettingsMock.mock.calls[1]?.[0]).toEqual({
+      quickSettings: { hotkeysEnabled: true },
     });
     expect(isDisplayed("key-bindings-section")).toBe(true);
     expect(text("announcements")).toBe("");
@@ -537,5 +533,23 @@ describe("quick settings popup: load and save", () => {
     expect(isDisplayed("disable-on-site-field")).toBe(false);
     expect(isDisplayed("site-section-field")).toBe(false);
     expect(isDisplayed("site-rule-row")).toBe(false);
+  });
+
+  it("shows a site rule saved elsewhere and sends only the next site change", async () => {
+    await loadQuickSettingsModule(DEFAULT_SETTINGS, "https://www.youtube.com/shorts/abc");
+    await flush();
+    expect(checkbox("disable-on-site").checked).toBe(false);
+
+    getSettingsMock.mockResolvedValue(settingsWithPolicies([DOMAIN_DISABLED]));
+    await emitStorageChange();
+
+    expect(checkbox("disable-on-site").checked).toBe(true);
+    expect(isDisplayed("key-bindings-section")).toBe(false);
+
+    setCheckbox("disable-on-site", false);
+    await flush();
+
+    expect(saveSettingsMock).toHaveBeenCalledOnce();
+    expect(saveSettingsMock).toHaveBeenLastCalledWith({ siteSettings: { sitePolicies: [] } });
   });
 });

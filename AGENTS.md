@@ -50,7 +50,7 @@ These aren't caught by tests unless marked. ARCHITECTURE.md#invariants explains 
 - Don't add generic button clicking for custom players. Only play buttons are clicked.
 - Shared content-script state goes in `src/content/state.ts`. State used by one module stays module-private. Plain module state, no classes.
 - Named exports only in `src/`. TypeScript strict mode.
-- Never write to `storage.sync` directly. Use `saveSettings` from `src/storage.ts`, which normalizes settings.
+- Never write to `storage.sync` directly. Use `saveSettings` from `src/storage.ts`, which takes a patch of only the settings that changed and maps it to sparse per-setting keys. A surface that keeps a settings snapshot sends `diffSettings(snapshot, next)`, never the whole object.
 - Safari is not a build target. Never add it to the default build, package, or CI path.
 - Don't commit `dist/`. Built manifests take `version` from `package.json`, so never set it in `manifest.template.json`.
 
@@ -68,7 +68,7 @@ These aren't caught by tests unless marked. ARCHITECTURE.md#invariants explains 
 
 ### Add a setting
 
-1. Add the default in `src/settings/defaults.json` and the type in `src/storage.ts`. Handle migration in `normalizeSettings` if the shape changes.
+1. Add the default in `src/settings/defaults.json` and the type in `src/storage.ts`. A new `advancedSettings` field is stored as `advanced.<name>` automatically; a setting in a new place needs a key in `readStoredSettings` and `flattenUpdate`. If the stored layout changes shape, bump `SETTINGS_SCHEMA_VERSION` and migrate.
 2. Add the control to the popup or the advanced page (`*.html`, `*.ts`; advanced form helpers are in `src/advanced-settings.ts`).
 3. Read it from `state.settings` in the content script or from the settings passed to `src/overlay.ts`.
 4. Add tests in `tests/unit/storage/` and `tests/ui/<surface>/`.

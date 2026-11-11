@@ -20,7 +20,6 @@ beforeEach(() => {
 describe("quick settings popup: status, reset, and error handling", () => {
   it("resets only quick settings to defaults", async () => {
     const settings = structuredClone(DEFAULT_SETTINGS);
-    settings.quickSettings.hotkeysEnabled = false;
     settings.advancedSettings.volumeStep = 0.2;
     settings.quickSettings.actionKeyBindings.togglePlayPause.keys = ["x"];
 
@@ -36,11 +35,9 @@ describe("quick settings popup: status, reset, and error handling", () => {
 
     expect(getConfirmDialog()).toBeNull();
     expect(saveSettingsMock).toHaveBeenCalledOnce();
-    expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
-      quickSettings: DEFAULT_SETTINGS.quickSettings,
-      advancedSettings: {
-        volumeStep: 0.2,
-      },
+    // Only the binding that differed from the default is sent, and nothing outside this popup.
+    expect(saveSettingsMock.mock.calls[0]?.[0]).toEqual({
+      quickSettings: { actionKeyBindings: { togglePlayPause: { keys: ["k"] } } },
     });
     expect((document.getElementById("disable-everywhere") as HTMLInputElement).checked).toBe(false);
     expect(document.getElementById("key-bindings-section")?.style.display).not.toBe("none");
