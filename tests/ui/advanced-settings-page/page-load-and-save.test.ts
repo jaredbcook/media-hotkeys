@@ -273,7 +273,6 @@ describe("advanced settings page: load and save", () => {
           { pattern: "vimeo.com", policy: "enabled", embedsPolicy: "ignore" },
           { pattern: "youtube.com/shorts", policy: "disabled", embedsPolicy: "inherit" },
         ],
-        disabledUrlPatterns: ["youtube.com/shorts"],
       },
     });
     expect(youtubePattern!.value).toBe("youtube.com/shorts");
@@ -284,7 +283,6 @@ describe("advanced settings page: load and save", () => {
     settings.siteSettings.sitePolicies = [
       { pattern: "youtube.com", policy: "disabled", embedsPolicy: "inherit" },
     ];
-    settings.siteSettings.disabledUrlPatterns = ["youtube.com"];
     await loadAdvancedSettingsModule(settings);
 
     const mode = document.querySelector<HTMLSelectElement>(".site-policy-mode");
@@ -300,7 +298,6 @@ describe("advanced settings page: load and save", () => {
     expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
       siteSettings: {
         sitePolicies: [{ pattern: "youtube.com", policy: "enabled", embedsPolicy: "inherit" }],
-        disabledUrlPatterns: [],
       },
     });
 
@@ -312,7 +309,6 @@ describe("advanced settings page: load and save", () => {
     expect(saveSettingsMock.mock.calls[1]?.[0]).toMatchObject({
       siteSettings: {
         sitePolicies: [{ pattern: "youtube.com", policy: "enabled", embedsPolicy: "ignore" }],
-        disabledUrlPatterns: [],
       },
     });
   });
@@ -335,7 +331,6 @@ describe("advanced settings page: load and save", () => {
     expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
       siteSettings: {
         sitePolicies: [{ pattern: "youtube.com", policy: "disabled", embedsPolicy: "inherit" }],
-        disabledUrlPatterns: ["youtube.com"],
       },
     });
   });
@@ -427,7 +422,6 @@ describe("advanced settings page: load and save", () => {
     settings.siteSettings.sitePolicies = [
       { pattern: "youtube.com", policy: "disabled", embedsPolicy: "inherit" },
     ];
-    settings.siteSettings.disabledUrlPatterns = ["youtube.com"];
     await loadAdvancedSettingsModule(
       settings,
       "?highlightDisabledSiteUrl=https%3A%2F%2Fwww.youtube.com%2Fshorts%2Fabc",

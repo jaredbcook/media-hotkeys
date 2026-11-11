@@ -94,7 +94,6 @@ describe("keyboard shortcut routing", () => {
     settings.siteSettings.sitePolicies = [
       { pattern: "localhost/shorts", policy: "disabled", embedsPolicy: "inherit" },
     ];
-    settings.siteSettings.disabledUrlPatterns = ["localhost/shorts"];
     setSettingsForTests(settings);
     const event = new KeyboardEvent("keydown", {
       key: "k",
@@ -119,7 +118,6 @@ describe("keyboard shortcut routing", () => {
     settings.siteSettings.sitePolicies = [
       { pattern: "localhost/shorts", policy: "disabled", embedsPolicy: "inherit" },
     ];
-    settings.siteSettings.disabledUrlPatterns = ["localhost/shorts"];
     setSettingsForTests(settings);
 
     await dispatchMappedKey("k");
@@ -155,7 +153,6 @@ describe("keyboard shortcut routing", () => {
       { pattern: "localhost", policy: "disabled", embedsPolicy: "inherit" },
       { pattern: "localhost/shorts", policy: "enabled", embedsPolicy: "inherit" },
     ];
-    settings.siteSettings.disabledUrlPatterns = ["localhost"];
     setSettingsForTests(settings);
 
     await dispatchMappedKey("k");
