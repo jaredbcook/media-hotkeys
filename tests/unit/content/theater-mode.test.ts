@@ -84,6 +84,36 @@ describe("theater mode", () => {
     expect(video.controls).toBe(false);
   });
 
+  it("puts its styles on the root element in a document without a head", () => {
+    const video = makeVideo();
+    document.querySelectorAll("style[data-media-hotkeys-theater-style]").forEach((style) => {
+      style.remove();
+    });
+    const head = document.head;
+    head.remove();
+
+    try {
+      expect(document.head).toBeNull();
+      expect(() => handleAction("toggleTheater", video)).not.toThrow();
+      expect(getTheaterMedia()).toBe(video);
+      const styles = document.documentElement.querySelectorAll(
+        "style[data-media-hotkeys-theater-style]",
+      );
+      expect(styles).toHaveLength(1);
+      expect(styles[0]?.parentElement).toBe(document.documentElement);
+      expect(styles[0]?.namespaceURI).toBe("http://www.w3.org/1999/xhtml");
+
+      // A second promotion reuses the style instead of adding another.
+      exitTheater();
+      handleAction("toggleTheater", video);
+      expect(
+        document.documentElement.querySelectorAll("style[data-media-hotkeys-theater-style]"),
+      ).toHaveLength(1);
+    } finally {
+      document.documentElement.prepend(head);
+    }
+  });
+
   it("restores the page scroll position on exit", () => {
     const video = makeVideo();
     Object.defineProperty(window, "scrollY", { configurable: true, value: 640 });
