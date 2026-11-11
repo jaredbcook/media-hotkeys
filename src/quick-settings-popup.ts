@@ -7,15 +7,17 @@ import {
   type SitePolicy,
   DEFAULT_QUICK_SETTINGS,
   findMatchingSitePolicy,
-  getDisabledSitePrefillForUrl,
-  getSitePolicySectionPatternForUrl,
   getSettings,
   hasReservedModifier,
   normalizeHotkeyKey,
-  normalizeSitePolicies,
   saveSettings,
   settingsEqual,
 } from "./storage.js";
+import {
+  getDisabledSitePrefillForUrl,
+  getSitePolicySectionPatternForUrl,
+  normalizeSitePolicies,
+} from "./site-patterns.js";
 import { showStatusToast, type StatusToastTone } from "./status-toast.js";
 
 const ACTION_LABELS: Record<ConfigurableMediaAction, string> = {
