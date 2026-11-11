@@ -10,6 +10,7 @@ import {
   saveSettingsMock,
   setCheckbox,
 } from "./helpers.js";
+import { UNUSABLE_HOTKEYS } from "../../../src/storage.js";
 
 beforeEach(() => {
   resetQuickSettingsTestState();
@@ -125,6 +126,21 @@ describe("quick settings popup: key binding editing", () => {
     await flushDomWork();
 
     expect(getChipKeys("Mute/Unmute")).toContain("z");
+  });
+
+  it.each(UNUSABLE_HOTKEYS)("refuses %s, as settings loading drops it", async (key) => {
+    await loadQuickSettingsModule();
+
+    const addButton = startCapture("Mute/Unmute");
+    pressKey({ key });
+    await flushDomWork();
+
+    expect(getChipKeys("Mute/Unmute")).not.toContain(key);
+    expect(saveSettingsMock).not.toHaveBeenCalled();
+    expect(document.getElementById("announcements")?.textContent).toContain(
+      "Press another key, or Escape to cancel.",
+    );
+    expect(addButton.classList.contains("listening")).toBe(true);
   });
 
   it("refuses a key pressed while an input method is composing", async () => {
