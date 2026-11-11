@@ -48,6 +48,7 @@ vi.mock("../../../src/overlay.js", () => ({
 }));
 
 import { setSettingsForTests } from "../../../src/content.js";
+import { resetMediaPresenceForTests } from "../../../src/content/media-presence.js";
 
 const DEFAULT_SETTINGS = defaults as ExtensionSettings;
 
@@ -203,6 +204,9 @@ export function resetContentTestState(): void {
   storageRemoveMock.mockReset();
   showActionOverlayMock.mockReset();
   setSettingsForTests(structuredClone(DEFAULT_SETTINGS));
+  // The last reported presence decides whether the next report is sent, so a
+  // test must not inherit the one its predecessor left.
+  resetMediaPresenceForTests();
 }
 
 export async function dispatchMappedKey(key: string, init?: KeyboardEventInit): Promise<void> {
