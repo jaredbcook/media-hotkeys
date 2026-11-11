@@ -1,6 +1,5 @@
 import {
   type AdvancedSettings,
-  type ConfigurableMediaAction,
   type MediaAction,
   resolveActionOverlaySettings,
 } from "../storage.js";
@@ -80,10 +79,6 @@ function roundPlaybackRate(playbackRate: number): number {
 
 export function isGlobalAction(action: MediaAction): action is "toggleOverlays" {
   return action === "toggleOverlays";
-}
-
-function isConfigurableMediaAction(action: MediaAction): action is ConfigurableMediaAction {
-  return action in state.settings.quickSettings.actionKeyBindings;
 }
 
 function getSeekOverlayDisplay(
@@ -342,10 +337,7 @@ export function handleAction(
     }
   }
 
-  const actionConfig = isConfigurableMediaAction(action)
-    ? state.settings.quickSettings.actionKeyBindings[action]
-    : { keys: [] };
-  const overlaySettings = resolveActionOverlaySettings(action, actionConfig, advancedSettings);
+  const overlaySettings = resolveActionOverlaySettings(action, advancedSettings);
   if (overlaySettings.overlayVisible) {
     showActionOverlay(
       action,
