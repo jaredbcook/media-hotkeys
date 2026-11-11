@@ -295,6 +295,48 @@ describe("settings storage", () => {
     expect(normalizeDisabledUrlPattern("not a site")).toBeNull();
   });
 
+  it("saves the host as typed, except for a leading www.", () => {
+    expect(normalizeDisabledUrlPattern("music.youtube.com")).toBe("music.youtube.com");
+    expect(normalizeDisabledUrlPattern("https://Music.YouTube.com/browse?x=1")).toBe(
+      "music.youtube.com/browse",
+    );
+    expect(normalizeDisabledUrlPattern("www.example.com")).toBe("example.com");
+    expect(normalizeDisabledUrlPattern("https://www.example.com/a/")).toBe("example.com/a");
+    expect(normalizeDisabledUrlPattern("m.youtube.com")).toBe("m.youtube.com");
+    expect(normalizeDisabledUrlPattern("www.docs.google.com")).toBe("docs.google.com");
+    expect(normalizeDisabledUrlPattern("www.www.example.com")).toBe("example.com");
+    expect(normalizeDisabledUrlPattern("www.localhost")).toBe("www.localhost");
+    expect(normalizeDisabledUrlPattern("a.b.c.bbc.co.uk")).toBe("a.b.c.bbc.co.uk");
+    expect(normalizeDisabledUrlPattern("example.com.")).toBe("example.com");
+    expect(normalizeDisabledUrlPattern("http://localhost:3000/video")).toBe("localhost/video");
+    expect(normalizeDisabledUrlPattern("http://192.168.1.10/")).toBe("192.168.1.10");
+  });
+
+  it("leaves a normalized rule unchanged when it is normalized again", () => {
+    for (const entry of [
+      "www.www.example.com/a",
+      "www.co.uk",
+      "m.youtube.com",
+      "http://localhost:3000/v",
+      "www.localhost",
+      "www.alice.github.io",
+    ]) {
+      const once = normalizeDisabledUrlPattern(entry);
+      expect(once, entry).not.toBeNull();
+      expect(normalizeDisabledUrlPattern(once!), entry).toBe(once);
+    }
+  });
+
+  it("refuses a bare public suffix or a single label but accepts a private suffix", () => {
+    expect(normalizeDisabledUrlPattern("com")).toBeNull();
+    expect(normalizeDisabledUrlPattern("co.uk")).toBeNull();
+    expect(normalizeDisabledUrlPattern("www.co.uk")).toBe("www.co.uk");
+    expect(normalizeDisabledUrlPattern("intranet")).toBeNull();
+    expect(normalizeDisabledUrlPattern("github.io")).toBe("github.io");
+    expect(normalizeDisabledUrlPattern("https://pages.dev/")).toBe("pages.dev");
+    expect(normalizeDisabledUrlPattern("www.github.io")).toBe("github.io");
+  });
+
   it("finds a matching site policy and prefill domain for a URL", () => {
     expect(
       findMatchingSitePolicy("https://www.youtube.com/shorts/abc", {
@@ -304,6 +346,17 @@ describe("settings storage", () => {
       })?.pattern,
     ).toBe("youtube.com/shorts");
     expect(getDisabledSitePrefillForUrl("https://www.youtube.com/shorts/abc")).toBe("youtube.com");
+    expect(getDisabledSitePrefillForUrl("https://music.youtube.com/watch?v=1")).toBe(
+      "music.youtube.com",
+    );
+    expect(getDisabledSitePrefillForUrl("https://www.alice.github.io/")).toBe("alice.github.io");
+    expect(getDisabledSitePrefillForUrl("http://localhost:3000/")).toBe("localhost");
+    expect(getSitePolicySectionPatternForUrl("https://music.youtube.com/browse/abc")).toBe(
+      "music.youtube.com/browse",
+    );
+    expect(getSitePolicySectionPatternForUrl("https://m.youtube.com/watch?v=1")).toBe(
+      "m.youtube.com",
+    );
     expect(getSitePolicySectionPatternForUrl("https://www.youtube.com/shorts/abc")).toBe(
       "youtube.com/shorts",
     );
@@ -322,7 +375,7 @@ describe("settings storage", () => {
       "alice.github.io/blog/post",
     );
     expect(normalizeDisabledUrlPattern("www.alice.github.io")).toBe("alice.github.io");
-    expect(normalizeDisabledUrlPattern("app.b.vercel.app")).toBe("b.vercel.app");
+    expect(normalizeDisabledUrlPattern("app.b.vercel.app")).toBe("app.b.vercel.app");
     expect(getDisabledSitePrefillForUrl("https://alice.github.io/blog/")).toBe("alice.github.io");
     expect(getSitePolicySectionPatternForUrl("https://alice.github.io/blog/post")).toBe(
       "alice.github.io/blog",
@@ -342,23 +395,23 @@ describe("settings storage", () => {
     expect(findMatchingSitePolicy("https://bob.github.io/", siteSettings)).toBeUndefined();
   });
 
-  it("drops rules for a whole shared hosting platform", async () => {
-    expect(normalizeDisabledUrlPattern("github.io")).toBeNull();
-    expect(normalizeDisabledUrlPattern("https://pages.dev/")).toBeNull();
-
+  it("accepts a rule for a whole shared hosting platform", async () => {
     await saveSettings({
       siteSettings: {
         sitePolicies: normalizeSitePolicies([
           { pattern: "github.io", policy: "disabled", embedsPolicy: "inherit" },
-          { pattern: "alice.github.io", policy: "disabled", embedsPolicy: "inherit" },
+          { pattern: "alice.github.io", policy: "enabled", embedsPolicy: "inherit" },
         ]),
       },
     });
 
-    const settings = await getSettings();
-    expect(settings.siteSettings.sitePolicies).toEqual([
-      { pattern: "alice.github.io", policy: "disabled", embedsPolicy: "inherit" },
+    const { siteSettings } = await getSettings();
+    expect(siteSettings.sitePolicies).toEqual([
+      { pattern: "alice.github.io", policy: "enabled", embedsPolicy: "inherit" },
+      { pattern: "github.io", policy: "disabled", embedsPolicy: "inherit" },
     ]);
+    expect(isUrlDisabledBySiteSettings("https://bob.github.io/", siteSettings)).toBe(true);
+    expect(isUrlDisabledBySiteSettings("https://alice.github.io/", siteSettings)).toBe(false);
   });
 
   it("deduplicates site policies by topmost rule", () => {
@@ -380,7 +433,7 @@ describe("settings storage", () => {
       findMatchingSitePolicy(url, { sitePolicies: patterns.map((pattern) => rule(pattern)) })
         ?.pattern;
 
-    it("matches the registrable domain and every subdomain under it", () => {
+    it("matches the saved host and every subdomain under it", () => {
       expect(match("https://youtube.com/", "youtube.com")).toBe("youtube.com");
       expect(match("https://www.youtube.com/watch?v=1", "youtube.com")).toBe("youtube.com");
       expect(match("https://m.www.YouTube.com./", "youtube.com")).toBe("youtube.com");
@@ -394,6 +447,20 @@ describe("settings storage", () => {
       expect(match("https://itv.co.uk/", "bbc.co.uk")).toBeUndefined();
     });
 
+    it("lets a rule for one subdomain leave the rest of the site alone", () => {
+      expect(match("https://music.youtube.com/", "music.youtube.com")).toBe("music.youtube.com");
+      expect(match("https://www.music.youtube.com/", "music.youtube.com")).toBe(
+        "music.youtube.com",
+      );
+      expect(match("https://youtube.com/", "music.youtube.com")).toBeUndefined();
+      expect(match("https://www.youtube.com/", "music.youtube.com")).toBeUndefined();
+      expect(match("https://m.youtube.com/", "music.youtube.com")).toBeUndefined();
+      expect(match("https://notmusic.youtube.com/", "music.youtube.com")).toBeUndefined();
+      expect(match("https://badmusic.youtube.com.evil.example/", "music.youtube.com")).toBe(
+        undefined,
+      );
+    });
+
     it("keeps shared hosting tenants apart", () => {
       expect(match("https://www.alice.github.io/", "alice.github.io")).toBe("alice.github.io");
       expect(match("https://bob.github.io/", "alice.github.io")).toBeUndefined();
@@ -401,13 +468,42 @@ describe("settings storage", () => {
     });
 
     it("matches localhost and IP addresses exactly", () => {
+      expect(match("http://www.localhost/", "www.localhost")).toBe("www.localhost");
+      expect(match("http://www.localhost/", "localhost")).toBeUndefined();
       expect(match("http://localhost:3000/video", "localhost")).toBe("localhost");
       expect(match("http://dev.localhost/", "localhost")).toBeUndefined();
       expect(match("http://192.168.1.10/", "192.168.1.10")).toBe("192.168.1.10");
       expect(match("http://192.168.1.10/", "168.1.10")).toBeUndefined();
     });
 
-    it("prefers the longer domain when saved domains nest across a public suffix", () => {
+    it("prefers the more specific host when saved hosts nest", () => {
+      expect(match("https://music.youtube.com/", "youtube.com", "music.youtube.com")).toBe(
+        "music.youtube.com",
+      );
+      expect(match("https://a.music.youtube.com/", "youtube.com", "music.youtube.com")).toBe(
+        "music.youtube.com",
+      );
+      expect(match("https://www.youtube.com/", "youtube.com", "music.youtube.com")).toBe(
+        "youtube.com",
+      );
+      expect(match("https://music.youtube.com/", "music.youtube.com", "youtube.com")).toBe(
+        "music.youtube.com",
+      );
+      // The host decides before the path does.
+      expect(
+        match("https://music.youtube.com/shorts/1", "youtube.com/shorts", "music.youtube.com"),
+      ).toBe("music.youtube.com");
+      // At the same host, the longer path wins.
+      expect(
+        match(
+          "https://music.youtube.com/shorts/1",
+          "music.youtube.com",
+          "music.youtube.com/shorts",
+        ),
+      ).toBe("music.youtube.com/shorts");
+    });
+
+    it("prefers the longer host when saved hosts nest across a public suffix", () => {
       expect(
         match("https://bucket.s3.amazonaws.com/video", "amazonaws.com", "bucket.s3.amazonaws.com"),
       ).toBe("bucket.s3.amazonaws.com");

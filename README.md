@@ -48,7 +48,7 @@ Letter hotkeys follow the character a key types, so on Latin layouts such as AZE
 
 ## Settings
 
-Click the toolbar icon for **Quick Settings**: disable the extension on all pages, on the current domain, or on the page's first path segment such as `youtube.com/shorts` (which becomes an enable checkbox once the domain is disabled); the key bindings are hidden while a disable checkbox applies to the current page, unless the section is re-enabled, and rebind any action. When rebinding, keys that can't work as hotkeys are refused with a message and the popup keeps listening: combinations with Ctrl, Alt, or Meta, Tab and Enter (needed for keyboard navigation), lock keys, and accent or input-method keys that don't produce a character. **Advanced Settings** (the gear icon in Quick Settings, or the extension's Options page) holds everything else, plus the installed version and a link to report an issue:
+Click the toolbar icon for **Quick Settings**: disable the extension on all pages, on the current site (its host without a leading `www.`, such as `music.youtube.com`), or on the page's first path segment such as `music.youtube.com/browse` (which becomes an enable checkbox once the site is disabled); the key bindings are hidden while the current page is disabled, by a rule for the whole site or a checked section checkbox, unless the section is re-enabled, and rebind any action. When rebinding, keys that can't work as hotkeys are refused with a message and the popup keeps listening: combinations with Ctrl, Alt, or Meta, Tab and Enter (needed for keyboard navigation), lock keys, and accent or input-method keys that don't produce a character. **Advanced Settings** (the gear icon in Quick Settings, or the extension's Options page) holds everything else, plus the installed version and a link to report an issue:
 
 | Setting                          | Default        |
 | -------------------------------- | -------------- |
@@ -74,9 +74,9 @@ With **Sum skips** on, pressing skip repeatedly shows the running total (for exa
 
 Some sites, such as YouTube, have their own shortcuts. Add a site rule in Advanced Settings, or use the checkboxes in Quick Settings, to let the site's shortcuts win:
 
-- A rule is a domain (`youtube.com`) or a path (`youtube.com/shorts`), and it either **disables** or **enables** Media Hotkeys there.
-- A domain rule covers its subdomains, so `youtube.com` also covers `www.youtube.com` and `m.youtube.com`. On shared hosting such as GitHub Pages, Vercel, Netlify, or Cloudflare Pages, each site is its own domain: a rule for `alice.github.io` doesn't affect `bob.github.io`.
-- More specific rules win. For example, disable `youtube.com` but enable `youtube.com/shorts`.
+- A rule is a host (`youtube.com`, `music.youtube.com`) or a path (`youtube.com/shorts`), and it either **disables** or **enables** Media Hotkeys there. Advanced Settings saves the host as you type it, except that a leading `www.` is dropped (`www.youtube.com` is saved as `youtube.com`). Quick Settings uses the host of the current page the same way.
+- A host rule covers that host and its subdomains, so `youtube.com` also covers `www.youtube.com`, `m.youtube.com`, and `music.youtube.com`, while `music.youtube.com` covers only YouTube Music. It never covers a different name that merely ends the same way, such as `notyoutube.com`. On shared hosting such as GitHub Pages, a rule for `alice.github.io` doesn't affect `bob.github.io`, and a rule for `github.io` covers every site on it. A bare public suffix such as `com` or `co.uk` is refused.
+- More specific rules win: the longer host first, then the longer path. For example, disable `youtube.com` but enable `music.youtube.com` or `youtube.com/shorts`. Rules saved for a wider host keep working, and Quick Settings names the rule when a wider or deeper one decides the page.
 - Rules match the address of the page in the tab, including after a single-page app such as YouTube navigates without reloading. Embedded players inherit a disabled page's rule unless that rule's embeds setting is **ignore**.
 
 ## Install from source

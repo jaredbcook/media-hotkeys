@@ -182,7 +182,7 @@ function mergeActionKeyBindings(
   return normalizedBindings;
 }
 
-/** localhost and IP addresses, which have no registrable domain and match only themselves. */
+/** localhost and IP addresses, which have no subdomains and match only themselves. */
 export function isLocalHostname(hostname: string): boolean {
   return (
     hostname === "localhost" || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname) || hostname.includes(":")
@@ -218,10 +218,11 @@ export function parseHttpUrl(value: string): URL | null {
   return ["http:", "https:"].includes(parsedUrl.protocol) ? parsedUrl : null;
 }
 
-// Saved patterns are already reduced to a registrable domain (or local host) plus an
-// optional path by `normalizeDisabledUrlPattern` in `src/site-patterns.ts`, which the
-// popup and options page run before saving. This module only checks their shape, so
-// the content script, which imports it, doesn't load the public suffix list.
+// Saved patterns are already a host (as typed, minus a leading `www.`) plus an optional
+// path, validated by `normalizeDisabledUrlPattern` in `src/site-patterns.ts`, which the
+// popup and options page run before saving. This module only checks their shape and
+// matches whole labels, so the content script, which imports it, doesn't load the
+// public suffix list.
 const SITE_PATTERN_DOMAIN = /^(?:[a-z0-9_-]+(?:\.[a-z0-9_-]+)*|\[[0-9a-f:.]+\])$/;
 
 function splitSitePattern(pattern: string): { domain: string; path: string } | null {
@@ -282,9 +283,9 @@ export function normalizeSitePoliciesWith(
   return normalizedPolicies.sort((left, right) => left.pattern.localeCompare(right.pattern));
 }
 
-// A saved domain is a registrable domain, so every host under it belongs to that
-// site: www.youtube.com matches youtube.com, and alice.github.io matches only
-// alice.github.io and its subdomains because github.io itself is never saved.
+// A saved domain matches the host that equals it and every host that ends with `.domain`
+// (whole labels only): youtube.com covers www.youtube.com and music.youtube.com, but
+// never notyoutube.com, and music.youtube.com leaves the rest of youtube.com alone.
 function hostnameMatchesSiteDomain(hostname: string, domain: string): boolean {
   if (hostname === domain) {
     return true;
@@ -329,9 +330,9 @@ export function findMatchingSitePolicy(
     },
   );
 
-  // The most specific rule wins: the longest domain, then the longest path. Two saved
-  // domains can only nest when a public suffix sits between them (amazonaws.com and
-  // bucket.s3.amazonaws.com), and the longer one is then the page's own site.
+  // The most specific rule wins: the longest domain, then the longest path. Saved domains
+  // nest whenever one is a suffix of another (youtube.com and music.youtube.com), and the
+  // longer one is then the page's own host.
   matches.sort(
     (left, right) =>
       right.domain.length - left.domain.length ||

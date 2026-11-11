@@ -369,13 +369,27 @@ function isSiteDisabledByCheckbox(patterns: SiteControlPatterns): boolean {
   return findSitePolicy(patterns.hostPattern)?.policy === "disabled";
 }
 
+/**
+ * Whether the site as a whole is disabled for this page: the winning rule among the host rules, which
+ * is the exact host's own rule or a wider one saved earlier (or typed in Advanced Settings).
+ */
+function isSiteDisabledForPage(patterns: SiteControlPatterns): boolean {
+  const hostRules = currentSettings.siteSettings.sitePolicies.filter(
+    (policy) => !policy.pattern.includes("/"),
+  );
+  return (
+    findMatchingSitePolicy(patterns.activeTabUrl, { sitePolicies: hostRules })?.policy ===
+    "disabled"
+  );
+}
+
 function hasSectionCheckbox(patterns: SiteControlPatterns): boolean {
   return patterns.sectionPattern !== patterns.hostPattern;
 }
 
-/** The section checkbox disables the section, or re-enables it once the whole domain is disabled. */
+/** The section checkbox disables the section, or re-enables it once the whole site is disabled. */
 function getSectionCheckboxPolicy(patterns: SiteControlPatterns): SitePolicy["policy"] {
-  return isSiteDisabledByCheckbox(patterns) ? "enabled" : "disabled";
+  return isSiteDisabledForPage(patterns) ? "enabled" : "disabled";
 }
 
 function isSectionCheckboxChecked(patterns: SiteControlPatterns): boolean {
@@ -386,7 +400,7 @@ function isSectionCheckboxChecked(patterns: SiteControlPatterns): boolean {
 }
 
 /**
- * The checkboxes show only the domain rule and the first-path-segment rule. When a different rule decides
+ * The checkboxes show only the host rule and the first-path-segment rule. When a different rule decides
  * the current page (for example a deeper path), say which one so the checkboxes don't mislead.
  */
 function getOtherMatchingPolicy(patterns: SiteControlPatterns): SitePolicy | undefined {
@@ -410,8 +424,9 @@ function getOtherMatchingPolicy(patterns: SiteControlPatterns): SitePolicy | und
 }
 
 /**
- * The key bindings are hidden whenever a "Disable on ..." checkbox is checked for this page, unless a
- * checked "Enable on <section>" override re-enables it.
+ * The key bindings are hidden whenever a host rule disables the site for this page (the "Disable on ..."
+ * checkbox, or a wider rule that status line names), unless a checked "Enable on <section>" override
+ * re-enables it.
  */
 function isDisabledByCheckbox(patterns: SiteControlPatterns | undefined): boolean {
   if (!currentSettings.quickSettings.hotkeysEnabled) {
@@ -422,8 +437,8 @@ function isDisabledByCheckbox(patterns: SiteControlPatterns | undefined): boolea
     return false;
   }
 
-  // The section checkbox is a Disable when the domain is enabled and an Enable (override) when not.
-  return isSiteDisabledByCheckbox(patterns) !== isSectionCheckboxChecked(patterns);
+  // The section checkbox is a Disable when the site is enabled and an Enable (override) when not.
+  return isSiteDisabledForPage(patterns) !== isSectionCheckboxChecked(patterns);
 }
 
 function renderSiteControls(): void {
