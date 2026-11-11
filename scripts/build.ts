@@ -61,9 +61,6 @@ async function buildBrowser(
       path.join(outDir, "advanced-settings-page.html"),
     ),
     cp(path.join(projectRoot, "src", "ui.css"), path.join(outDir, "ui.css")),
-    cp(path.join(projectRoot, "src", "settings"), path.join(outDir, "settings"), {
-      recursive: true,
-    }),
     copyIcons(outDir),
     writeManifest(browser, outDir, packageJson, manifestTemplate),
   ]);
@@ -107,12 +104,6 @@ export function createManifest({
   const manifest = structuredClone(manifestTemplate) as ManifestTemplate & { version: string };
 
   manifest.version = packageJson.version;
-  manifest.icons = {
-    16: "assets/icon16.png",
-    32: "assets/icon32.png",
-    48: "assets/icon48.png",
-    128: "assets/icon128.png",
-  };
 
   if (browser === "firefox") {
     manifest.browser_specific_settings = {

@@ -168,6 +168,7 @@ test("uses custom element host APIs for shadow-root media actions", async ({ pag
     const counts = {
       play: 0,
       pause: 0,
+      readPaused: 0,
       muted: 0,
       volume: 0,
       currentTime: 0,
@@ -181,6 +182,11 @@ test("uses custom element host APIs for shadow-root media actions", async ({ pag
     ).__customPlayerApiCounts = counts;
 
     class MediaHotkeysTestPlayer extends HTMLElement {
+      private hostPaused = true;
+      private hostMuted = false;
+      private hostVolume = 0.5;
+      private hostPlaybackRate = 1;
+
       connectedCallback(): void {
         if (this.shadowRoot) {
           return;
@@ -208,29 +214,38 @@ test("uses custom element host APIs for shadow-root media actions", async ({ pag
 
       play(): Promise<void> {
         counts.play += 1;
+        this.hostPaused = false;
         return this.media.play();
       }
 
       pause(): void {
         counts.pause += 1;
+        this.hostPaused = true;
         this.media.pause();
       }
 
+      get paused(): boolean {
+        counts.readPaused += 1;
+        return this.hostPaused;
+      }
+
       get muted(): boolean {
-        return this.media.muted;
+        return this.hostMuted;
       }
 
       set muted(value: boolean) {
         counts.muted += 1;
+        this.hostMuted = value;
         this.media.muted = value;
       }
 
       get volume(): number {
-        return this.media.volume;
+        return this.hostVolume;
       }
 
       set volume(value: number) {
         counts.volume += 1;
+        this.hostVolume = value;
         this.media.volume = value;
       }
 
@@ -248,11 +263,12 @@ test("uses custom element host APIs for shadow-root media actions", async ({ pag
       }
 
       get playbackRate(): number {
-        return this.media.playbackRate;
+        return this.hostPlaybackRate;
       }
 
       set playbackRate(value: number) {
         counts.playbackRate += 1;
+        this.hostPlaybackRate = value;
         this.media.playbackRate = value;
       }
 
@@ -297,12 +313,21 @@ test("uses custom element host APIs for shadow-root media actions", async ({ pag
       ),
     )
     .toBe(1);
+  await expect(page.locator("#media-hotkeys-overlay svg path")).toHaveAttribute(
+    "d",
+    expect.stringContaining("M320-273v-414"),
+  );
 
   await page.keyboard.press("k");
   await waitForMediaState(page, "custom-api-media", (state) => state.paused);
+  await expect(page.locator("#media-hotkeys-overlay svg path")).toHaveAttribute(
+    "d",
+    expect.stringContaining("M640-200q-33 0"),
+  );
 
   await page.keyboard.press("m");
   await waitForMediaState(page, "custom-api-media", (state) => state.muted);
+  await expect(page.locator("#media-hotkeys-overlay")).toHaveText("0%");
 
   await page.keyboard.press("ArrowUp");
   await waitForMediaState(
@@ -310,6 +335,7 @@ test("uses custom element host APIs for shadow-root media actions", async ({ pag
     "custom-api-media",
     (state) => !state.muted && Math.abs(state.volume - 0.05) < 0.0001,
   );
+  await expect(page.locator("#media-hotkeys-overlay")).toHaveText("5%");
 
   await markPlaying(page, "custom-api-media");
   await waitForMediaState(page, "custom-api-media", (state) => !state.paused);
@@ -327,6 +353,7 @@ test("uses custom element host APIs for shadow-root media actions", async ({ pag
     "custom-api-media",
     (state) => Math.abs(state.playbackRate - 1.25) < 0.0001,
   );
+  await expect(page.locator("#media-hotkeys-overlay")).toHaveText("1.25x");
 
   await expect
     .poll(() =>
@@ -345,6 +372,18 @@ test("uses custom element host APIs for shadow-root media actions", async ({ pag
       currentTime: 1,
       playbackRate: 1,
     });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as typeof window & {
+              __customPlayerApiCounts?: { readPaused: number };
+            }
+          ).__customPlayerApiCounts?.readPaused ?? 0,
+      ),
+    )
+    .toBeGreaterThanOrEqual(2);
 });
 
 test("uses a custom element host fullscreen API for shadow-root video", async ({ page }) => {

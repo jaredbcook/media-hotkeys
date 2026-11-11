@@ -3,6 +3,7 @@ import { debugLog } from "./dom-utils.js";
 type PlayerBridgeCommandName =
   | "play"
   | "pause"
+  | "readPaused"
   | "setMuted"
   | "readMuted"
   | "setVolume"
@@ -270,6 +271,10 @@ export function pauseMedia(media: HTMLMediaElement): void {
   }
 
   media.pause();
+}
+
+export function readPlayerPaused(media: HTMLMediaElement): boolean {
+  return readCustomPlayerBoolean(media, "paused", "readPaused") ?? media.paused;
 }
 
 export function getEffectiveVolume(media: HTMLMediaElement): number {

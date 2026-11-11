@@ -4,6 +4,7 @@
 type PlayerBridgeCommandName =
   | "play"
   | "pause"
+  | "readPaused"
   | "setMuted"
   | "readMuted"
   | "setVolume"
@@ -92,6 +93,9 @@ function handleBridgeCommand(
 
       case "pause":
         return { id: command.id, handled: callMethod(host, "pause") };
+
+      case "readPaused":
+        return { ...readBooleanProperty(host, "paused"), id: command.id };
 
       case "setMuted":
         return {

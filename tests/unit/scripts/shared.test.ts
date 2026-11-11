@@ -72,6 +72,7 @@ describe("browser manifests", () => {
     manifest_version: 3,
     name: "Media Hotkeys",
     description: "test",
+    icons: { 16: "assets/icon16.png", 128: "assets/icon128.png" },
   };
   const packageJson = { name: "media-hotkeys", version: "1.2.3" };
 
@@ -79,6 +80,7 @@ describe("browser manifests", () => {
     const manifest = createManifest({ browser: "firefox", packageJson, manifestTemplate });
 
     expect(manifest.version).toBe("1.2.3");
+    expect(manifest.icons).toEqual(manifestTemplate.icons);
     expect(manifest.browser_specific_settings?.gecko).toMatchObject({
       strict_min_version: "128.0",
       data_collection_permissions: { required: ["none"] },
@@ -88,6 +90,7 @@ describe("browser manifests", () => {
   it("leaves Gecko settings out of Chromium manifests", () => {
     const manifest = createManifest({ browser: "chrome", packageJson, manifestTemplate });
 
+    expect(manifest.icons).toEqual(manifestTemplate.icons);
     expect(manifest.browser_specific_settings).toBeUndefined();
   });
 });
