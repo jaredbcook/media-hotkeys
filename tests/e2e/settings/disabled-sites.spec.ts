@@ -151,41 +151,61 @@ test("an embed added after the page loaded inherits a disabled site rule", async
   expect((await readFrameMediaState(frame!, "frame-video")).paused).toBe(true);
 });
 
-test("a domain rule covers its subdomains but not other sites on a shared host", async ({
-  page,
-  server,
-}) => {
-  const extensionId = await getExtensionId(page);
-  await page.goto(`chrome-extension://${extensionId}/advanced-settings-page.html`);
-  const entries = [
-    ["https://video.example.co.uk/watch", "example.co.uk/watch"],
-    ["https://www.alice.github.io/", "alice.github.io"],
-  ];
-  for (const [entry, savedPattern] of entries) {
-    await page.locator("#add-site-policy").click();
-    const patternInput = page.locator(".site-policy-pattern").last();
-    await patternInput.fill(entry);
-    // Saving rewrites the entry as the saved rule.
-    await expect(patternInput).toHaveValue(savedPattern);
-  }
-  await page.reload();
+async function addSitePolicy(
+  page: Page,
+  entry: string,
+  savedPattern: string,
+  mode: "disabled" | "enabled" = "disabled",
+): Promise<void> {
+  // A click before the options page has attached its listeners adds nothing, so click again.
+  const rows = page.locator(".site-policy-row");
+  const rowCount = await rows.count();
+  await expect(async () => {
+    if ((await rows.count()) === rowCount) {
+      await page.locator("#add-site-policy").click();
+    }
+    await expect(rows).toHaveCount(rowCount + 1, { timeout: 1000 });
+  }).toPass();
+  const row = rows.last();
+  await row.locator(".site-policy-mode").selectOption(mode);
+  const patternInput = row.locator(".site-policy-pattern");
+  await patternInput.fill(entry);
+  // Saving rewrites the entry as the saved rule.
+  await expect(patternInput).toHaveValue(savedPattern);
+}
+
+/** Rules autosave after a pause, and an entry already in its saved form shows no sign of it. */
+async function waitForSavedPolicies(page: Page, patterns: string[]): Promise<void> {
   await expect
     .poll(() =>
-      page
-        .locator(".site-policy-pattern")
-        .evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).value)),
+      page.evaluate(async () => {
+        const extensionApi = (
+          globalThis as unknown as {
+            chrome: {
+              storage: {
+                sync: {
+                  get(
+                    keys: null,
+                  ): Promise<{ siteSettings?: { sitePolicies?: { pattern: string }[] } }>;
+                };
+              };
+            };
+          }
+        ).chrome;
+        const stored = await extensionApi.storage.sync.get(null);
+        return (stored.siteSettings?.sitePolicies ?? []).map((policy) => policy.pattern);
+      }),
     )
-    .toEqual(["alice.github.io", "example.co.uk/watch"]);
+    .toEqual(patterns);
+}
 
-  const port = new URL(server.url).port;
-  const cases = [
-    { url: `http://www.example.co.uk:${port}/watch`, disabled: true },
-    { url: `http://example.co.uk:${port}/shorts`, disabled: false },
-    { url: `http://alice.github.io:${port}/`, disabled: true },
-    { url: `http://www.alice.github.io:${port}/`, disabled: true },
-    { url: `http://bob.github.io:${port}/`, disabled: false },
-  ];
-  for (const [index, { url, disabled }] of cases.entries()) {
+async function expectKeyHandling(
+  page: Page,
+  port: string,
+  cases: { host: string; path?: string; disabled: boolean }[],
+): Promise<void> {
+  for (const [index, { host, path = "/", disabled }] of cases.entries()) {
+    const url = `http://${host}:${port}${path}`;
     const mediaId = `media-${index}`;
     await page.goto(url);
     await addNativeKeyCounter(page);
@@ -201,4 +221,55 @@ test("a domain rule covers its subdomains but not other sites on a shared host",
       expect(await readNativeKeyCount(page), url).toBe(0);
     }
   }
+}
+
+test("a host rule covers its subdomains but not other sites on a shared host", async ({
+  page,
+  server,
+}) => {
+  const extensionId = await getExtensionId(page);
+  await page.goto(`chrome-extension://${extensionId}/advanced-settings-page.html`);
+  await addSitePolicy(page, "https://www.video.example.co.uk/watch", "video.example.co.uk/watch");
+  await addSitePolicy(page, "www.alice.github.io", "alice.github.io");
+  await page.reload();
+  await expect
+    .poll(() =>
+      page
+        .locator(".site-policy-pattern")
+        .evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).value)),
+    )
+    .toEqual(["alice.github.io", "video.example.co.uk/watch"]);
+
+  await expectKeyHandling(page, new URL(server.url).port, [
+    { host: "video.example.co.uk", path: "/watch", disabled: true },
+    { host: "www.video.example.co.uk", path: "/watch", disabled: true },
+    { host: "a.video.example.co.uk", path: "/watch", disabled: true },
+    { host: "video.example.co.uk", path: "/shorts", disabled: false },
+    { host: "example.co.uk", path: "/watch", disabled: false },
+    { host: "other.example.co.uk", path: "/watch", disabled: false },
+    { host: "alice.github.io", disabled: true },
+    { host: "www.alice.github.io", disabled: true },
+    { host: "bob.github.io", disabled: false },
+  ]);
+});
+
+test("the more specific host wins over a domain rule, and a bare private suffix covers its sites", async ({
+  page,
+  server,
+}) => {
+  const extensionId = await getExtensionId(page);
+  await page.goto(`chrome-extension://${extensionId}/advanced-settings-page.html`);
+  await addSitePolicy(page, "www.example.co.uk", "example.co.uk");
+  await addSitePolicy(page, "video.example.co.uk", "video.example.co.uk", "enabled");
+  await addSitePolicy(page, "github.io", "github.io");
+  await waitForSavedPolicies(page, ["example.co.uk", "github.io", "video.example.co.uk"]);
+
+  await expectKeyHandling(page, new URL(server.url).port, [
+    { host: "example.co.uk", disabled: true },
+    { host: "other.example.co.uk", disabled: true },
+    { host: "video.example.co.uk", disabled: false },
+    { host: "a.video.example.co.uk", disabled: false },
+    { host: "alice.github.io", disabled: true },
+    { host: "bob.github.io", disabled: true },
+  ]);
 });

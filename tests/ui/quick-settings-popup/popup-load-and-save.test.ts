@@ -375,6 +375,160 @@ describe("quick settings popup: load and save", () => {
     });
   });
 
+  it("creates host rules from the current subdomain", async () => {
+    await loadQuickSettingsModule(DEFAULT_SETTINGS, "https://music.youtube.com/browse/abc");
+    await flush();
+
+    expect(text("disable-on-site-label")).toBe("Disable on music.youtube.com");
+    expect(text("site-section-label")).toBe("Disable on music.youtube.com/browse");
+
+    setCheckbox("disable-on-site", true);
+    await flush();
+
+    expectSavedPolicies([
+      { pattern: "music.youtube.com", policy: "disabled", embedsPolicy: "inherit" },
+    ]);
+    expect(checkbox("disable-on-site").checked).toBe(true);
+    expect(isDisplayed("site-rule-row")).toBe(false);
+    expect(text("site-section-label")).toBe("Enable on music.youtube.com/browse");
+
+    setCheckbox("site-section", true);
+    await flush();
+
+    expectSavedPolicies([
+      { pattern: "music.youtube.com", policy: "disabled", embedsPolicy: "inherit" },
+      { pattern: "music.youtube.com/browse", policy: "enabled", embedsPolicy: "inherit" },
+    ]);
+  });
+
+  it("drops only a leading www. from the current host", async () => {
+    await loadQuickSettingsModule(DEFAULT_SETTINGS, "https://www.docs.google.com/");
+    await flush();
+    expect(text("disable-on-site-label")).toBe("Disable on docs.google.com");
+
+    await loadQuickSettingsModule(DEFAULT_SETTINGS, "https://m.youtube.com/");
+    await flush();
+    expect(text("disable-on-site-label")).toBe("Disable on m.youtube.com");
+  });
+
+  it("keeps each site on a shared host separate", async () => {
+    await loadQuickSettingsModule(DEFAULT_SETTINGS, "https://alice.github.io/blog/post");
+    await flush();
+
+    expect(text("disable-on-site-label")).toBe("Disable on alice.github.io");
+    expect(text("site-section-label")).toBe("Disable on alice.github.io/blog");
+  });
+
+  it("names a wider rule that decides the page and routes Edit site rule to it", async () => {
+    await loadQuickSettingsModule(
+      settingsWithPolicies([DOMAIN_DISABLED]),
+      "https://music.youtube.com/browse",
+    );
+    await flush();
+
+    expect(text("disable-on-site-label")).toBe("Disable on music.youtube.com");
+    expect(checkbox("disable-on-site").checked).toBe(false);
+    expect(isDisplayed("site-rule-row")).toBe(true);
+    expect(text("site-control-status")).toBe("Disabled here by rule: youtube.com");
+
+    (document.getElementById("site-edit-rule-button") as HTMLButtonElement).click();
+    await flush();
+
+    expect(tabsCreateMock).toHaveBeenCalledWith({
+      url: "chrome-extension://test/advanced-settings-page.html?highlightDisabledSiteUrl=https%3A%2F%2Fmusic.youtube.com%2Fbrowse",
+    });
+  });
+
+  it("hides the key bindings and offers to enable the section when a wider rule disables the site", async () => {
+    await loadQuickSettingsModule(
+      settingsWithPolicies([DOMAIN_DISABLED]),
+      "https://music.youtube.com/browse/abc",
+    );
+    await flush();
+
+    expect(checkbox("disable-on-site").checked).toBe(false);
+    expect(isDisplayed("key-bindings-section")).toBe(false);
+    expect(text("site-section-label")).toBe("Enable on music.youtube.com/browse");
+    expect(checkbox("site-section").checked).toBe(false);
+    expect(text("site-control-status")).toBe("Disabled here by rule: youtube.com");
+
+    setCheckbox("site-section", true);
+    await flush();
+
+    expectSavedPolicies([
+      { pattern: "music.youtube.com/browse", policy: "enabled", embedsPolicy: "inherit" },
+      DOMAIN_DISABLED,
+    ]);
+    expect(isDisplayed("key-bindings-section")).toBe(true);
+    expect(isDisplayed("site-rule-row")).toBe(false);
+  });
+
+  it("shows the key bindings when a subdomain rule enables it inside a disabled domain", async () => {
+    await loadQuickSettingsModule(
+      settingsWithPolicies([
+        DOMAIN_DISABLED,
+        { pattern: "music.youtube.com", policy: "enabled", embedsPolicy: "inherit" },
+      ]),
+      "https://music.youtube.com/browse/abc",
+    );
+    await flush();
+
+    expect(isDisplayed("key-bindings-section")).toBe(true);
+    expect(text("site-section-label")).toBe("Disable on music.youtube.com/browse");
+  });
+
+  it("lets a subdomain rule disable a site that a wider rule enables", async () => {
+    await loadQuickSettingsModule(
+      settingsWithPolicies([
+        { pattern: "youtube.com", policy: "enabled", embedsPolicy: "inherit" },
+        { pattern: "music.youtube.com", policy: "disabled", embedsPolicy: "inherit" },
+        { pattern: "music.youtube.com/browse", policy: "enabled", embedsPolicy: "inherit" },
+      ]),
+      "https://music.youtube.com/browse/abc",
+    );
+    await flush();
+
+    expect(checkbox("disable-on-site").checked).toBe(true);
+    expect(text("site-section-label")).toBe("Enable on music.youtube.com/browse");
+    expect(checkbox("site-section").checked).toBe(true);
+    expect(isDisplayed("key-bindings-section")).toBe(true);
+    expect(isDisplayed("site-rule-row")).toBe(false);
+
+    setCheckbox("site-section", false);
+    await flush();
+
+    expect(isDisplayed("key-bindings-section")).toBe(false);
+  });
+
+  it("stops naming the wider rule once the subdomain has its own", async () => {
+    await loadQuickSettingsModule(
+      settingsWithPolicies([DOMAIN_DISABLED]),
+      "https://music.youtube.com/",
+    );
+    await flush();
+    expect(isDisplayed("site-rule-row")).toBe(true);
+
+    setCheckbox("disable-on-site", true);
+    await flush();
+
+    expect(checkbox("disable-on-site").checked).toBe(true);
+    expect(isDisplayed("site-rule-row")).toBe(false);
+  });
+
+  it("names an enabled subdomain rule that overrides a disabled domain", async () => {
+    await loadQuickSettingsModule(
+      settingsWithPolicies([
+        DOMAIN_DISABLED,
+        { pattern: "music.youtube.com", policy: "enabled", embedsPolicy: "inherit" },
+      ]),
+      "https://music.youtube.com/",
+    );
+    await flush();
+
+    expect(checkbox("disable-on-site").checked).toBe(false);
+    expect(text("site-control-status")).toBe("Enabled here by rule: music.youtube.com");
+  });
+
   it("shows only the global checkbox on browser internal pages", async () => {
     await loadQuickSettingsModule(DEFAULT_SETTINGS, "chrome://extensions");
     await flush();

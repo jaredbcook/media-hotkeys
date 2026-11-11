@@ -335,6 +335,53 @@ describe("advanced settings page: load and save", () => {
     });
   });
 
+  it.each([
+    ["music.youtube.com", "music.youtube.com"],
+    ["https://Music.YouTube.com/browse/", "music.youtube.com/browse"],
+    ["www.youtube.com", "youtube.com"],
+    ["m.youtube.com", "m.youtube.com"],
+    ["github.io", "github.io"],
+    ["alice.github.io/blog", "alice.github.io/blog"],
+  ])("saves the site policy %s as %s", async (typed, saved) => {
+    await loadAdvancedSettingsModule();
+    vi.useFakeTimers();
+
+    document
+      .getElementById("add-site-policy")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    const pattern = document.querySelector<HTMLInputElement>(".site-policy-pattern");
+    pattern!.value = typed;
+    pattern!.dispatchEvent(new Event("input", { bubbles: true }));
+
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(saveSettingsMock).toHaveBeenCalledOnce();
+    expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
+      siteSettings: {
+        sitePolicies: [{ pattern: saved, policy: "disabled", embedsPolicy: "inherit" }],
+      },
+    });
+    expect(pattern!.value).toBe(saved);
+    expect(pattern!.getAttribute("aria-invalid")).not.toBe("true");
+  });
+
+  it.each(["com", "co.uk", "intranet"])("does not save %s, which is not a site", async (typed) => {
+    await loadAdvancedSettingsModule();
+    vi.useFakeTimers();
+
+    document
+      .getElementById("add-site-policy")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    const pattern = document.querySelector<HTMLInputElement>(".site-policy-pattern");
+    pattern!.value = typed;
+    pattern!.dispatchEvent(new Event("input", { bubbles: true }));
+
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(saveSettingsMock).not.toHaveBeenCalled();
+    expect(pattern!.getAttribute("aria-invalid")).toBe("true");
+  });
+
   it("adds new site policy rows to the bottom of the list", async () => {
     const settings = structuredClone(DEFAULT_SETTINGS);
     settings.siteSettings.sitePolicies = [
