@@ -8,7 +8,7 @@ import {
 import { findMedia, isTargetableMediaElement } from "./media-discovery.js";
 import { getTargetMedia } from "./media-scoring.js";
 import { trackInteraction } from "./media-tracking.js";
-import { playMedia } from "./player-control.js";
+import { playMedia, readPlayerPaused } from "./player-control.js";
 
 type PlayControlKind = "labeled" | "classed" | "icon";
 
@@ -638,7 +638,7 @@ export async function activatePlayablePlaceholder(action: MediaAction): Promise<
   }
 
   const media = await waitForTargetMedia(PLACEHOLDER_ACTIVATION_MEDIA_WAIT_MS);
-  if (media?.paused) {
+  if (media && readPlayerPaused(media)) {
     trackInteraction(media, "placeholder:play");
     playMedia(media);
   }

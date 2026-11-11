@@ -230,6 +230,84 @@ test("controls media added dynamically after page load", async ({ page }) => {
   await waitForMediaState(page, "late-media", (state) => !state.paused);
 });
 
+test("targets a custom player whose host reports playing with sound over an idle native element", async ({
+  page,
+}) => {
+  // The native element is first in the document and, like the host's inner element,
+  // has no controls, so it wins any tie.
+  await createMedia(page, "idle-native", { muted: false });
+  await page.evaluate(() => {
+    const writes = { muted: [] as boolean[] };
+    (window as typeof window & { __hostWrites?: typeof writes }).__hostWrites = writes;
+
+    // The host answers from its own state and never touches the inner element,
+    // which stays paused and muted. These members are page-defined, so the
+    // content script can only read them through the player bridge.
+    class MediaHotkeysScoredPlayer extends HTMLElement {
+      private hostMuted = false;
+
+      connectedCallback(): void {
+        if (this.shadowRoot) {
+          return;
+        }
+
+        const media = document.createElement("audio");
+        media.id = "scored-media";
+        media.src = "/silence.wav";
+        media.preload = "auto";
+        media.muted = true;
+        this.attachShadow({ mode: "open" }).appendChild(media);
+      }
+
+      get paused(): boolean {
+        return false;
+      }
+
+      get volume(): number {
+        return 1;
+      }
+
+      get muted(): boolean {
+        return this.hostMuted;
+      }
+
+      set muted(value: boolean) {
+        writes.muted.push(value);
+        this.hostMuted = value;
+      }
+    }
+
+    customElements.define("media-hotkeys-scored-player", MediaHotkeysScoredPlayer);
+    document
+      .getElementById("app")
+      ?.appendChild(document.createElement("media-hotkeys-scored-player"));
+  });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            document
+              .querySelector("media-hotkeys-scored-player")
+              ?.shadowRoot?.getElementById("scored-media") as HTMLMediaElement | null
+          )?.readyState ?? 0,
+      ),
+    )
+    .toBeGreaterThan(0);
+
+  await page.keyboard.press("m");
+
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as typeof window & { __hostWrites?: { muted: boolean[] } }).__hostWrites?.muted,
+      ),
+    )
+    .toEqual([true]);
+  expect((await readMediaState(page, "idle-native")).muted).toBe(false);
+});
+
 test("targets the video whose custom player controls the user clicked", async ({ page }) => {
   await createMedia(page, "first", { volume: 0.5 }, "video");
   await createMedia(page, "second", { volume: 0.5 }, "video");

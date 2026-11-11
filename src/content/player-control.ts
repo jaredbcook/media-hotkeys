@@ -305,6 +305,24 @@ export function readPlayerPaused(media: HTMLMediaElement): boolean {
   return readCustomPlayerBoolean(media, "paused", "readPaused") ?? media.paused;
 }
 
+/**
+ * Whether the media is playing, as the player reports it. A custom-element
+ * host that reports `paused` decides on its own: its inner element may never
+ * load, or lag behind the host, so `ended` and `readyState` say nothing about
+ * it. Everything else is judged from the element: not paused or ended, and
+ * with at least metadata. Stalled playback (buffering) drops `readyState` to
+ * HAVE_CURRENT_DATA or HAVE_METADATA while the media is still logically
+ * playing, and users often press keys exactly then.
+ */
+export function readPlayerPlaying(media: HTMLMediaElement): boolean {
+  const hostPaused = readCustomPlayerBoolean(media, "paused", "readPaused");
+  if (hostPaused !== null) {
+    return !hostPaused;
+  }
+
+  return !media.paused && !media.ended && media.readyState >= 1;
+}
+
 export function getEffectiveVolume(media: HTMLMediaElement): number {
   return readPlayerMuted(media) ? 0 : readPlayerVolume(media);
 }
