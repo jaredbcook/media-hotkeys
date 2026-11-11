@@ -74,6 +74,7 @@ Labels and their meanings are defined in `scripts/sync-labels.ts`; `npm run labe
 
 - Use [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`, `ci:`, `build:`. Write the subject in the imperative, lower case, without a trailing period.
 - Keep each commit focused, and include its tests and doc updates in the same commit.
+- Don't add co-authorship, attribution, or authored-by lines (`Co-authored-by:` trailers, "Generated with …" footers, session links) to commits or pull request descriptions, whoever or whatever wrote the change. Changes are reviewed on their merits. The `commit-msg` hook runs `scripts/check-attribution.sh` locally, and CI runs it on every commit and the description of a pull request.
 - Don't commit `dist/`, `coverage/`, or test output.
 
 ## Keeping docs current

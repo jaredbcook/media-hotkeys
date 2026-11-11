@@ -15,6 +15,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - if: github.event_name == 'pull_request'
+        name: Check commits and description for attribution lines
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          COMMITS_URL: ${{ github.event.pull_request.commits_url }}
+        run: |
+          printf '%s\n' "$PR_BODY" | sh scripts/check-attribution.sh
+          gh api --paginate "$COMMITS_URL" --jq '.[].commit.message' | sh scripts/check-attribution.sh
       - if: startsWith(github.ref, 'refs/tags/')
         name: Check tag matches package.json version
         run: |

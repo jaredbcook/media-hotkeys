@@ -2,7 +2,7 @@ Closes #
 
 ## Summary
 
-<!-- What changed and why. -->
+<!-- What changed and why. Don't add "Generated with" or co-author lines; CI rejects them. -->
 
 ## Verification
 
