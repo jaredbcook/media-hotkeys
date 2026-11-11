@@ -140,6 +140,53 @@ describe("quick skip streak handling", () => {
     vi.useRealTimers();
   });
 
+  it("checks a custom-element player's own time and duration for the streak bounds", () => {
+    vi.useFakeTimers();
+    const host = document.createElement("custom-player");
+    const video = document.createElement("video");
+    host.attachShadow({ mode: "open" }).appendChild(video);
+    document.body.appendChild(host);
+    // The inner element is mid-media with no known end; the host is at the
+    // start of a 100s item and ignores seeks, so it stays where it is.
+    Object.defineProperty(video, "currentTime", { configurable: true, value: 50 });
+    let hostTime = 2;
+    Object.defineProperties(host, {
+      currentTime: {
+        configurable: true,
+        get: () => hostTime,
+        set: () => undefined,
+      },
+      duration: { configurable: true, get: () => 100 },
+    });
+
+    handleAction("seekBackwardSmall", video);
+    handleAction("seekBackwardSmall", video);
+
+    expect(showActionOverlayMock).toHaveBeenNthCalledWith(
+      2,
+      "seekBackwardSmall",
+      video,
+      "center-left",
+      expect.anything(),
+      { seekSeconds: 5, animateSkipDirection: undefined },
+    );
+
+    // Now the host sits at the end, while the inner element could still seek on.
+    hostTime = 98;
+    handleAction("seekForwardSmall", video);
+    handleAction("seekForwardSmall", video);
+
+    expect(showActionOverlayMock).toHaveBeenNthCalledWith(
+      4,
+      "seekForwardSmall",
+      video,
+      "center-right",
+      expect.anything(),
+      { seekSeconds: 5, animateSkipDirection: undefined },
+    );
+    vi.useRealTimers();
+  });
+
   it("replays the directional skip animation for repeated skips when sumQuickSkips is disabled", () => {
     vi.useFakeTimers();
     const video = makeVideo();

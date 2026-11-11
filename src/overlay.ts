@@ -1,6 +1,7 @@
 import type { MediaAction, OverlayPosition, AdvancedSettings } from "./storage.js";
 import * as icons from "./icons.js";
 import {
+  readPlayerDuration,
   readPlayerMuted,
   readPlayerPaused,
   readPlayerPlaybackRate,
@@ -81,6 +82,12 @@ function formatTimestamp(seconds: number, includeHours: boolean): string {
 
   const totalMinutes = Math.floor(clampedSeconds / 60);
   return `${totalMinutes}:${String(remainingSeconds).padStart(2, "0")}`;
+}
+
+// A custom player's host may know a duration its inner media element doesn't.
+function hasHours(media: HTMLMediaElement): boolean {
+  const duration = readPlayerDuration(media);
+  return Number.isFinite(duration) && duration >= 3600;
 }
 
 // Track labels come from the page, so they must not be read as markup.
@@ -432,17 +439,14 @@ function buildContent(
       return `${icons.SEEK_BACK_LARGE}<span>-${options.seekSeconds ?? advancedSettings.seekStepMedium}s</span>`;
 
     case "restart":
-      return `${icons.TIME_BACKWARD}<span>${formatTimestamp(0, Number.isFinite(media.duration) && media.duration >= 3600)}</span>`;
+      return `${icons.TIME_BACKWARD}<span>${formatTimestamp(0, hasHours(media))}</span>`;
 
     default: {
       const percentMatch = action.match(/^seekToPercent\d+$/);
       if (percentMatch && typeof options.timestampSeconds === "number") {
         const icon =
           options.jumpDirection === "backward" ? icons.TIME_BACKWARD : icons.TIME_FORWARD;
-        return `${icon}<span>${formatTimestamp(
-          options.timestampSeconds,
-          Number.isFinite(media.duration) && media.duration >= 3600,
-        )}</span>`;
+        return `${icon}<span>${formatTimestamp(options.timestampSeconds, hasHours(media))}</span>`;
       }
       return null;
     }
