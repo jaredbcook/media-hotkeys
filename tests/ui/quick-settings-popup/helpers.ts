@@ -5,6 +5,7 @@ import type { ExtensionSettings } from "../../../src/storage.js";
 const hoistedMocks = vi.hoisted(() => ({
   getSettingsMock: vi.fn<() => Promise<ExtensionSettings>>(),
   saveSettingsMock: vi.fn(),
+  storageChangeListeners: [] as ((changes: unknown, areaName: string) => void)[],
   openOptionsPageMock: vi.fn(),
   runtimeGetUrlMock: vi.fn((path: string) => `chrome-extension://test/${path}`),
   runtimeGetManifestMock: vi.fn(() => ({ version: "1.2.3" })),
@@ -14,6 +15,7 @@ const hoistedMocks = vi.hoisted(() => ({
 
 export const getSettingsMock = hoistedMocks.getSettingsMock;
 export const saveSettingsMock = hoistedMocks.saveSettingsMock;
+const storageChangeListeners = hoistedMocks.storageChangeListeners;
 export const openOptionsPageMock = hoistedMocks.openOptionsPageMock;
 export const runtimeGetUrlMock = hoistedMocks.runtimeGetUrlMock;
 export const runtimeGetManifestMock = hoistedMocks.runtimeGetManifestMock;
@@ -33,6 +35,11 @@ vi.mock("webextension-polyfill", () => ({
       query: tabsQueryMock,
     },
     storage: {
+      onChanged: {
+        addListener: (listener: (changes: unknown, areaName: string) => void) => {
+          hoistedMocks.storageChangeListeners.push(listener);
+        },
+      },
       sync: {
         get: vi.fn(),
         set: vi.fn(),
@@ -84,6 +91,7 @@ export function resetQuickSettingsTestState(): void {
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
   getSettingsMock.mockReset();
   saveSettingsMock.mockReset();
+  storageChangeListeners.length = 0;
   openOptionsPageMock.mockReset();
   runtimeGetUrlMock.mockReset();
   runtimeGetUrlMock.mockImplementation((path: string) => `chrome-extension://test/${path}`);
@@ -131,4 +139,12 @@ export function setCheckbox(id: string, checked: boolean): void {
   const checkbox = document.getElementById(id) as HTMLInputElement;
   checkbox.checked = checked;
   checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+/** Announces a storage change, as the browser does after another surface saved, and lets the page react. */
+export async function emitStorageChange(areaName = "sync"): Promise<void> {
+  for (const listener of storageChangeListeners) {
+    listener({}, areaName);
+  }
+  await new Promise((resolve) => setTimeout(resolve, 0));
 }

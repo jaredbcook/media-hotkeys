@@ -8,9 +8,9 @@ import {
   resetContentTestState,
   showActionOverlayMock,
   storageGetMock,
+  storageRemoveMock as untypedStorageRemoveMock,
   storageSetMock as untypedStorageSetMock,
 } from "./helpers.js";
-import type { ExtensionSettings } from "../../../src/storage.js";
 
 type ExecuteRequest = {
   type: string;
@@ -30,6 +30,13 @@ const storageSetMock = untypedStorageSetMock as unknown as Mock<
   (settings: Record<string, unknown>) => Promise<void>
 >;
 
+const storageRemoveMock = untypedStorageRemoveMock as unknown as Mock<
+  (keys: string[]) => Promise<void>
+>;
+
+// `showOverlays` is on by default, so it is stored only while it is off.
+const SHOW_OVERLAYS_KEY = "advanced.showOverlays";
+
 let storedSettings: Record<string, unknown>;
 
 beforeEach(() => {
@@ -38,7 +45,12 @@ beforeEach(() => {
   storedSettings = {};
   storageGetMock.mockImplementation(async () => structuredClone(storedSettings));
   storageSetMock.mockImplementation(async (settings: Record<string, unknown>) => {
-    storedSettings = structuredClone(settings);
+    Object.assign(storedSettings, structuredClone(settings));
+  });
+  storageRemoveMock.mockImplementation(async (keys: string[]) => {
+    for (const key of keys) {
+      delete storedSettings[key];
+    }
   });
 });
 
@@ -62,10 +74,24 @@ function restoreTopWindowForTest(): void {
   setWindowParentForTest(window);
 }
 
+/** The `showOverlays` value of every save, in order: a `set` of `false` or a `remove` back to the default. */
 function savedShowOverlays(): boolean[] {
-  return storageSetMock.mock.calls.map(
-    ([settings]) => (settings as unknown as ExtensionSettings).advancedSettings.showOverlays,
-  );
+  const writes: { order: number; value: boolean }[] = [];
+  storageSetMock.mock.calls.forEach(([settings], index) => {
+    writes.push({
+      order: storageSetMock.mock.invocationCallOrder[index],
+      value: settings[SHOW_OVERLAYS_KEY] as boolean,
+    });
+  });
+  storageRemoveMock.mock.calls.forEach(([keys], index) => {
+    expect(keys).toEqual([SHOW_OVERLAYS_KEY]);
+    writes.push({ order: storageRemoveMock.mock.invocationCallOrder[index], value: true });
+  });
+  return writes.sort((left, right) => left.order - right.order).map((write) => write.value);
+}
+
+function storedShowOverlays(): boolean {
+  return (storedSettings[SHOW_OVERLAYS_KEY] as boolean | undefined) ?? true;
 }
 
 /**
@@ -180,6 +206,7 @@ describe("overlay toggle in the frame that gets the key", () => {
     await flush();
 
     expect(storageSetMock).toHaveBeenCalledOnce();
+    expect(storageRemoveMock).not.toHaveBeenCalled();
     expect(savedShowOverlays()).toEqual([false]);
     // The confirmation goes to the one winning frame, with the new value, and
     // nothing is broadcast to the others.
@@ -201,9 +228,7 @@ describe("overlay toggle in the frame that gets the key", () => {
     await flush();
 
     expect(savedShowOverlays()).toEqual([false, true, false]);
-    expect((storedSettings as unknown as ExtensionSettings).advancedSettings.showOverlays).toBe(
-      false,
-    );
+    expect(storedShowOverlays()).toBe(false);
     expect(showActionOverlayMock.mock.calls.map((call) => call[4])).toEqual([
       { overlayEnabled: false },
       { overlayEnabled: true },
@@ -222,7 +247,7 @@ describe("overlay toggle in the frame that gets the key", () => {
       await new Promise<void>((resolve) => {
         releaseFirstWrite = resolve;
       });
-      storedSettings = structuredClone(settings);
+      Object.assign(storedSettings, structuredClone(settings));
       void emitStorageChange();
     });
 
@@ -246,9 +271,8 @@ describe("overlay toggle in the frame that gets the key", () => {
     // Right after this frame's write lands, the settings page turns overlays
     // back on, and that change event reloads settings before the save settles.
     storageSetMock.mockImplementationOnce(async (settings: Record<string, unknown>) => {
-      const written = structuredClone(settings) as unknown as ExtensionSettings;
-      written.advancedSettings.showOverlays = true;
-      storedSettings = written as unknown as Record<string, unknown>;
+      Object.assign(storedSettings, structuredClone(settings));
+      delete storedSettings[SHOW_OVERLAYS_KEY];
       void emitStorageChange();
     });
 

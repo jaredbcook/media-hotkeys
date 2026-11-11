@@ -2,11 +2,14 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  emitStorageChange,
+  getSettingsMock,
   loadAdvancedSettingsModule,
+  renderAdvancedSettingsDom,
   resetAdvancedSettingsTestState,
   saveSettingsMock,
 } from "./helpers.js";
-import { DEFAULT_SETTINGS } from "../../../src/storage.js";
+import { DEFAULT_SETTINGS, type ExtensionSettings } from "../../../src/storage.js";
 
 beforeEach(() => {
   resetAdvancedSettingsTestState();
@@ -68,12 +71,7 @@ describe("advanced settings page: load and save", () => {
     await vi.advanceTimersByTimeAsync(1);
 
     expect(saveSettingsMock).toHaveBeenCalledOnce();
-    expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
-      quickSettings: DEFAULT_SETTINGS.quickSettings,
-      advancedSettings: expect.objectContaining({
-        volumeStep: 0.02,
-      }),
-    });
+    expect(saveSettingsMock.mock.calls[0]?.[0]).toEqual({ advancedSettings: { volumeStep: 0.02 } });
     expect(document.querySelector("#announcements .announcement")?.textContent).toContain(
       "Settings saved.",
     );
@@ -91,10 +89,10 @@ describe("advanced settings page: load and save", () => {
 
     expect(volumeStep.value).toBe("10");
     expect(saveSettingsMock).toHaveBeenCalledOnce();
-    expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
-      advancedSettings: expect.objectContaining({
+    expect(saveSettingsMock.mock.calls[0]?.[0]).toEqual({
+      advancedSettings: {
         volumeStep: 0.1,
-      }),
+      },
     });
   });
 
@@ -131,8 +129,8 @@ describe("advanced settings page: load and save", () => {
 
     expect(input.value).toBe(expected);
     expect(saveSettingsMock).toHaveBeenCalledOnce();
-    expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
-      advancedSettings: expect.objectContaining({ [id]: Number(expected) }),
+    expect(saveSettingsMock.mock.calls[0]?.[0]).toEqual({
+      advancedSettings: { [id]: Number(expected) },
     });
   });
 
@@ -164,10 +162,10 @@ describe("advanced settings page: load and save", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(saveSettingsMock).toHaveBeenCalledOnce();
-    expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
-      advancedSettings: expect.objectContaining({
+    expect(saveSettingsMock.mock.calls[0]?.[0]).toEqual({
+      advancedSettings: {
         useNumberKeysToJump: false,
-      }),
+      },
     });
     expect(document.querySelector("#announcements .announcement")?.getAttribute("role")).toBe(
       "status",
@@ -211,10 +209,10 @@ describe("advanced settings page: load and save", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(saveSettingsMock).toHaveBeenCalledOnce();
-    expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
-      advancedSettings: expect.objectContaining({
+    expect(saveSettingsMock.mock.calls[0]?.[0]).toEqual({
+      advancedSettings: {
         debugLogging: true,
-      }),
+      },
     });
   });
 
@@ -267,7 +265,7 @@ describe("advanced settings page: load and save", () => {
     await vi.advanceTimersByTimeAsync(1);
 
     expect(saveSettingsMock).toHaveBeenCalledOnce();
-    expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
+    expect(saveSettingsMock.mock.calls[0]?.[0]).toEqual({
       siteSettings: {
         sitePolicies: [
           { pattern: "vimeo.com", policy: "enabled", embedsPolicy: "ignore" },
@@ -295,7 +293,7 @@ describe("advanced settings page: load and save", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(saveSettingsMock).toHaveBeenCalledOnce();
-    expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
+    expect(saveSettingsMock.mock.calls[0]?.[0]).toEqual({
       siteSettings: {
         sitePolicies: [{ pattern: "youtube.com", policy: "enabled", embedsPolicy: "inherit" }],
       },
@@ -306,7 +304,7 @@ describe("advanced settings page: load and save", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(saveSettingsMock).toHaveBeenCalledTimes(2);
-    expect(saveSettingsMock.mock.calls[1]?.[0]).toMatchObject({
+    expect(saveSettingsMock.mock.calls[1]?.[0]).toEqual({
       siteSettings: {
         sitePolicies: [{ pattern: "youtube.com", policy: "enabled", embedsPolicy: "ignore" }],
       },
@@ -328,7 +326,7 @@ describe("advanced settings page: load and save", () => {
     await vi.advanceTimersByTimeAsync(500);
 
     expect(saveSettingsMock).toHaveBeenCalledOnce();
-    expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
+    expect(saveSettingsMock.mock.calls[0]?.[0]).toEqual({
       siteSettings: {
         sitePolicies: [{ pattern: "youtube.com", policy: "disabled", embedsPolicy: "inherit" }],
       },
@@ -356,7 +354,7 @@ describe("advanced settings page: load and save", () => {
     await vi.advanceTimersByTimeAsync(500);
 
     expect(saveSettingsMock).toHaveBeenCalledOnce();
-    expect(saveSettingsMock.mock.calls[0]?.[0]).toMatchObject({
+    expect(saveSettingsMock.mock.calls[0]?.[0]).toEqual({
       siteSettings: {
         sitePolicies: [{ pattern: saved, policy: "disabled", embedsPolicy: "inherit" }],
       },
@@ -513,5 +511,458 @@ describe("advanced settings page: load and save", () => {
 
     expect(saveSettingsMock).not.toHaveBeenCalled();
     expect(window.location.search).not.toContain("disabledSitePrefill");
+  });
+
+  describe("settings changed elsewhere while the page is open", () => {
+    function changeElsewhere(change: (settings: ExtensionSettings) => void): Promise<void> {
+      const latest = structuredClone(DEFAULT_SETTINGS);
+      change(latest);
+      getSettingsMock.mockResolvedValue(latest);
+      return emitStorageChange();
+    }
+
+    it("doesn't write back a key binding or showOverlays changed elsewhere", async () => {
+      await loadAdvancedSettingsModule();
+
+      // The popup rebinds Play/Pause and the `o` hotkey turns overlays off.
+      await changeElsewhere((settings) => {
+        settings.quickSettings.actionKeyBindings.togglePlayPause.keys = ["x"];
+        settings.advancedSettings.showOverlays = false;
+      });
+      expect((document.getElementById("showOverlays") as HTMLInputElement).checked).toBe(false);
+
+      const volumeStep = document.getElementById("volumeStep") as HTMLInputElement;
+      volumeStep.value = "10";
+      volumeStep.dispatchEvent(new Event("input", { bubbles: true }));
+      volumeStep.dispatchEvent(new Event("blur"));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Only the edited setting is sent, so overlays stay off and the binding is untouched.
+      expect(saveSettingsMock).toHaveBeenCalledOnce();
+      expect(saveSettingsMock.mock.calls[0]?.[0]).toEqual({
+        advancedSettings: { volumeStep: 0.1 },
+      });
+    });
+
+    it("doesn't write back a setting changed elsewhere before the page learned of it", async () => {
+      await loadAdvancedSettingsModule();
+
+      // No change event has reached the page yet, so it still shows overlays on.
+      const volumeStep = document.getElementById("volumeStep") as HTMLInputElement;
+      volumeStep.value = "10";
+      volumeStep.dispatchEvent(new Event("input", { bubbles: true }));
+      volumeStep.dispatchEvent(new Event("blur"));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(saveSettingsMock.mock.calls[0]?.[0]).toEqual({
+        advancedSettings: { volumeStep: 0.1 },
+      });
+    });
+
+    it("keeps what the user is typing and saves it", async () => {
+      await loadAdvancedSettingsModule();
+      const volumeStep = document.getElementById("volumeStep") as HTMLInputElement;
+      volumeStep.focus();
+      volumeStep.value = "7";
+      volumeStep.dispatchEvent(new Event("input", { bubbles: true }));
+
+      await changeElsewhere((settings) => {
+        settings.advancedSettings.speedStep = 0.5;
+      });
+
+      expect(volumeStep.value).toBe("7");
+      expect((document.getElementById("speedStep") as HTMLInputElement).value).toBe("0.5");
+      volumeStep.dispatchEvent(new Event("blur"));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(saveSettingsMock.mock.calls[0]?.[0]).toEqual({
+        advancedSettings: { volumeStep: 0.07 },
+      });
+    });
+
+    it("ignores changes in other storage areas and its own saves", async () => {
+      await loadAdvancedSettingsModule();
+      getSettingsMock.mockClear();
+
+      await emitStorageChange("local");
+      expect(getSettingsMock).not.toHaveBeenCalled();
+
+      const debugLogging = document.getElementById("debugLogging") as HTMLInputElement;
+      debugLogging.checked = true;
+      debugLogging.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      // The change event for that save reads storage as the save left it.
+      await changeElsewhere((settings) => {
+        settings.advancedSettings.debugLogging = true;
+      });
+
+      expect(debugLogging.checked).toBe(true);
+      expect(saveSettingsMock).toHaveBeenCalledOnce();
+    });
+
+    it("shows the newest settings when an older read finishes last", async () => {
+      await loadAdvancedSettingsModule();
+      getSettingsMock.mockReset();
+
+      const older = structuredClone(DEFAULT_SETTINGS);
+      older.advancedSettings.speedStep = 0.5;
+      const newer = structuredClone(DEFAULT_SETTINGS);
+      newer.advancedSettings.speedStep = 0.75;
+      let finishOlderRead!: () => void;
+      getSettingsMock.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishOlderRead = () => resolve(older);
+          }),
+      );
+      getSettingsMock.mockResolvedValueOnce(newer);
+
+      await emitStorageChange();
+      await emitStorageChange();
+      finishOlderRead();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect((document.getElementById("speedStep") as HTMLInputElement).value).toBe("0.75");
+    });
+
+    it("reads again when a change arrived while the page was still loading", async () => {
+      const latest = structuredClone(DEFAULT_SETTINGS);
+      latest.advancedSettings.speedStep = 0.5;
+      // The first read starts before the change and finishes after it was announced.
+      let finishFirstRead!: () => void;
+      const stale = structuredClone(DEFAULT_SETTINGS);
+      vi.resetModules();
+      renderAdvancedSettingsDom();
+      getSettingsMock.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishFirstRead = () => resolve(stale);
+          }),
+      );
+      getSettingsMock.mockResolvedValue(latest);
+      void import("../../../src/advanced-settings-page.js");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      await emitStorageChange();
+      finishFirstRead();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect((document.getElementById("speedStep") as HTMLInputElement).value).toBe("0.5");
+    });
+
+    it("shows what is stored when a save fails, so the edit can be retried", async () => {
+      await loadAdvancedSettingsModule();
+      saveSettingsMock.mockRejectedValueOnce(new Error("quota exceeded"));
+
+      const debugLogging = document.getElementById("debugLogging") as HTMLInputElement;
+      debugLogging.checked = true;
+      debugLogging.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(document.querySelector("#announcements .announcement")?.textContent).toContain(
+        "Failed to save settings.",
+      );
+      expect(debugLogging.checked).toBe(false);
+
+      debugLogging.checked = true;
+      debugLogging.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(saveSettingsMock).toHaveBeenCalledTimes(2);
+      expect(saveSettingsMock.mock.calls[1]?.[0]).toEqual({
+        advancedSettings: { debugLogging: true },
+      });
+    });
+
+    it("drops a failed edit from the focused field and rule row, so it can be retried", async () => {
+      await loadAdvancedSettingsModule();
+      saveSettingsMock.mockRejectedValueOnce(new Error("quota exceeded"));
+      const volumeStep = document.getElementById("volumeStep") as HTMLInputElement;
+      volumeStep.focus();
+      volumeStep.value = "9";
+      volumeStep.dispatchEvent(new Event("input", { bubbles: true }));
+      volumeStep.dispatchEvent(new Event("blur"));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(volumeStep.value).toBe("5");
+
+      saveSettingsMock.mockRejectedValueOnce(new Error("quota exceeded"));
+      document
+        .getElementById("add-site-policy")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      const pattern = document.querySelector<HTMLInputElement>(".site-policy-pattern")!;
+      pattern.focus();
+      pattern.value = "vimeo.com";
+      pattern.dispatchEvent(new Event("blur"));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(document.querySelectorAll(".site-policy-row")).toHaveLength(0);
+
+      document
+        .getElementById("add-site-policy")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      const retry = document.querySelector<HTMLInputElement>(".site-policy-pattern")!;
+      retry.value = "vimeo.com";
+      retry.dispatchEvent(new Event("blur"));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(saveSettingsMock.mock.calls.at(-1)?.[0]).toEqual({
+        siteSettings: {
+          sitePolicies: [{ pattern: "vimeo.com", policy: "disabled", embedsPolicy: "inherit" }],
+        },
+      });
+    });
+
+    it("doesn't let the read after a failed save overwrite a newer edit", async () => {
+      await loadAdvancedSettingsModule();
+      getSettingsMock.mockReset();
+      let finishRecoveryRead!: () => void;
+      getSettingsMock.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishRecoveryRead = () => resolve(structuredClone(DEFAULT_SETTINGS));
+          }),
+      );
+      saveSettingsMock.mockRejectedValueOnce(new Error("quota exceeded"));
+
+      const debugLogging = document.getElementById("debugLogging") as HTMLInputElement;
+      debugLogging.checked = true;
+      debugLogging.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // The user changes something else while the recovery read is still out.
+      const sumQuickSkips = document.getElementById("sumQuickSkips") as HTMLInputElement;
+      sumQuickSkips.checked = false;
+      sumQuickSkips.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      finishRecoveryRead();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(sumQuickSkips.checked).toBe(false);
+    });
+
+    it("keeps text typed while the read after a failed save was out", async () => {
+      await loadAdvancedSettingsModule();
+      getSettingsMock.mockReset();
+      let finishRecoveryRead!: () => void;
+      getSettingsMock.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishRecoveryRead = () => resolve(structuredClone(DEFAULT_SETTINGS));
+          }),
+      );
+      saveSettingsMock.mockRejectedValueOnce(new Error("quota exceeded"));
+      const volumeStep = document.getElementById("volumeStep") as HTMLInputElement;
+      volumeStep.focus();
+      volumeStep.value = "9";
+      volumeStep.dispatchEvent(new Event("input", { bubbles: true }));
+      volumeStep.dispatchEvent(new Event("blur"));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // The user starts typing a new value before the read comes back.
+      volumeStep.value = "7";
+      volumeStep.dispatchEvent(new Event("input", { bubbles: true }));
+      finishRecoveryRead();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(volumeStep.value).toBe("7");
+      volumeStep.dispatchEvent(new Event("blur"));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(saveSettingsMock.mock.calls.at(-1)?.[0]).toEqual({
+        advancedSettings: { volumeStep: 0.07 },
+      });
+    });
+
+    it("still drops a failed rule edit when another change overtakes the first read", async () => {
+      await loadAdvancedSettingsModule();
+      getSettingsMock.mockReset();
+      let finishRecoveryRead!: () => void;
+      getSettingsMock.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishRecoveryRead = () => resolve(structuredClone(DEFAULT_SETTINGS));
+          }),
+      );
+      getSettingsMock.mockResolvedValueOnce(structuredClone(DEFAULT_SETTINGS));
+      saveSettingsMock.mockRejectedValueOnce(new Error("quota exceeded"));
+      document
+        .getElementById("add-site-policy")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      const pattern = document.querySelector<HTMLInputElement>(".site-policy-pattern")!;
+      pattern.focus();
+      pattern.value = "vimeo.com";
+      pattern.dispatchEvent(new Event("blur"));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(document.querySelectorAll(".site-policy-row")).toHaveLength(1);
+
+      // An unrelated change event starts a newer read, which finishes first.
+      await emitStorageChange();
+      finishRecoveryRead();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(document.querySelectorAll(".site-policy-row")).toHaveLength(0);
+    });
+
+    it("reverts a cleared field to the stored value, not the value that failed to save", async () => {
+      await loadAdvancedSettingsModule();
+      getSettingsMock.mockReset();
+      let finishRecoveryRead!: () => void;
+      getSettingsMock.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishRecoveryRead = () => resolve(structuredClone(DEFAULT_SETTINGS));
+          }),
+      );
+      saveSettingsMock.mockRejectedValueOnce(new Error("quota exceeded"));
+      const volumeStep = document.getElementById("volumeStep") as HTMLInputElement;
+      volumeStep.focus();
+      volumeStep.value = "9";
+      volumeStep.dispatchEvent(new Event("input", { bubbles: true }));
+      volumeStep.dispatchEvent(new Event("blur"));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      volumeStep.value = "";
+      volumeStep.dispatchEvent(new Event("input", { bubbles: true }));
+      finishRecoveryRead();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      volumeStep.dispatchEvent(new Event("blur"));
+
+      expect(volumeStep.value).toBe("5");
+      expect(saveSettingsMock).toHaveBeenCalledOnce();
+    });
+
+    it("drops a failed rule edit but keeps a new row that has not been filled in", async () => {
+      const settings = structuredClone(DEFAULT_SETTINGS);
+      settings.siteSettings.sitePolicies = [
+        { pattern: "youtube.com", policy: "disabled", embedsPolicy: "inherit" },
+      ];
+      await loadAdvancedSettingsModule(settings);
+      document
+        .getElementById("add-site-policy")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      saveSettingsMock.mockRejectedValueOnce(new Error("quota exceeded"));
+
+      const mode = document.querySelector<HTMLSelectElement>(".site-policy-mode")!;
+      mode.value = "enabled";
+      mode.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const rows = Array.from(document.querySelectorAll<HTMLTableRowElement>(".site-policy-row"));
+      expect(rows.map((row) => row.querySelector<HTMLInputElement>("input")!.value)).toEqual([
+        "youtube.com",
+        "",
+      ]);
+      expect(rows[0].querySelector<HTMLSelectElement>(".site-policy-mode")!.value).toBe("disabled");
+    });
+
+    it("drops a failed rule edit even while the user types in an unrelated field", async () => {
+      const settings = structuredClone(DEFAULT_SETTINGS);
+      settings.siteSettings.sitePolicies = [
+        { pattern: "youtube.com", policy: "disabled", embedsPolicy: "inherit" },
+      ];
+      await loadAdvancedSettingsModule(settings);
+      saveSettingsMock.mockRejectedValueOnce(new Error("quota exceeded"));
+      getSettingsMock.mockReset();
+      let finishRecoveryRead!: () => void;
+      getSettingsMock.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishRecoveryRead = () => resolve(structuredClone(settings));
+          }),
+      );
+
+      const mode = document.querySelector<HTMLSelectElement>(".site-policy-mode")!;
+      mode.focus();
+      mode.value = "enabled";
+      mode.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Typing in another field leaves its debounce pending when the recovery read returns.
+      const speedStep = document.getElementById("speedStep") as HTMLInputElement;
+      speedStep.focus();
+      speedStep.value = "0.5";
+      speedStep.dispatchEvent(new Event("input", { bubbles: true }));
+      finishRecoveryRead();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(document.querySelector<HTMLSelectElement>(".site-policy-mode")!.value).toBe(
+        "disabled",
+      );
+    });
+
+    it("shows a rule change from elsewhere once focus leaves the rule list", async () => {
+      await loadAdvancedSettingsModule();
+      document
+        .getElementById("add-site-policy")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      const pattern = document.querySelector<HTMLInputElement>(".site-policy-pattern")!;
+      pattern.focus();
+
+      await changeElsewhere((settings) => {
+        settings.siteSettings.sitePolicies = [
+          { pattern: "vimeo.com", policy: "disabled", embedsPolicy: "inherit" },
+        ];
+      });
+      expect(
+        Array.from(document.querySelectorAll<HTMLInputElement>(".site-policy-pattern")).map(
+          (input) => input.value,
+        ),
+      ).toEqual([""]);
+
+      pattern.blur();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(
+        Array.from(document.querySelectorAll<HTMLInputElement>(".site-policy-pattern")).map(
+          (input) => input.value,
+        ),
+      ).toEqual(["vimeo.com", ""]);
+    });
+
+    it("shows site rules changed elsewhere, and saves the next rule edit on top of them", async () => {
+      await loadAdvancedSettingsModule();
+      expect(document.querySelectorAll(".site-policy-row")).toHaveLength(0);
+
+      await changeElsewhere((settings) => {
+        settings.siteSettings.sitePolicies = [
+          { pattern: "vimeo.com", policy: "disabled", embedsPolicy: "inherit" },
+        ];
+      });
+      expect(
+        Array.from(document.querySelectorAll<HTMLInputElement>(".site-policy-pattern")).map(
+          (input) => input.value,
+        ),
+      ).toEqual(["vimeo.com"]);
+
+      const mode = document.querySelector<HTMLSelectElement>(".site-policy-mode")!;
+      mode.value = "enabled";
+      mode.dispatchEvent(new Event("input", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(saveSettingsMock.mock.calls[0]?.[0]).toEqual({
+        siteSettings: {
+          sitePolicies: [{ pattern: "vimeo.com", policy: "enabled", embedsPolicy: "inherit" }],
+        },
+      });
+    });
+
+    it("leaves site rule rows alone while one is being edited", async () => {
+      await loadAdvancedSettingsModule();
+      document
+        .getElementById("add-site-policy")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      const pattern = document.querySelector<HTMLInputElement>(".site-policy-pattern")!;
+      pattern.focus();
+      pattern.value = "youtu";
+
+      await changeElsewhere((settings) => {
+        settings.siteSettings.sitePolicies = [
+          { pattern: "vimeo.com", policy: "disabled", embedsPolicy: "inherit" },
+        ];
+      });
+
+      expect(document.querySelectorAll(".site-policy-row")).toHaveLength(1);
+      expect(document.activeElement).toBe(pattern);
+      expect(pattern.value).toBe("youtu");
+    });
   });
 });

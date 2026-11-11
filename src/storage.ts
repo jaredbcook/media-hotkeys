@@ -54,18 +54,23 @@ export type ConfigurableMediaAction = Exclude<
   | "seekToPercent90"
 >;
 
-export type OverlayPosition =
-  | "top-left"
-  | "top"
-  | "top-right"
-  | "center-left"
-  | "center"
-  | "center-right"
-  | "bottom-left"
-  | "bottom"
-  | "bottom-right";
+export const OVERLAY_POSITIONS = [
+  "top-left",
+  "top",
+  "top-right",
+  "center-left",
+  "center",
+  "center-right",
+  "bottom-left",
+  "bottom",
+  "bottom-right",
+] as const;
 
-export type SkipOverlayPosition = "left / right" | "same as others";
+export type OverlayPosition = (typeof OVERLAY_POSITIONS)[number];
+
+export const SKIP_OVERLAY_POSITIONS = ["left / right", "same as others"] as const;
+
+export type SkipOverlayPosition = (typeof SKIP_OVERLAY_POSITIONS)[number];
 
 export interface ActionConfig {
   keys: string[];
@@ -113,6 +118,10 @@ export interface ExtensionSettings {
   siteSettings: SiteSettings;
 }
 
+/**
+ * A patch for `saveSettings`: only the fields present are written. A field whose value
+ * equals its default is removed from storage instead (see "Storage" below).
+ */
 export interface SettingsUpdate {
   quickSettings?: {
     hotkeysEnabled?: boolean;
@@ -154,28 +163,21 @@ function isDirectionalSkipAction(
 }
 
 function mergeActionKeyBindings(
-  storedBindings?: Partial<Record<ConfigurableMediaAction, Partial<ActionConfig>>>,
+  storedKeys: Partial<Record<ConfigurableMediaAction, string[]>>,
 ): Record<ConfigurableMediaAction, ActionConfig> {
   const normalizedBindings = {} as Record<ConfigurableMediaAction, ActionConfig>;
-  const userKeys = new Set(
-    Object.values(storedBindings ?? {})
-      .flatMap((binding) => binding?.keys ?? [])
-      .map(normalizeHotkeyKey),
-  );
+  // Only actions the user changed are stored, so these are the keys they chose themselves.
+  const userKeys = new Set(Object.values(storedKeys).flat().map(normalizeHotkeyKey));
 
   for (const action of Object.keys(
     DEFAULT_QUICK_SETTINGS.actionKeyBindings,
   ) as ConfigurableMediaAction[]) {
-    const defaultBinding = DEFAULT_QUICK_SETTINGS.actionKeyBindings[action];
-    const hasUserKeys = Boolean(storedBindings?.[action]?.keys);
+    const defaultKeys = DEFAULT_QUICK_SETTINGS.actionKeyBindings[action].keys;
+    // An action added in a later release must not take over a key the user already
+    // assigned to something else.
     normalizedBindings[action] = {
-      ...defaultBinding,
-      // An action added after the user saved bindings must not take over a key
-      // they already assigned to something else.
-      keys: hasUserKeys
-        ? defaultBinding.keys
-        : defaultBinding.keys.filter((key) => !userKeys.has(normalizeHotkeyKey(key))),
-      ...storedBindings?.[action],
+      keys:
+        storedKeys[action] ?? defaultKeys.filter((key) => !userKeys.has(normalizeHotkeyKey(key))),
     };
   }
 
@@ -347,63 +349,6 @@ export function isUrlDisabledBySiteSettings(url: string, siteSettings: SiteSetti
   return findMatchingSitePolicy(url, siteSettings)?.policy === "disabled";
 }
 
-function normalizeSettings(settings: SettingsUpdate): ExtensionSettings {
-  const nestedQuickSettings = settings.quickSettings ?? {};
-  const nestedAdvancedSettings = settings.advancedSettings ?? {};
-  const nestedSiteSettings = settings.siteSettings ?? {};
-
-  const quickSettings: QuickSettings = {
-    ...DEFAULT_QUICK_SETTINGS,
-    ...nestedQuickSettings,
-    hotkeysEnabled: nestedQuickSettings.hotkeysEnabled ?? DEFAULT_QUICK_SETTINGS.hotkeysEnabled,
-    actionKeyBindings: mergeActionKeyBindings(nestedQuickSettings.actionKeyBindings),
-  };
-
-  const advancedSettings: AdvancedSettings = {
-    ...DEFAULT_ADVANCED_SETTINGS,
-    ...nestedAdvancedSettings,
-  };
-
-  const siteSettings: SiteSettings = {
-    sitePolicies: normalizeSitePoliciesWith(
-      nestedSiteSettings.sitePolicies ?? DEFAULT_SITE_SETTINGS.sitePolicies,
-      normalizeStoredSitePattern,
-    ),
-  };
-
-  return {
-    quickSettings,
-    advancedSettings,
-    siteSettings,
-  };
-}
-
-function mergeSettings(
-  baseSettings: ExtensionSettings,
-  settingsUpdate: SettingsUpdate,
-): ExtensionSettings {
-  return normalizeSettings({
-    quickSettings: {
-      ...baseSettings.quickSettings,
-      ...settingsUpdate.quickSettings,
-      hotkeysEnabled:
-        settingsUpdate.quickSettings?.hotkeysEnabled ?? baseSettings.quickSettings.hotkeysEnabled,
-      actionKeyBindings: {
-        ...baseSettings.quickSettings.actionKeyBindings,
-        ...settingsUpdate.quickSettings?.actionKeyBindings,
-      },
-    },
-    advancedSettings: {
-      ...baseSettings.advancedSettings,
-      ...settingsUpdate.advancedSettings,
-    },
-    siteSettings: {
-      ...baseSettings.siteSettings,
-      ...settingsUpdate.siteSettings,
-    },
-  });
-}
-
 function areValuesEqual(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) {
     return true;
@@ -483,19 +428,221 @@ export function resolveActionOverlaySettings(
 
 // #region Storage
 
-export async function getSettings(): Promise<ExtensionSettings> {
-  const result = await browser.storage.sync.get(null);
-  return normalizeSettings(result as SettingsUpdate);
-}
+// Settings are stored as flat keys in `storage.sync`, one per setting, and only the settings the
+// user changed are stored. A setting with no key has its default from `defaults.json`, so a default
+// changed in a later release reaches everyone who never touched it, and "reset" is removing the key.
+//
+//   schemaVersion              number, written once so a later layout can migrate
+//   quick.hotkeysEnabled       boolean
+//   advanced.<setting>         one key per `AdvancedSettings` field
+//   keys.<action>              that action's list of keys
+//   sitePolicies               the site rules, one array for now
+//
+// A save writes and removes only the keys it was given, and never reads the settings, so saves
+// that touch different settings can't overwrite each other. Keys this version doesn't know (an
+// older layout, or one written by a newer version) are ignored when reading and never removed.
+// `schemaVersion` is written only while it is missing, so an older version doesn't lower the
+// marker a newer one stored. The check and the write aren't atomic, so two writers that both see
+// it missing can still write version 1 after a newer one wrote its own: a migration that relies
+// on the marker has to tolerate that.
+//
+// Limits, from the Chrome and Firefox documentation: 8,192 bytes per item (key included), 512
+// items, and about 100 KB in total, with Chrome also capping writes at 120 per minute and 1,800
+// per hour (`set` and `remove` each count as one). Every setting but `sitePolicies` is small in
+// practice (35 items and about 2 KB with all of them customized and long key lists; the popup
+// adds one key per press, so a key list would need hundreds of distinct keys to reach 8 KB).
+// `sitePolicies`, the one array that grows with use, is the one to watch: about 150 simple rules
+// fit in its 8 KB item. A save that exceeds a limit is rejected and reported like any failed save.
+export const SETTINGS_SCHEMA_VERSION = 1;
 
-export async function saveSettings(settingsUpdate: SettingsUpdate): Promise<void> {
-  const currentSettings = await getSettings();
-  const mergedSettings = mergeSettings(currentSettings, settingsUpdate);
-  if (settingsEqual(currentSettings, mergedSettings)) {
-    return;
+const SCHEMA_VERSION_KEY = "schemaVersion";
+const HOTKEYS_ENABLED_KEY = "quick.hotkeysEnabled";
+const ADVANCED_KEY_PREFIX = "advanced.";
+const ACTION_KEYS_PREFIX = "keys.";
+const SITE_POLICIES_KEY = "sitePolicies";
+
+const ADVANCED_SETTING_NAMES = Object.keys(DEFAULT_ADVANCED_SETTINGS) as (keyof AdvancedSettings)[];
+const CONFIGURABLE_ACTIONS = Object.keys(
+  DEFAULT_QUICK_SETTINGS.actionKeyBindings,
+) as ConfigurableMediaAction[];
+
+function isValidAdvancedSetting<Name extends keyof AdvancedSettings>(
+  name: Name,
+  value: unknown,
+): value is AdvancedSettings[Name] {
+  const defaultValue = DEFAULT_ADVANCED_SETTINGS[name];
+  if (typeof value !== typeof defaultValue) {
+    return false;
   }
 
-  await browser.storage.sync.set(mergedSettings as unknown as Record<string, unknown>);
+  if (typeof value === "number") {
+    return Number.isFinite(value);
+  }
+
+  if (name === "overlayPosition") {
+    return OVERLAY_POSITIONS.includes(value as OverlayPosition);
+  }
+
+  if (name === "skipOverlayPosition") {
+    return SKIP_OVERLAY_POSITIONS.includes(value as SkipOverlayPosition);
+  }
+
+  return true;
+}
+
+function isValidKeyList(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((key) => typeof key === "string" && key.length > 0);
+}
+
+/** Builds the settings from the stored keys, filling every setting that has no key from the defaults. */
+function readStoredSettings(stored: Record<string, unknown>): ExtensionSettings {
+  const hotkeysEnabled = stored[HOTKEYS_ENABLED_KEY];
+
+  const advancedSettings: AdvancedSettings = { ...DEFAULT_ADVANCED_SETTINGS };
+  for (const name of ADVANCED_SETTING_NAMES) {
+    const value = stored[ADVANCED_KEY_PREFIX + name];
+    if (isValidAdvancedSetting(name, value)) {
+      (advancedSettings[name] as AdvancedSettings[typeof name]) = value;
+    }
+  }
+
+  const storedKeys: Partial<Record<ConfigurableMediaAction, string[]>> = {};
+  for (const action of CONFIGURABLE_ACTIONS) {
+    const keys = stored[ACTION_KEYS_PREFIX + action];
+    if (isValidKeyList(keys)) {
+      storedKeys[action] = [...keys];
+    }
+  }
+
+  const sitePolicies = stored[SITE_POLICIES_KEY];
+
+  return {
+    quickSettings: {
+      hotkeysEnabled:
+        typeof hotkeysEnabled === "boolean"
+          ? hotkeysEnabled
+          : DEFAULT_QUICK_SETTINGS.hotkeysEnabled,
+      actionKeyBindings: mergeActionKeyBindings(storedKeys),
+    },
+    advancedSettings,
+    siteSettings: {
+      sitePolicies: normalizeSitePoliciesWith(
+        Array.isArray(sitePolicies) ? sitePolicies : DEFAULT_SITE_SETTINGS.sitePolicies,
+        normalizeStoredSitePattern,
+      ),
+    },
+  };
+}
+
+/** The storage key and (normalized) value of every setting a patch names. Invalid values are dropped. */
+function flattenUpdate(update: SettingsUpdate): Map<string, { value: unknown; fallback: unknown }> {
+  const entries = new Map<string, { value: unknown; fallback: unknown }>();
+
+  const hotkeysEnabled = update.quickSettings?.hotkeysEnabled;
+  if (typeof hotkeysEnabled === "boolean") {
+    entries.set(HOTKEYS_ENABLED_KEY, {
+      value: hotkeysEnabled,
+      fallback: DEFAULT_QUICK_SETTINGS.hotkeysEnabled,
+    });
+  }
+
+  for (const action of CONFIGURABLE_ACTIONS) {
+    const keys = update.quickSettings?.actionKeyBindings?.[action]?.keys;
+    if (isValidKeyList(keys)) {
+      entries.set(ACTION_KEYS_PREFIX + action, {
+        value: keys,
+        fallback: DEFAULT_QUICK_SETTINGS.actionKeyBindings[action].keys,
+      });
+    }
+  }
+
+  for (const name of ADVANCED_SETTING_NAMES) {
+    const value = update.advancedSettings?.[name];
+    if (isValidAdvancedSetting(name, value)) {
+      entries.set(ADVANCED_KEY_PREFIX + name, { value, fallback: DEFAULT_ADVANCED_SETTINGS[name] });
+    }
+  }
+
+  const sitePolicies = update.siteSettings?.sitePolicies;
+  if (Array.isArray(sitePolicies)) {
+    entries.set(SITE_POLICIES_KEY, {
+      value: normalizeSitePoliciesWith(sitePolicies, normalizeStoredSitePattern),
+      fallback: DEFAULT_SITE_SETTINGS.sitePolicies,
+    });
+  }
+
+  return entries;
+}
+
+/** The patch that turns `base` into `next`, or undefined when they are the same. */
+export function diffSettings(
+  base: ExtensionSettings,
+  next: ExtensionSettings,
+): SettingsUpdate | undefined {
+  const update: SettingsUpdate = {};
+
+  if (base.quickSettings.hotkeysEnabled !== next.quickSettings.hotkeysEnabled) {
+    update.quickSettings = { hotkeysEnabled: next.quickSettings.hotkeysEnabled };
+  }
+
+  for (const action of CONFIGURABLE_ACTIONS) {
+    const keys = next.quickSettings.actionKeyBindings[action].keys;
+    if (!areValuesEqual(base.quickSettings.actionKeyBindings[action].keys, keys)) {
+      update.quickSettings ??= {};
+      update.quickSettings.actionKeyBindings ??= {};
+      update.quickSettings.actionKeyBindings[action] = { keys: [...keys] };
+    }
+  }
+
+  for (const name of ADVANCED_SETTING_NAMES) {
+    if (!Object.is(base.advancedSettings[name], next.advancedSettings[name])) {
+      update.advancedSettings ??= {};
+      (update.advancedSettings[name] as AdvancedSettings[typeof name]) =
+        next.advancedSettings[name];
+    }
+  }
+
+  if (!areValuesEqual(base.siteSettings.sitePolicies, next.siteSettings.sitePolicies)) {
+    update.siteSettings = { sitePolicies: structuredClone(next.siteSettings.sitePolicies) };
+  }
+
+  return Object.keys(update).length > 0 ? update : undefined;
+}
+
+export async function getSettings(): Promise<ExtensionSettings> {
+  const stored = await browser.storage.sync.get(null);
+  return readStoredSettings(stored);
+}
+
+/**
+ * Saves a patch: sets the keys whose value differs from the default and removes the keys whose
+ * value is back at the default. It never reads the settings (only the schema marker), so it can't
+ * write back values another surface changed meanwhile; two saves for different settings both land, and for the same setting
+ * the last write wins. The only writer of `storage.sync`.
+ */
+export async function saveSettings(update: SettingsUpdate): Promise<void> {
+  const toSet: Record<string, unknown> = {};
+  const toRemove: string[] = [];
+
+  for (const [key, { value, fallback }] of flattenUpdate(update)) {
+    if (areValuesEqual(value, fallback)) {
+      toRemove.push(key);
+    } else {
+      toSet[key] = value;
+    }
+  }
+
+  if (Object.keys(toSet).length > 0) {
+    const stored = await browser.storage.sync.get(SCHEMA_VERSION_KEY);
+    if (typeof stored[SCHEMA_VERSION_KEY] !== "number") {
+      toSet[SCHEMA_VERSION_KEY] = SETTINGS_SCHEMA_VERSION;
+    }
+    await browser.storage.sync.set(toSet);
+  }
+
+  if (toRemove.length > 0) {
+    await browser.storage.sync.remove(toRemove);
+  }
 }
 
 // #endregion

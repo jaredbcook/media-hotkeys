@@ -77,9 +77,7 @@ describe("media action handling", () => {
     handleAction("toggleMute", video);
     expect(consoleInfoSpy).not.toHaveBeenCalled();
 
-    const enabledSettings = structuredClone(DEFAULT_SETTINGS);
-    enabledSettings.advancedSettings.debugLogging = true;
-    storageGetMock.mockResolvedValueOnce(enabledSettings);
+    storageGetMock.mockResolvedValueOnce({ "advanced.debugLogging": true });
     await emitStorageChange();
 
     handleAction("toggleMute", video);
