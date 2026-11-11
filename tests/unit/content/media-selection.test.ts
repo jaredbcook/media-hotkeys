@@ -1,6 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { makeInvalidVideo, makeVideo, mockRect, rect, resetContentTestState } from "./helpers.js";
+import { type MockInstance, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  makeInvalidVideo,
+  makeVideo,
+  mockRect,
+  rect,
+  resetContentTestState,
+  settleLeftoverTimers,
+} from "./helpers.js";
 import { getTargetMedia, handleAction, setSettingsForTests } from "../../../src/content.js";
+import { MEDIA_PRESENCE_REPORT_DELAY_MS } from "../../../src/content/constants.js";
 import { state } from "../../../src/content/state.js";
 import { DEFAULT_SETTINGS } from "../../../src/storage.js";
 
@@ -232,6 +240,85 @@ describe("media target selection", () => {
     first.remove();
     second.remove();
     overlay.remove();
+  });
+
+  describe("extension-managed DOM in a child frame", () => {
+    // A change the observer counts as the page's schedules a presence report
+    // to the parent frame; one it ignores must not. The report is the visible
+    // effect, because the other work a page change does (forgetting a removed
+    // interaction, re-checking the site policy) has no effect in these cases.
+    let parentWindow: Window;
+    let reportTimers: MockInstance<typeof window.setTimeout>;
+
+    beforeEach(() => {
+      parentWindow = { postMessage: vi.fn() } as unknown as Window;
+      Object.defineProperty(window, "parent", { configurable: true, value: parentWindow });
+      reportTimers = vi.spyOn(window, "setTimeout");
+    });
+
+    afterEach(() => {
+      reportTimers.mockRestore();
+      Object.defineProperty(window, "parent", { configurable: true, value: window });
+    });
+
+    function scheduledReports(): number {
+      return reportTimers.mock.calls.filter(([, delay]) => delay === MEDIA_PRESENCE_REPORT_DELAY_MS)
+        .length;
+    }
+
+    function makeStyle(attribute: string): HTMLStyleElement {
+      const style = document.createElement("style");
+      style.setAttribute(attribute, "true");
+      return style;
+    }
+
+    function makeOverlayHost(): HTMLDivElement {
+      const host = document.createElement("div");
+      host.id = "media-hotkeys-overlay";
+      host.setAttribute("data-media-hotkeys-overlay", "true");
+      return host;
+    }
+
+    const managedNodes: Array<[string, () => Element]> = [
+      ["overlay host", makeOverlayHost],
+      ["fullscreen style tag", () => makeStyle("data-media-hotkeys-fullscreen")],
+      ["theater style tag", () => makeStyle("data-media-hotkeys-theater-style")],
+    ];
+
+    it("reports to the parent frame when the page adds an element", async () => {
+      document.body.appendChild(document.createElement("div"));
+      await Promise.resolve();
+
+      expect(scheduledReports()).toBe(1);
+    });
+
+    it.each(managedNodes)(
+      "ignores a %s added to and removed from the page",
+      async (_name, make) => {
+        const node = make();
+        document.head.appendChild(node);
+        await Promise.resolve();
+        node.remove();
+        await Promise.resolve();
+
+        expect(scheduledReports()).toBe(0);
+      },
+    );
+
+    it("ignores a theater style tag added to a shadow root", async () => {
+      const host = document.createElement("div");
+      const shadowRoot = host.attachShadow({ mode: "open" });
+      document.body.appendChild(host);
+      await Promise.resolve();
+      // Adding the host armed a report; let it run so the next one can arm.
+      await settleLeftoverTimers();
+      reportTimers.mockClear();
+
+      shadowRoot.appendChild(makeStyle("data-media-hotkeys-theater-style"));
+      await Promise.resolve();
+
+      expect(scheduledReports()).toBe(0);
+    });
   });
 
   it("treats DOM changes under a page element that shares the overlay's id as page changes", async () => {
