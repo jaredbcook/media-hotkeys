@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import browser from "webextension-polyfill";
 import {
+  ADVANCED_NUMBER_LIMITS,
   DEFAULT_ADVANCED_SETTINGS,
   DEFAULT_QUICK_SETTINGS,
   DEFAULT_SITE_SETTINGS,
@@ -13,6 +14,7 @@ import {
   UNUSABLE_HOTKEYS,
   isUnusableHotkey,
   type ExtensionSettings,
+  type NumericAdvancedSetting,
 } from "../../../src/storage.js";
 import {
   getDisabledSitePrefillForUrl,
@@ -254,6 +256,121 @@ describe("settings storage", () => {
     });
 
     expect(store).toEqual({ schemaVersion: 1, "advanced.debugLogging": true });
+  });
+
+  describe("numeric setting ranges", () => {
+    const numericSettings = Object.keys(ADVANCED_NUMBER_LIMITS) as NumericAdvancedSetting[];
+
+    it("limits every numeric advanced setting, with its default inside the range", () => {
+      const numericNames = Object.entries(DEFAULT_ADVANCED_SETTINGS)
+        .filter(([, value]) => typeof value === "number")
+        .map(([name]) => name);
+
+      expect([...numericSettings].sort()).toEqual(numericNames.sort());
+      for (const name of numericSettings) {
+        const { min, max } = ADVANCED_NUMBER_LIMITS[name];
+        expect(DEFAULT_ADVANCED_SETTINGS[name], name).toBeGreaterThanOrEqual(min);
+        expect(DEFAULT_ADVANCED_SETTINGS[name], name).toBeLessThanOrEqual(max);
+      }
+    });
+
+    it("can't let the minimum speed exceed the maximum speed", () => {
+      expect(ADVANCED_NUMBER_LIMITS.speedMin.max).toBeLessThanOrEqual(
+        ADVANCED_NUMBER_LIMITS.speedMax.min,
+      );
+    });
+
+    it.each(numericSettings)("clamps a stored %s to its range when loading", async (name) => {
+      const { min, max } = ADVANCED_NUMBER_LIMITS[name];
+
+      store[`advanced.${name}`] = max + 1000;
+      expect((await getSettings()).advancedSettings[name]).toBe(max);
+
+      store[`advanced.${name}`] = min - 1000;
+      expect((await getSettings()).advancedSettings[name]).toBe(min);
+
+      store[`advanced.${name}`] = min;
+      expect((await getSettings()).advancedSettings[name]).toBe(min);
+
+      store[`advanced.${name}`] = max;
+      expect((await getSettings()).advancedSettings[name]).toBe(max);
+    });
+
+    it.each([
+      ["seekStepSmall", 0, 1],
+      ["seekStepMedium", -5, 1],
+      ["seekStepLarge", 100000, 600],
+      ["volumeStep", 0, 0.01],
+      ["volumeStep", 5, 0.1],
+      ["speedMin", 0, 0.1],
+      ["speedMax", 100, 8],
+      ["speedStep", -1, 0.05],
+      ["overlayVisibleDuration", -1, 0],
+      ["overlayFadeDuration", 60000, 2000],
+    ] as const)("loads a stored %s of %s as %s", async (name, stored, expected) => {
+      store[`advanced.${name}`] = stored;
+
+      expect((await getSettings()).advancedSettings[name]).toBe(expected);
+    });
+
+    it("keeps an in-range value as stored, fractions included", async () => {
+      Object.assign(store, { "advanced.volumeStep": 0.055, "advanced.seekStepSmall": 2.5 });
+
+      const { advancedSettings } = await getSettings();
+
+      expect(advancedSettings.volumeStep).toBe(0.055);
+      expect(advancedSettings.seekStepSmall).toBe(2.5);
+    });
+
+    it("falls back to the default for NaN, infinite, and non-numeric values", async () => {
+      for (const name of numericSettings) {
+        for (const value of [Number.NaN, Infinity, -Infinity, "10", null, true]) {
+          store[`advanced.${name}`] = value;
+          expect((await getSettings()).advancedSettings[name], `${name}: ${String(value)}`).toBe(
+            DEFAULT_ADVANCED_SETTINGS[name],
+          );
+        }
+      }
+    });
+
+    it("clamps each setting alone and leaves the others as stored", async () => {
+      Object.assign(store, { "advanced.seekStepLarge": 9999, "advanced.speedMax": 6 });
+
+      const { advancedSettings } = await getSettings();
+
+      expect(advancedSettings).toEqual({
+        ...DEFAULT_ADVANCED_SETTINGS,
+        seekStepLarge: 600,
+        speedMax: 6,
+      });
+    });
+
+    it("leaves the stored value alone when loading, and fixes it only when the user saves", async () => {
+      store["advanced.seekStepLarge"] = 9999;
+
+      await getSettings();
+
+      expect(store["advanced.seekStepLarge"]).toBe(9999);
+      expect(browser.storage.sync.set).not.toHaveBeenCalled();
+      expect(browser.storage.sync.remove).not.toHaveBeenCalled();
+    });
+
+    it("clamps out-of-range numbers in a save and drops the ones that aren't numbers", async () => {
+      await saveSettings({
+        advancedSettings: {
+          seekStepSmall: 0,
+          seekStepLarge: 9999,
+          overlayFadeDuration: Number.NaN,
+          speedMax: Infinity,
+        },
+      });
+
+      expect(store).toEqual({
+        schemaVersion: 1,
+        "advanced.seekStepSmall": 1,
+        "advanced.seekStepLarge": 600,
+      });
+    });
   });
 
   it("keeps a skip of 600 seconds through save and load", async () => {

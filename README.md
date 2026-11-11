@@ -66,6 +66,8 @@ Click the toolbar icon for **Quick Settings**: disable the extension on all page
 | Fade duration                    | 250ms          |
 | Debug logging                    | Off            |
 
+Each number is limited to the range its field accepts. A saved value outside that range (from an older version or edited by hand) is brought to the nearest limit when settings load, and a value that isn't a number is replaced by the default.
+
 With **Sum skips** on, pressing skip repeatedly shows the running total (for example "+15s") instead of restarting the overlay each time.
 
 **Restore Defaults** in Quick Settings resets the key bindings, and in Advanced Settings it resets the settings in the table above and keeps your site rules. Both ask you to confirm first, because a restore can't be undone.

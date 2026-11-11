@@ -69,6 +69,7 @@ These aren't caught by tests unless marked. ARCHITECTURE.md#invariants explains 
 ### Add a setting
 
 1. Add the default in `src/settings/defaults.json` and the type in `src/storage.ts`. A new `advancedSettings` field is stored as `advanced.<name>` automatically; a setting in a new place needs a key in `readStoredSettings` and `flattenUpdate`. If the stored layout changes shape, bump `SETTINGS_SCHEMA_VERSION` and migrate.
+   A numeric advanced setting also needs a range in `ADVANCED_NUMBER_LIMITS` (`tsc` requires it) that matches the `min` and `max` of its input; a UI test fails when they differ.
 2. Add the control to the popup or the advanced page (`*.html`, `*.ts`; advanced form helpers are in `src/advanced-settings.ts`).
 3. Read it from `state.settings` in the content script or from the settings passed to `src/overlay.ts`.
 4. Add tests in `tests/unit/storage/` and `tests/ui/<surface>/`.
