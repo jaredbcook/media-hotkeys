@@ -6,9 +6,9 @@ import {
   readPlayerPlaybackRate,
   readPlayerVolume,
 } from "./content/player-control.js";
+import { OVERLAY_ATTR, OVERLAY_ID } from "./content/constants.js";
 import { isTheaterMedia } from "./content/theater.js";
 
-const OVERLAY_ID = "media-hotkeys-overlay";
 const INSET_PX = 16;
 const OVERLAY_ICON_SIZE_RATIO = 0.1;
 const MIN_OVERLAY_ICON_SIZE_PX = 32;
@@ -19,6 +19,20 @@ const MAX_OVERLAY_TEXT_SIZE_PX = 24;
 
 let hideTimeout: ReturnType<typeof setTimeout> | null = null;
 let fadeTimeout: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * The overlay is a host element in the page's DOM, which carries only position
+ * and visibility, around a box inside a closed shadow root, which carries
+ * everything the user sees. The root is closed so page scripts can't reach
+ * the box, and page CSS can't select what's inside it. The page can still
+ * select the host, so its styles are set `!important` (see `setHostStyle`).
+ */
+interface Overlay {
+  host: HTMLElement;
+  box: HTMLElement;
+}
+
+let overlay: Overlay | null = null;
 
 type SkipAnimationDirection = "forward" | "backward";
 type OverlayAnchorKind = "media" | "viewport";
@@ -71,23 +85,38 @@ function formatPlaybackRate(playbackRate: number): string {
   return String(Math.round(playbackRate * 100) / 100);
 }
 
-function getOrCreateOverlay(media?: HTMLMediaElement): HTMLElement {
-  const parent = getFullscreenOverlayHost(media ?? null) ?? document.body;
-  let el = document.getElementById(OVERLAY_ID);
-  if (el) {
-    if (el.parentElement !== parent) {
-      parent.appendChild(el);
-    }
-    return el;
-  }
+// Inline `!important` outranks page rules of either importance, so a broad
+// selector such as `div { position: static !important }` can't move the host.
+function setHostStyle(host: HTMLElement, property: string, value: string): void {
+  host.style.setProperty(property, value, "important");
+}
 
-  el = document.createElement("div");
-  el.id = OVERLAY_ID;
-  Object.assign(el.style, {
-    position: "absolute",
-    zIndex: "2147483647",
-    pointerEvents: "none",
-    display: "none",
+function createOverlay(): Overlay {
+  // Orphans of an earlier content script (the extension was updated or
+  // reloaded) can't be reached from this one, so they would only pile up. The
+  // attribute marks them as ours; an element that merely shares the id is the
+  // page's own and stays.
+  document.querySelector(`#${OVERLAY_ID}[${OVERLAY_ATTR}]`)?.remove();
+
+  const host = document.createElement("div");
+  host.id = OVERLAY_ID;
+  host.setAttribute(OVERLAY_ATTR, "true");
+  // `all: initial` first, so nothing the page sets on `div` is inherited into
+  // the shadow tree or applies to the host. This also neutralizes the UA popover
+  // box (border, margin, background, inset) when the host is promoted to the top
+  // layer above a theater-mode video.
+  setHostStyle(host, "all", "initial");
+  setHostStyle(host, "position", "absolute");
+  setHostStyle(host, "z-index", "2147483647");
+  setHostStyle(host, "pointer-events", "none");
+  setHostStyle(host, "display", "none");
+
+  const root = host.attachShadow({ mode: "closed" });
+  const style = document.createElement("style");
+  style.textContent = OVERLAY_STYLES;
+  const box = document.createElement("div");
+  Object.assign(box.style, {
+    display: "flex",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
@@ -100,16 +129,20 @@ function getOrCreateOverlay(media?: HTMLMediaElement): HTMLElement {
     fontWeight: "bold",
     lineHeight: "1.2",
     boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-    // Neutralize the UA popover box when the overlay is promoted to the top
-    // layer above a theater-mode video.
-    border: "none",
-    margin: "0",
-    right: "auto",
-    bottom: "auto",
-    overflow: "visible",
   });
-  parent.appendChild(el);
-  return el;
+  root.append(style, box);
+  return { host, box };
+}
+
+function getOrCreateOverlay(media?: HTMLMediaElement): Overlay {
+  const parent = getFullscreenOverlayHost(media ?? null) ?? document.body;
+  if (!overlay?.host.isConnected) {
+    overlay = createOverlay();
+  }
+  if (overlay.host.parentElement !== parent) {
+    parent.appendChild(overlay.host);
+  }
+  return overlay;
 }
 
 function isRectOutsideViewport(rect: DOMRect): boolean {
@@ -315,12 +348,10 @@ function positionOverAnchor(
     top = clampCoordinate(top, minTop, maxTop);
   }
 
-  el.style.left = `${left}px`;
-  el.style.top = `${top}px`;
-  el.style.position = anchor.position;
-  el.style.transform = `translate(${translateX}, ${translateY})`;
-  el.style.setProperty("--media-hotkeys-translate-x", translateX);
-  el.style.setProperty("--media-hotkeys-translate-y", translateY);
+  setHostStyle(el, "left", `${left}px`);
+  setHostStyle(el, "top", `${top}px`);
+  setHostStyle(el, "position", anchor.position);
+  setHostStyle(el, "transform", `translate(${translateX}, ${translateY})`);
 }
 
 function buildContent(
@@ -420,38 +451,18 @@ function resizeOverlayText(el: HTMLElement, media: HTMLMediaElement): void {
   el.style.fontSize = `${getOverlayTextSizePx(media)}px`;
 }
 
-const OVERLAY_STYLE_SELECTOR = 'style[data-media-hotkeys-overlay="true"]';
-
+// The box slides on its own so the host's transform, which positions the
+// overlay, stays untouched. A percentage translates by the box's own width.
 const OVERLAY_STYLES = `
   @keyframes media-hotkeys-skip-slide {
     from {
-      transform: translate(
-        calc(var(--media-hotkeys-translate-x, 0%) + var(--media-hotkeys-slide-from-x, 0px)),
-        var(--media-hotkeys-translate-y, 0%)
-      );
+      transform: translateX(var(--media-hotkeys-slide-from-x, 0%));
     }
     to {
-      transform: translate(
-        var(--media-hotkeys-translate-x, 0%),
-        var(--media-hotkeys-translate-y, 0%)
-      );
+      transform: translateX(0);
     }
   }
 `;
-
-// Added on first use so pages without an overlay stay untouched. SVG and XML
-// documents have no <head>, so fall back to the root element.
-function ensureOverlayStyles(): void {
-  const parent = document.head ?? document.documentElement;
-  if (!parent || parent.querySelector(OVERLAY_STYLE_SELECTOR)) {
-    return;
-  }
-
-  const style = document.createElement("style");
-  style.dataset.mediaHotkeysOverlay = "true";
-  style.textContent = OVERLAY_STYLES;
-  parent.appendChild(style);
-}
 
 export function showActionOverlay(
   action: MediaAction,
@@ -463,42 +474,41 @@ export function showActionOverlay(
   const content = buildContent(action, media, advancedSettings, options);
   if (!content) return;
 
-  ensureOverlayStyles();
   const anchor = resolveOverlayAnchor(media);
-  const el = getOrCreateOverlay(anchor.kind === "media" ? media : undefined);
-  if (el.parentElement !== anchor.host) {
-    anchor.host.appendChild(el);
+  const { host, box } = getOrCreateOverlay(anchor.kind === "media" ? media : undefined);
+  if (host.parentElement !== anchor.host) {
+    anchor.host.appendChild(host);
   }
-  syncOverlayTopLayer(el, anchor.topLayer === true);
+  syncOverlayTopLayer(host, anchor.topLayer === true);
 
   if (hideTimeout) clearTimeout(hideTimeout);
   if (fadeTimeout) clearTimeout(fadeTimeout);
 
-  el.innerHTML = content;
-  resizeOverlayIcons(el, media);
-  resizeOverlayText(el, media);
-  el.style.display = "flex";
-  el.style.opacity = "1";
-  el.style.visibility = "hidden";
-  el.style.transition = "";
-  el.style.animation = "none";
-  void el.offsetWidth;
-  positionOverAnchor(el, anchor, position);
-  el.style.visibility = "visible";
+  box.innerHTML = content;
+  resizeOverlayIcons(box, media);
+  resizeOverlayText(box, media);
+  setHostStyle(host, "display", "block");
+  setHostStyle(host, "opacity", "1");
+  setHostStyle(host, "visibility", "hidden");
+  setHostStyle(host, "transition", "none");
+  box.style.animation = "none";
+  void host.offsetWidth;
+  positionOverAnchor(host, anchor, position);
+  setHostStyle(host, "visibility", "visible");
 
   if (options.animateSkipDirection) {
     const deltaX = options.animateSkipDirection === "forward" ? "-20%" : "20%";
-    el.style.animation = `media-hotkeys-skip-slide 150ms ease-out`;
-    el.style.setProperty("--media-hotkeys-slide-from-x", deltaX);
+    box.style.animation = `media-hotkeys-skip-slide 150ms ease-out`;
+    box.style.setProperty("--media-hotkeys-slide-from-x", deltaX);
   }
 
   hideTimeout = setTimeout(() => {
-    el.style.transition = `opacity ${advancedSettings.overlayFadeDuration}ms ease-out`;
-    el.style.opacity = "0";
+    setHostStyle(host, "transition", `opacity ${advancedSettings.overlayFadeDuration}ms ease-out`);
+    setHostStyle(host, "opacity", "0");
     fadeTimeout = setTimeout(() => {
-      el.style.display = "none";
-      el.style.visibility = "visible";
-      el.style.animation = "none";
+      setHostStyle(host, "display", "none");
+      setHostStyle(host, "visibility", "visible");
+      box.style.animation = "none";
     }, advancedSettings.overlayFadeDuration);
   }, advancedSettings.overlayVisibleDuration);
 }
