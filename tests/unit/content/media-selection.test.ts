@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { makeInvalidVideo, makeVideo, mockRect, rect, resetContentTestState } from "./helpers.js";
 import { getTargetMedia, handleAction, setSettingsForTests } from "../../../src/content.js";
+import { state } from "../../../src/content/state.js";
 import { DEFAULT_SETTINGS } from "../../../src/storage.js";
 
 beforeEach(() => {
@@ -222,6 +223,7 @@ describe("media target selection", () => {
 
     const overlay = document.createElement("div");
     overlay.id = "media-hotkeys-overlay";
+    overlay.setAttribute("data-media-hotkeys-overlay", "true");
     document.body.appendChild(overlay);
     await Promise.resolve();
 
@@ -230,6 +232,23 @@ describe("media target selection", () => {
     first.remove();
     second.remove();
     overlay.remove();
+  });
+
+  it("treats DOM changes under a page element that shares the overlay's id as page changes", async () => {
+    const pageContainer = document.createElement("div");
+    pageContainer.id = "media-hotkeys-overlay";
+    document.body.appendChild(pageContainer);
+    const video = makeVideo();
+    pageContainer.appendChild(video);
+    await Promise.resolve();
+
+    video.dispatchEvent(new Event("pointerdown"));
+    expect(state.lastInteractedMedia).toBe(video);
+
+    pageContainer.remove();
+    await Promise.resolve();
+
+    expect(state.lastInteractedMedia).toBeNull();
   });
 
   it("prefers audible playing media over muted playing media", () => {

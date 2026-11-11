@@ -23,7 +23,7 @@ export const FULLSCREEN_WRAPPER_ATTR = "data-media-hotkeys-fullscreen-wrapper";
 export const FULLSCREEN_STYLE_ATTR = "data-media-hotkeys-fullscreen";
 export const THEATER_ATTR = "data-media-hotkeys-theater";
 export const THEATER_STYLE_ATTR = "data-media-hotkeys-theater-style";
-export const OVERLAY_STYLE_ATTR = "data-media-hotkeys-overlay";
+export const OVERLAY_ATTR = "data-media-hotkeys-overlay";
 export const OVERLAY_ID = "media-hotkeys-overlay";
 
 // Dispatched by src/player-bridge.ts (main world) on a host that just attached
