@@ -33,3 +33,4 @@ References: Chrome [`content_scripts.world`](https://developer.chrome.com/docs/e
 ## Not yet supported
 
 - **Closed captions.** Native `<track>` captions could be toggled through the `TextTrack` API, but sites like YouTube draw their own caption UI, so a useful CC action would need per-site handling.
+- **Site controls and captions in theater mode.** Theater mode promotes only the `<video>`, so a custom player's own controls and captions stay behind. See [theater-controls.md](theater-controls.md) for how each player behaves and the planned changes.

@@ -85,6 +85,7 @@ Each fact has one home. Update that file in the same change that alters the beha
 | Commands, tooling, test layout, workflow                                | `CONTRIBUTING.md`                         |
 | Rules and recipes for AI agents                                         | `AGENTS.md` (`CLAUDE.md` only imports it) |
 | Third-party player research                                             | `docs/player-compatibility.md`            |
+| Theater mode controls and captions evaluation                           | `docs/theater-controls.md`                |
 
 `tests/unit/docs/docs-consistency.test.ts` runs with `npm test` and fails when:
 

@@ -10,6 +10,7 @@ Read the relevant doc before you change code. Each fact lives in one file, so li
 - [CONTRIBUTING.md](CONTRIBUTING.md): issue and pull request workflow, commands, test layout, debugging, commit style, release
 - [README.md](README.md): user-facing behavior, default hotkeys and settings
 - [docs/player-compatibility.md](docs/player-compatibility.md): third-party player research
+- [docs/theater-controls.md](docs/theater-controls.md): evaluation of theater mode's native versus site controls and captions
 
 ## Workflow
 
