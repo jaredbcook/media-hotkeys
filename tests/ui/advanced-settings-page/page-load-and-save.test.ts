@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   emitStorageChange,
@@ -7,9 +5,15 @@ import {
   loadAdvancedSettingsModule,
   renderAdvancedSettingsDom,
   resetAdvancedSettingsTestState,
+  readShippedNumberInputs,
   saveSettingsMock,
 } from "./helpers.js";
-import { DEFAULT_SETTINGS, type ExtensionSettings } from "../../../src/storage.js";
+import {
+  ADVANCED_NUMBER_LIMITS,
+  DEFAULT_SETTINGS,
+  type ExtensionSettings,
+  type NumericAdvancedSetting,
+} from "../../../src/storage.js";
 
 beforeEach(() => {
   resetAdvancedSettingsTestState();
@@ -97,15 +101,30 @@ describe("advanced settings page: load and save", () => {
   });
 
   it("allows 1 to 600 whole seconds for every skip in the shipped page", () => {
-    const html = readFileSync(
-      path.resolve(__dirname, "../../../src/advanced-settings-page.html"),
-      "utf8",
-    );
-    const page = new DOMParser().parseFromString(html, "text/html");
+    const inputs = new Map(readShippedNumberInputs().map((input) => [input.id, input]));
 
     for (const id of ["seekStepSmall", "seekStepMedium", "seekStepLarge"]) {
-      const input = page.getElementById(id) as HTMLInputElement;
+      const input = inputs.get(id) as HTMLInputElement;
       expect([id, input.min, input.max, input.step]).toEqual([id, "1", "600", "1"]);
+    }
+  });
+
+  it("limits every number input to the range storage clamps its setting to", () => {
+    const inputs = readShippedNumberInputs();
+
+    expect(inputs.map((input) => input.id).sort()).toEqual(
+      Object.keys(ADVANCED_NUMBER_LIMITS).sort(),
+    );
+    for (const input of inputs) {
+      const { min, max } = ADVANCED_NUMBER_LIMITS[input.id as NumericAdvancedSetting];
+      // The volume step is stored as a fraction and shown as a percentage.
+      const scale = input.id === "volumeStep" ? 100 : 1;
+      // Compare the attributes as written: a missing `min` reads as "" and would pass as 0.
+      expect([input.id, input.getAttribute("min"), input.getAttribute("max")]).toEqual([
+        input.id,
+        String(Math.round(min * scale * 1e6) / 1e6),
+        String(Math.round(max * scale * 1e6) / 1e6),
+      ]);
     }
   });
 
