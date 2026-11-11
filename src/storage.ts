@@ -497,28 +497,67 @@ const CONFIGURABLE_ACTIONS = Object.keys(
   DEFAULT_QUICK_SETTINGS.actionKeyBindings,
 ) as ConfigurableMediaAction[];
 
-function isValidAdvancedSetting<Name extends keyof AdvancedSettings>(
+/** The advanced settings that are numbers. */
+export type NumericAdvancedSetting = {
+  [Name in keyof AdvancedSettings]: AdvancedSettings[Name] extends number ? Name : never;
+}[keyof AdvancedSettings];
+
+/**
+ * The range each numeric advanced setting may take, inclusive. Settings are clamped to it as they
+ * are read and saved, whatever put the value in storage. The number inputs on the Advanced Settings
+ * page carry the same limits as `min` and `max` (`volumeStep` is stored as a fraction, the page
+ * shows a percentage), and a test fails if the two differ. Each range holds its default, and the
+ * speed ranges can't cross, so `speedMin` never exceeds `speedMax`.
+ */
+export const ADVANCED_NUMBER_LIMITS: Record<NumericAdvancedSetting, { min: number; max: number }> =
+  {
+    volumeStep: { min: 0.01, max: 0.1 },
+    speedMin: { min: 0.1, max: 1 },
+    speedMax: { min: 1, max: 8 },
+    speedStep: { min: 0.05, max: 1 },
+    seekStepSmall: { min: 1, max: 600 },
+    seekStepMedium: { min: 1, max: 600 },
+    seekStepLarge: { min: 1, max: 600 },
+    overlayVisibleDuration: { min: 0, max: 1000 },
+    overlayFadeDuration: { min: 0, max: 2000 },
+  };
+
+/**
+ * The value to use for a stored or saved advanced setting: a number outside its range is clamped
+ * to the nearest limit, and a value of the wrong type (or a number that isn't finite) is invalid,
+ * which gives undefined. Reading then uses the default for that setting, and a save leaves it out of
+ * the write, so what is already stored stays as it was.
+ */
+function normalizeAdvancedSetting<Name extends keyof AdvancedSettings>(
   name: Name,
   value: unknown,
-): value is AdvancedSettings[Name] {
+): AdvancedSettings[Name] | undefined {
   const defaultValue = DEFAULT_ADVANCED_SETTINGS[name];
   if (typeof value !== typeof defaultValue) {
-    return false;
+    return undefined;
   }
 
   if (typeof value === "number") {
-    return Number.isFinite(value);
+    if (!Number.isFinite(value)) {
+      return undefined;
+    }
+
+    const { min, max } = ADVANCED_NUMBER_LIMITS[name as NumericAdvancedSetting];
+    return Math.min(Math.max(value, min), max) as AdvancedSettings[Name];
   }
 
-  if (name === "overlayPosition") {
-    return OVERLAY_POSITIONS.includes(value as OverlayPosition);
+  if (name === "overlayPosition" && !OVERLAY_POSITIONS.includes(value as OverlayPosition)) {
+    return undefined;
   }
 
-  if (name === "skipOverlayPosition") {
-    return SKIP_OVERLAY_POSITIONS.includes(value as SkipOverlayPosition);
+  if (
+    name === "skipOverlayPosition" &&
+    !SKIP_OVERLAY_POSITIONS.includes(value as SkipOverlayPosition)
+  ) {
+    return undefined;
   }
 
-  return true;
+  return value as AdvancedSettings[Name];
 }
 
 function isValidKeyList(value: unknown): value is string[] {
@@ -534,8 +573,8 @@ function readStoredSettings(stored: Record<string, unknown>): ExtensionSettings 
 
   const advancedSettings: AdvancedSettings = { ...DEFAULT_ADVANCED_SETTINGS };
   for (const name of ADVANCED_SETTING_NAMES) {
-    const value = stored[ADVANCED_KEY_PREFIX + name];
-    if (isValidAdvancedSetting(name, value)) {
+    const value = normalizeAdvancedSetting(name, stored[ADVANCED_KEY_PREFIX + name]);
+    if (value !== undefined) {
       (advancedSettings[name] as AdvancedSettings[typeof name]) = value;
     }
   }
@@ -570,7 +609,7 @@ function readStoredSettings(stored: Record<string, unknown>): ExtensionSettings 
   };
 }
 
-/** The storage key and (normalized) value of every setting a patch names. Invalid values are dropped. */
+/** The storage key and (normalized) value of every setting a patch names. Out-of-range numbers are clamped and other invalid values dropped. */
 function flattenUpdate(update: SettingsUpdate): Map<string, { value: unknown; fallback: unknown }> {
   const entries = new Map<string, { value: unknown; fallback: unknown }>();
 
@@ -593,8 +632,8 @@ function flattenUpdate(update: SettingsUpdate): Map<string, { value: unknown; fa
   }
 
   for (const name of ADVANCED_SETTING_NAMES) {
-    const value = update.advancedSettings?.[name];
-    if (isValidAdvancedSetting(name, value)) {
+    const value = normalizeAdvancedSetting(name, update.advancedSettings?.[name]);
+    if (value !== undefined) {
       entries.set(ADVANCED_KEY_PREFIX + name, { value, fallback: DEFAULT_ADVANCED_SETTINGS[name] });
     }
   }

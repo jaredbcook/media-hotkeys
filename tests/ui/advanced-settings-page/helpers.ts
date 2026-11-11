@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { vi } from "vitest";
 import defaults from "../../../src/settings/defaults.json";
 import type { ExtensionSettings } from "../../../src/storage.js";
@@ -42,25 +44,29 @@ vi.mock("../../../src/storage.js", async () => {
   };
 });
 
+/** The number inputs of the shipped page, so tests run against its real limits rather than a copy. */
+export function readShippedNumberInputs(): HTMLInputElement[] {
+  const html = readFileSync(
+    path.resolve(__dirname, "../../../src/advanced-settings-page.html"),
+    "utf8",
+  );
+  const page = new DOMParser().parseFromString(html, "text/html");
+  return Array.from(page.querySelectorAll<HTMLInputElement>('input[type="number"]'));
+}
+
 export function renderAdvancedSettingsDom(): void {
   Element.prototype.scrollIntoView = vi.fn();
   document.body.innerHTML = `
     <h1>Media Hotkeys <span id="extension-version"></span></h1>
     <a id="report-issue-link" href="https://github.com/jaredbcook/media-hotkeys/issues/new"></a>
-    <input type="number" id="volumeStep" min="1" max="10" step="1" />
-    <input type="number" id="speedMin" min="0.1" max="1" step="0.05" />
-    <input type="number" id="speedMax" min="1" max="8" step="0.25" />
-    <input type="number" id="speedStep" min="0.05" max="1" step="0.05" />
-    <input type="number" id="seekStepSmall" min="1" max="600" step="1" />
-    <input type="number" id="seekStepMedium" min="1" max="600" step="1" />
-    <input type="number" id="seekStepLarge" min="1" max="600" step="1" />
+    ${readShippedNumberInputs()
+      .map((input) => input.outerHTML)
+      .join("\n")}
     <input id="useNumberKeysToJump" type="checkbox" />
     <input id="sumQuickSkips" type="checkbox" />
     <input id="showOverlays" type="checkbox" />
     <select id="overlayPosition"></select>
     <select id="skipOverlayPosition"></select>
-    <input type="number" id="overlayVisibleDuration" min="0" max="1000" step="50" />
-    <input type="number" id="overlayFadeDuration" min="0" max="2000" step="50" />
     <input id="debugLogging" type="checkbox" />
     <section id="site-policies-section">
       <table>
