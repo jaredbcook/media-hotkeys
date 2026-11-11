@@ -286,7 +286,38 @@ function handleStorageChanged(_changes: unknown, areaName: string): void {
   void refreshFromStorage().catch(() => undefined);
 }
 
-function renderActionKeyBindingsTable(): void {
+/** The control in the key table that has keyboard focus: an action's add button, or one key's remove button. */
+type BindingControl = { action: ConfigurableMediaAction; key?: string };
+
+/**
+ * The key table control that has focus, so a rebuild can put focus back on its replacement. Undefined
+ * when focus is elsewhere, which keeps a rebuild from pulling focus out of another control.
+ */
+function findFocusedBindingControl(): BindingControl | undefined {
+  const focused = document.activeElement;
+  if (!(focused instanceof HTMLButtonElement) || !focused.closest("#actions-body")) {
+    return undefined;
+  }
+
+  const action = focused.dataset.action as ConfigurableMediaAction | undefined;
+  return action ? { action, key: focused.dataset.key } : undefined;
+}
+
+/** Focuses the control, or the add button of its action when that remove button is gone. */
+function focusBindingControl(tbody: HTMLElement, control: BindingControl): void {
+  const buttons = Array.from(tbody.querySelectorAll<HTMLButtonElement>("button"));
+  const inAction = buttons.filter((button) => button.dataset.action === control.action);
+  const target =
+    inAction.find((button) => control.key !== undefined && button.dataset.key === control.key) ??
+    inAction.find((button) => button.dataset.key === undefined);
+  target?.focus();
+}
+
+/**
+ * Rebuilds the key table. Focus would otherwise fall back to the page, so the control that had it
+ * (or `focus`, when the edit moves it) is focused again afterwards.
+ */
+function renderActionKeyBindingsTable(focus = findFocusedBindingControl()): void {
   const tbody = document.getElementById("actions-body") as HTMLTableSectionElement;
   tbody.innerHTML = "";
 
@@ -314,6 +345,8 @@ function renderActionKeyBindingsTable(): void {
       const deleteButton = document.createElement("button");
       deleteButton.type = "button";
       deleteButton.className = "delete-button";
+      deleteButton.dataset.action = action;
+      deleteButton.dataset.key = key;
       deleteButton.innerHTML = `<span class="delete-icon" aria-hidden="true">${DELETE}</span>`;
       deleteButton.setAttribute(
         "aria-label",
@@ -330,6 +363,7 @@ function renderActionKeyBindingsTable(): void {
     const addBtn = document.createElement("button");
     addBtn.className = "add-key-button";
     addBtn.type = "button";
+    addBtn.dataset.action = action;
     setAddButtonIdleState(addBtn, action);
     addBtn.addEventListener("click", () => {
       startKeyCapture(action, addBtn);
@@ -339,6 +373,10 @@ function renderActionKeyBindingsTable(): void {
     tdKeys.appendChild(chipsContainer);
     tr.appendChild(tdKeys);
     tbody.appendChild(tr);
+  }
+
+  if (focus) {
+    focusBindingControl(tbody, focus);
   }
 }
 
@@ -600,11 +638,18 @@ function removeKeyFromAction(action: ConfigurableMediaAction, key: string): void
   const nextSettings = structuredClone(currentSettings);
   const config = nextSettings.quickSettings.actionKeyBindings[action];
   const normalizedKey = normalizeHotkeyKey(key);
+  const removedIndex = config.keys.findIndex(
+    (existingKey) => normalizeHotkeyKey(existingKey) === normalizedKey,
+  );
   config.keys = config.keys.filter(
     (existingKey) => normalizeHotkeyKey(existingKey) !== normalizedKey,
   );
+  // The table is about to be rebuilt, so a pending key capture would be left listening for nothing.
+  clearActiveKeyCapture();
   void persistSettings(nextSettings);
-  renderActionKeyBindingsTable();
+  // Focus moves on to the next key's remove button, or to the add button after the last one, so
+  // clearing a row from the keyboard doesn't start over from the top of the page.
+  renderActionKeyBindingsTable({ action, key: config.keys[removedIndex] });
   announceBindingUpdate(`${accessibleKeyLabel(key)} removed from ${ACTION_LABELS[action]}.`);
 }
 
@@ -657,7 +702,7 @@ function startKeyCapture(action: ConfigurableMediaAction, button: HTMLButtonElem
 
     clearActiveKeyCapture();
     void persistSettings(nextSettings);
-    renderActionKeyBindingsTable();
+    renderActionKeyBindingsTable({ action });
 
     const keyLabel = accessibleKeyLabel(key);
     const conflictMessage = conflict
