@@ -215,6 +215,137 @@ describe("theater mode", () => {
   });
 });
 
+describe("theater mode and picture-in-picture", () => {
+  const originalPipElement = Object.getOwnPropertyDescriptor(document, "pictureInPictureElement");
+
+  function setPictureInPictureElement(element: Element | null): void {
+    Object.defineProperty(document, "pictureInPictureElement", {
+      configurable: true,
+      value: element,
+    });
+  }
+
+  afterEach(() => {
+    if (originalPipElement) {
+      Object.defineProperty(document, "pictureInPictureElement", originalPipElement);
+    } else {
+      delete (document as { pictureInPictureElement?: Element | null }).pictureInPictureElement;
+    }
+    delete (document as { exitPictureInPicture?: unknown }).exitPictureInPicture;
+    delete (document as { pictureInPictureEnabled?: boolean }).pictureInPictureEnabled;
+  });
+
+  it("exits theater mode when the theater video enters picture-in-picture", () => {
+    const video = makeVideo();
+    handleAction("toggleTheater", video);
+
+    video.dispatchEvent(new Event("enterpictureinpicture", { bubbles: true }));
+
+    expect(getTheaterMedia()).toBeNull();
+    expect(video.hasAttribute("popover")).toBe(false);
+    expect(video.hasAttribute("data-media-hotkeys-theater")).toBe(false);
+    expect(video.controls).toBe(false);
+  });
+
+  it("keeps theater mode until the picture-in-picture request succeeds", async () => {
+    Object.defineProperty(document, "pictureInPictureEnabled", { configurable: true, value: true });
+    const requestPictureInPicture = vi.fn(() => Promise.reject(new Error("no data yet")));
+    const video = makeVideo({ requestPictureInPicture } as Partial<HTMLVideoElement>);
+    handleAction("toggleTheater", video);
+
+    handleAction("togglePip", video);
+    await Promise.resolve();
+
+    expect(requestPictureInPicture).toHaveBeenCalled();
+    expect(getTheaterMedia()).toBe(video);
+  });
+
+  it("ignores picture-in-picture on other videos", () => {
+    const theaterVideo = makeVideo();
+    const otherVideo = makeVideo();
+    handleAction("toggleTheater", theaterVideo);
+
+    otherVideo.dispatchEvent(new Event("enterpictureinpicture", { bubbles: true }));
+
+    expect(getTheaterMedia()).toBe(theaterVideo);
+  });
+
+  it("stops listening once theater mode ends", () => {
+    const first = makeVideo();
+    const second = makeVideo();
+    handleAction("toggleTheater", first);
+    exitTheater();
+    handleAction("toggleTheater", second);
+
+    first.dispatchEvent(new Event("enterpictureinpicture", { bubbles: true }));
+
+    expect(getTheaterMedia()).toBe(second);
+  });
+
+  it("brings the video back from picture-in-picture when entering theater mode", () => {
+    const exitPictureInPicture = vi.fn(async () => undefined);
+    Object.defineProperty(document, "exitPictureInPicture", {
+      configurable: true,
+      value: exitPictureInPicture,
+    });
+    const video = makeVideo();
+    setPictureInPictureElement(video);
+
+    handleAction("toggleTheater", video);
+
+    expect(getTheaterMedia()).toBe(video);
+    expect(exitPictureInPicture).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves picture-in-picture alone when theater mode cannot start", () => {
+    const exitPictureInPicture = vi.fn(async () => undefined);
+    Object.defineProperty(document, "exitPictureInPicture", {
+      configurable: true,
+      value: exitPictureInPicture,
+    });
+    const video = makeVideo();
+    setPictureInPictureElement(video);
+    delete (HTMLElement.prototype as Partial<HTMLElement>).showPopover;
+
+    handleAction("toggleTheater", video);
+
+    expect(getTheaterMedia()).toBeNull();
+    expect(exitPictureInPicture).not.toHaveBeenCalled();
+  });
+
+  it("does not touch picture-in-picture when nothing is in it", () => {
+    const exitPictureInPicture = vi.fn(async () => undefined);
+    Object.defineProperty(document, "exitPictureInPicture", {
+      configurable: true,
+      value: exitPictureInPicture,
+    });
+
+    handleAction("toggleTheater", makeVideo());
+
+    expect(exitPictureInPicture).not.toHaveBeenCalled();
+  });
+
+  it("tells the parent frame to shrink the iframe when a framed video enters picture-in-picture", () => {
+    const parentWindow = { postMessage: vi.fn() } as unknown as Window;
+    Object.defineProperty(window, "parent", { configurable: true, value: parentWindow });
+    try {
+      const video = makeVideo();
+      handleAction("toggleTheater", video);
+      (parentWindow.postMessage as ReturnType<typeof vi.fn>).mockClear();
+
+      video.dispatchEvent(new Event("enterpictureinpicture", { bubbles: true }));
+
+      expect(getTheaterMedia()).toBeNull();
+      expect(parentWindow.postMessage).toHaveBeenCalledWith(
+        { source: "media-hotkeys-extension", type: "MEDIA_HOTKEYS_THEATER", active: false },
+        "*",
+      );
+    } finally {
+      Object.defineProperty(window, "parent", { configurable: true, value: window });
+    }
+  });
+});
+
 describe("theater mode across frames", () => {
   type ChildFrame = {
     iframe: HTMLIFrameElement;
