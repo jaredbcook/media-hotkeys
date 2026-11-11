@@ -49,7 +49,7 @@ These aren't caught by tests unless marked. ARCHITECTURE.md#invariants explains 
 - Don't add generic button clicking for custom players. Only play buttons are clicked.
 - Shared content-script state goes in `src/content/state.ts`. State used by one module stays module-private. Plain module state, no classes.
 - Named exports only in `src/`. TypeScript strict mode.
-- Never write to `storage.sync` directly. Use `saveSettings` from `src/storage.ts`, which normalizes and migrates.
+- Never write to `storage.sync` directly. Use `saveSettings` from `src/storage.ts`, which normalizes settings.
 - Safari is not a build target. Never add it to the default build, package, or CI path.
 - Don't commit `dist/`. Built manifests take `version` from `package.json`, so never set it in `manifest.template.json`.
 

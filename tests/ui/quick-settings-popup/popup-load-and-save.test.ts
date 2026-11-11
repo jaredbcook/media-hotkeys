@@ -21,9 +21,6 @@ async function flush(): Promise<void> {
 function settingsWithPolicies(sitePolicies: SitePolicy[]): ExtensionSettings {
   const settings = structuredClone(DEFAULT_SETTINGS);
   settings.siteSettings.sitePolicies = sitePolicies;
-  settings.siteSettings.disabledUrlPatterns = sitePolicies
-    .filter((policy) => policy.policy === "disabled")
-    .map((policy) => policy.pattern);
   return settings;
 }
 
@@ -33,9 +30,6 @@ function expectSavedPolicies(sitePolicies: SitePolicy[]): void {
     advancedSettings: DEFAULT_SETTINGS.advancedSettings,
     siteSettings: {
       sitePolicies,
-      disabledUrlPatterns: sitePolicies
-        .filter((policy) => policy.policy === "disabled")
-        .map((policy) => policy.pattern),
     },
   });
 }

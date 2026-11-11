@@ -5,14 +5,12 @@ import {
   DEFAULT_QUICK_SETTINGS,
   DEFAULT_SITE_SETTINGS,
   DEFAULT_SETTINGS,
-  findMatchingDisabledUrlPattern,
   findMatchingSitePolicy,
   getSettings,
   getDisabledSitePrefillForUrl,
   getSitePolicySectionPatternForUrl,
   isUrlDisabledBySiteSettings,
   normalizeDisabledUrlPattern,
-  normalizeDisabledUrlPatterns,
   normalizeSitePolicies,
   saveSettings,
 } from "../../../src/storage.js";
@@ -51,24 +49,34 @@ describe("settings storage", () => {
     );
   });
 
-  it("normalizes legacy flat settings into the grouped structure", async () => {
+  it("ignores unknown top-level and nested keys in storage and drops nested extras on save", async () => {
     Object.assign(store, {
-      hotkeysEnabled: false,
-      actions: {
-        togglePlayPause: {
-          keys: ["x"],
-        },
+      unknownTopLevelKey: "ignored",
+      siteSettings: {
+        sitePolicies: [{ pattern: "youtube.com", policy: "disabled", embedsPolicy: "inherit" }],
+        extraSiteKey: ["youtube.com"],
       },
-      showOverlays: false,
-      debugLogging: true,
     });
 
     const settings = await getSettings();
 
-    expect(settings.quickSettings.hotkeysEnabled).toBe(false);
-    expect(settings.quickSettings.actionKeyBindings.togglePlayPause.keys).toEqual(["x"]);
-    expect(settings.advancedSettings.showOverlays).toBe(false);
-    expect(settings.advancedSettings.debugLogging).toBe(true);
+    expect(settings).toEqual({
+      quickSettings: DEFAULT_QUICK_SETTINGS,
+      advancedSettings: DEFAULT_ADVANCED_SETTINGS,
+      siteSettings: {
+        sitePolicies: [{ pattern: "youtube.com", policy: "disabled", embedsPolicy: "inherit" }],
+      },
+    });
+
+    await saveSettings({
+      siteSettings: {
+        sitePolicies: [{ pattern: "vimeo.com", policy: "disabled", embedsPolicy: "inherit" }],
+      },
+    });
+
+    expect(store.siteSettings).toEqual({
+      sitePolicies: [{ pattern: "vimeo.com", policy: "disabled", embedsPolicy: "inherit" }],
+    });
   });
 
   it("keeps a skip of 600 seconds through save and load", async () => {
@@ -142,6 +150,28 @@ describe("settings storage", () => {
     expect(settings.advancedSettings.showOverlays).toBe(true);
   });
 
+  it("preserves existing custom action key bindings when saving a partial binding update", async () => {
+    await saveSettings({
+      quickSettings: {
+        actionKeyBindings: {
+          togglePlayPause: { keys: [" "] },
+        },
+      },
+    });
+
+    await saveSettings({
+      quickSettings: {
+        actionKeyBindings: {
+          toggleMute: { keys: ["u"] },
+        },
+      },
+    });
+
+    const settings = await getSettings();
+    expect(settings.quickSettings.actionKeyBindings.togglePlayPause.keys).toEqual([" "]);
+    expect(settings.quickSettings.actionKeyBindings.toggleMute.keys).toEqual(["u"]);
+  });
+
   it("does not give a newly added default key to an action when the user already bound it", async () => {
     Object.assign(store, {
       quickSettings: {
@@ -157,49 +187,7 @@ describe("settings storage", () => {
     expect(settings.quickSettings.actionKeyBindings.togglePip.keys).toEqual(["i"]);
   });
 
-  it("writes grouped settings when saving legacy flat updates", async () => {
-    await saveSettings({
-      hotkeysEnabled: false,
-      showOverlays: false,
-      actions: {
-        togglePlayPause: {
-          keys: ["x"],
-        },
-      },
-    });
-
-    expect(store.quickSettings).toMatchObject({
-      hotkeysEnabled: false,
-      actionKeyBindings: {
-        togglePlayPause: {
-          keys: ["x"],
-        },
-      },
-    });
-    expect(store.advancedSettings).toMatchObject({
-      showOverlays: false,
-    });
-  });
-
-  it("normalizes disabled URL patterns and drops invalid entries", async () => {
-    await saveSettings({
-      siteSettings: {
-        disabledUrlPatterns: [
-          "https://www.youtube.com/shorts?feature=share#clip",
-          "youtube.com/shorts/",
-          "not a site",
-        ],
-      },
-    });
-
-    const settings = await getSettings();
-    expect(settings.siteSettings.disabledUrlPatterns).toEqual(["youtube.com/shorts"]);
-    expect(settings.siteSettings.sitePolicies).toEqual([
-      { pattern: "youtube.com/shorts", policy: "disabled", embedsPolicy: "inherit" },
-    ]);
-  });
-
-  it("normalizes site policies and derives legacy disabled URL patterns", async () => {
+  it("normalizes site policies and drops invalid entries", async () => {
     await saveSettings({
       siteSettings: {
         sitePolicies: [
@@ -219,10 +207,9 @@ describe("settings storage", () => {
       { pattern: "vimeo.com", policy: "disabled", embedsPolicy: "inherit" },
       { pattern: "youtube.com/shorts", policy: "enabled", embedsPolicy: "ignore" },
     ]);
-    expect(settings.siteSettings.disabledUrlPatterns).toEqual(["vimeo.com"]);
   });
 
-  it("matches disabled URL patterns against top-level URLs", () => {
+  it("matches disabled site policies against top-level URLs", () => {
     const siteSettings = {
       sitePolicies: [
         {
@@ -232,7 +219,6 @@ describe("settings storage", () => {
         },
         { pattern: "vimeo.com", policy: "disabled" as const, embedsPolicy: "inherit" as const },
       ],
-      disabledUrlPatterns: ["youtube.com/shorts", "vimeo.com"],
     };
 
     expect(isUrlDisabledBySiteSettings("https://www.youtube.com/shorts/abc", siteSettings)).toBe(
@@ -256,7 +242,6 @@ describe("settings storage", () => {
           embedsPolicy: "inherit" as const,
         },
       ],
-      disabledUrlPatterns: ["youtube.com"],
     };
 
     expect(findMatchingSitePolicy("https://www.youtube.com/shorts/abc", siteSettings)?.policy).toBe(
@@ -306,14 +291,15 @@ describe("settings storage", () => {
     );
     expect(normalizeDisabledUrlPattern("youtube.com/shorts/")).toBe("youtube.com/shorts");
     expect(normalizeDisabledUrlPattern("not a site")).toBeNull();
-    expect(normalizeDisabledUrlPatterns(["youtube.com", "https://www.youtube.com/"])).toEqual([
-      "youtube.com",
-    ]);
   });
 
-  it("finds a matching disabled pattern and prefill domain for a URL", () => {
+  it("finds a matching site policy and prefill domain for a URL", () => {
     expect(
-      findMatchingDisabledUrlPattern("https://www.youtube.com/shorts/abc", ["youtube.com/shorts"]),
+      findMatchingSitePolicy("https://www.youtube.com/shorts/abc", {
+        sitePolicies: [
+          { pattern: "youtube.com/shorts", policy: "disabled", embedsPolicy: "inherit" },
+        ],
+      })?.pattern,
     ).toBe("youtube.com/shorts");
     expect(getDisabledSitePrefillForUrl("https://www.youtube.com/shorts/abc")).toBe("youtube.com");
     expect(getSitePolicySectionPatternForUrl("https://www.youtube.com/shorts/abc")).toBe(
@@ -348,13 +334,10 @@ describe("settings storage", () => {
           embedsPolicy: "inherit" as const,
         },
       ],
-      disabledUrlPatterns: ["alice.github.io"],
     };
     expect(isUrlDisabledBySiteSettings("https://alice.github.io/video", siteSettings)).toBe(true);
     expect(isUrlDisabledBySiteSettings("https://bob.github.io/video", siteSettings)).toBe(false);
-    expect(findMatchingDisabledUrlPattern("https://bob.github.io/", ["alice.github.io"])).toBe(
-      undefined,
-    );
+    expect(findMatchingSitePolicy("https://bob.github.io/", siteSettings)).toBeUndefined();
   });
 
   it("drops rules for a whole shared hosting platform", async () => {

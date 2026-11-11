@@ -87,8 +87,6 @@ export interface SitePolicy {
 
 export interface SiteSettings {
   sitePolicies: SitePolicy[];
-  /** @deprecated use sitePolicies */
-  disabledUrlPatterns: string[];
 }
 
 export interface AdvancedSettings {
@@ -115,16 +113,13 @@ export interface ExtensionSettings {
   siteSettings: SiteSettings;
 }
 
-export interface SettingsUpdate extends Partial<AdvancedSettings> {
+export interface SettingsUpdate {
   quickSettings?: {
     hotkeysEnabled?: boolean;
     actionKeyBindings?: Partial<Record<ConfigurableMediaAction, ActionConfig>>;
   };
   advancedSettings?: Partial<AdvancedSettings>;
   siteSettings?: Partial<SiteSettings>;
-  actions?: Partial<Record<ConfigurableMediaAction, ActionConfig>>;
-  hotkeysEnabled?: boolean;
-  globalSettings?: Partial<AdvancedSettings>;
 }
 
 const NON_OVERLAY_ACTIONS = new Set<MediaAction>([
@@ -141,7 +136,6 @@ export const DEFAULT_SETTINGS: ExtensionSettings = defaults as ExtensionSettings
 export const DEFAULT_QUICK_SETTINGS: QuickSettings = DEFAULT_SETTINGS.quickSettings;
 export const DEFAULT_ADVANCED_SETTINGS: AdvancedSettings = DEFAULT_SETTINGS.advancedSettings;
 export const DEFAULT_SITE_SETTINGS: SiteSettings = DEFAULT_SETTINGS.siteSettings;
-const ADVANCED_SETTING_KEYS = Object.keys(DEFAULT_ADVANCED_SETTINGS) as (keyof AdvancedSettings)[];
 
 export function actionSupportsOverlay(action: MediaAction): boolean {
   return !NON_OVERLAY_ACTIONS.has(action);
@@ -161,11 +155,10 @@ function isDirectionalSkipAction(
 
 function mergeActionKeyBindings(
   storedBindings?: Partial<Record<ConfigurableMediaAction, Partial<ActionConfig>>>,
-  legacyBindings?: Partial<Record<ConfigurableMediaAction, Partial<ActionConfig>>>,
 ): Record<ConfigurableMediaAction, ActionConfig> {
   const normalizedBindings = {} as Record<ConfigurableMediaAction, ActionConfig>;
   const userKeys = new Set(
-    [...Object.values(legacyBindings ?? {}), ...Object.values(storedBindings ?? {})]
+    Object.values(storedBindings ?? {})
       .flatMap((binding) => binding?.keys ?? [])
       .map(normalizeHotkeyKey),
   );
@@ -174,7 +167,7 @@ function mergeActionKeyBindings(
     DEFAULT_QUICK_SETTINGS.actionKeyBindings,
   ) as ConfigurableMediaAction[]) {
     const defaultBinding = DEFAULT_QUICK_SETTINGS.actionKeyBindings[action];
-    const hasUserKeys = Boolean(legacyBindings?.[action]?.keys || storedBindings?.[action]?.keys);
+    const hasUserKeys = Boolean(storedBindings?.[action]?.keys);
     normalizedBindings[action] = {
       ...defaultBinding,
       // An action added after the user saved bindings must not take over a key
@@ -182,20 +175,11 @@ function mergeActionKeyBindings(
       keys: hasUserKeys
         ? defaultBinding.keys
         : defaultBinding.keys.filter((key) => !userKeys.has(normalizeHotkeyKey(key))),
-      ...legacyBindings?.[action],
       ...storedBindings?.[action],
     };
   }
 
   return normalizedBindings;
-}
-
-function pickAdvancedSettings(settings: Partial<AdvancedSettings>): Partial<AdvancedSettings> {
-  return Object.fromEntries(
-    ADVANCED_SETTING_KEYS.filter((key) => Object.prototype.hasOwnProperty.call(settings, key)).map(
-      (key) => [key, settings[key]],
-    ),
-  ) as Partial<AdvancedSettings>;
 }
 
 function isLocalHostname(hostname: string): boolean {
@@ -253,16 +237,6 @@ export function normalizeDisabledUrlPattern(value: string): string | null {
   return `${domain}${normalizePath(parsedUrl.pathname)}`;
 }
 
-export function normalizeDisabledUrlPatterns(patterns: string[]): string[] {
-  return Array.from(
-    new Set(
-      patterns
-        .map((pattern) => normalizeDisabledUrlPattern(pattern))
-        .filter((pattern): pattern is string => pattern !== null),
-    ),
-  );
-}
-
 function parseNormalizedSitePattern(pattern: string): { domain: string; path: string } | null {
   const normalizedPattern = normalizeDisabledUrlPattern(pattern);
   if (!normalizedPattern) {
@@ -292,12 +266,7 @@ function getSitePatternSpecificity(pattern: string): number {
   return parsedPattern.path.length;
 }
 
-type StoredSitePolicy = Partial<SitePolicy> & {
-  /** @deprecated use embedsPolicy */
-  appliesToEmbeds?: boolean;
-};
-
-function normalizeSitePolicy(policy: StoredSitePolicy): SitePolicy | null {
+function normalizeSitePolicy(policy: Partial<SitePolicy>): SitePolicy | null {
   const pattern = normalizeDisabledUrlPattern(policy.pattern ?? "");
   if (!pattern || !["disabled", "enabled"].includes(policy.policy ?? "")) {
     return null;
@@ -315,7 +284,7 @@ function normalizeSitePolicy(policy: StoredSitePolicy): SitePolicy | null {
   };
 }
 
-export function normalizeSitePolicies(policies: StoredSitePolicy[]): SitePolicy[] {
+export function normalizeSitePolicies(policies: Partial<SitePolicy>[]): SitePolicy[] {
   const seen = new Set<string>();
   const normalizedPolicies: SitePolicy[] = [];
 
@@ -334,18 +303,6 @@ export function normalizeSitePolicies(policies: StoredSitePolicy[]): SitePolicy[
   }
 
   return [...normalizedPolicies].sort((left, right) => left.pattern.localeCompare(right.pattern));
-}
-
-function sitePoliciesFromDisabledUrlPatterns(patterns: string[]): SitePolicy[] {
-  return normalizeDisabledUrlPatterns(patterns).map((pattern) => ({
-    pattern,
-    policy: "disabled",
-    embedsPolicy: "inherit",
-  }));
-}
-
-function getDisabledUrlPatternsFromSitePolicies(policies: SitePolicy[]): string[] {
-  return policies.filter((policy) => policy.policy === "disabled").map((policy) => policy.pattern);
 }
 
 export function getDisabledSitePrefillForUrl(url: string): string | null {
@@ -371,37 +328,6 @@ export function getSitePolicySectionPatternForUrl(url: string): string | null {
   // Only a first segment followed by a slash is a section (/shorts/abc); /watch?v=abc is a page.
   const firstSegment = /^\/+([^/]+)\//.exec(parsedUrl.pathname)?.[1];
   return firstSegment ? `${domain}/${firstSegment}` : domain;
-}
-
-export function findMatchingDisabledUrlPattern(
-  url: string,
-  disabledUrlPatterns: string[],
-): string | undefined {
-  const parsedUrl = parseUrlishValue(url);
-  if (!parsedUrl || !["http:", "https:"].includes(parsedUrl.protocol)) {
-    return undefined;
-  }
-
-  const targetDomain = getRegistrableDomain(parsedUrl.hostname);
-  if (!targetDomain) {
-    return undefined;
-  }
-
-  const targetPath = normalizePath(parsedUrl.pathname);
-  const normalizedPatterns = normalizeDisabledUrlPatterns(disabledUrlPatterns);
-
-  return normalizedPatterns.find((pattern) => {
-    const parsedPattern = parseNormalizedSitePattern(pattern);
-    if (!parsedPattern || parsedPattern.domain !== targetDomain) {
-      return false;
-    }
-
-    if (!parsedPattern.path) {
-      return true;
-    }
-
-    return targetPath === parsedPattern.path || targetPath.startsWith(`${parsedPattern.path}/`);
-  });
 }
 
 export function findMatchingSitePolicy(
@@ -456,48 +382,27 @@ export function isUrlDisabledBySiteSettings(url: string, siteSettings: SiteSetti
   return findMatchingSitePolicy(url, siteSettings)?.policy === "disabled";
 }
 
-function normalizeSettings(
-  settings: Partial<ExtensionSettings> & SettingsUpdate,
-): ExtensionSettings {
-  const nestedQuickSettings: Partial<QuickSettings> & {
-    actionKeyBindings?: Partial<Record<ConfigurableMediaAction, ActionConfig>>;
-  } = settings.quickSettings ?? {};
-  const nestedAdvancedSettings: Partial<AdvancedSettings> = settings.advancedSettings ?? {};
-  const nestedSiteSettings: Partial<SiteSettings> = settings.siteSettings ?? {};
-  const legacyGlobalSettings = settings.globalSettings ?? {};
-  const legacyAdvancedSettings = pickAdvancedSettings(settings);
+function normalizeSettings(settings: SettingsUpdate): ExtensionSettings {
+  const nestedQuickSettings = settings.quickSettings ?? {};
+  const nestedAdvancedSettings = settings.advancedSettings ?? {};
+  const nestedSiteSettings = settings.siteSettings ?? {};
 
   const quickSettings: QuickSettings = {
     ...DEFAULT_QUICK_SETTINGS,
     ...nestedQuickSettings,
-    hotkeysEnabled:
-      nestedQuickSettings.hotkeysEnabled ??
-      settings.hotkeysEnabled ??
-      DEFAULT_QUICK_SETTINGS.hotkeysEnabled,
-    actionKeyBindings: mergeActionKeyBindings(
-      nestedQuickSettings.actionKeyBindings,
-      settings.actions,
-    ),
+    hotkeysEnabled: nestedQuickSettings.hotkeysEnabled ?? DEFAULT_QUICK_SETTINGS.hotkeysEnabled,
+    actionKeyBindings: mergeActionKeyBindings(nestedQuickSettings.actionKeyBindings),
   };
 
   const advancedSettings: AdvancedSettings = {
     ...DEFAULT_ADVANCED_SETTINGS,
-    ...legacyAdvancedSettings,
-    ...legacyGlobalSettings,
     ...nestedAdvancedSettings,
   };
 
-  const sitePolicies = normalizeSitePolicies(
-    nestedSiteSettings.sitePolicies ??
-      sitePoliciesFromDisabledUrlPatterns(
-        nestedSiteSettings.disabledUrlPatterns ?? DEFAULT_SITE_SETTINGS.disabledUrlPatterns,
-      ),
-  );
   const siteSettings: SiteSettings = {
-    ...DEFAULT_SITE_SETTINGS,
-    ...nestedSiteSettings,
-    sitePolicies,
-    disabledUrlPatterns: getDisabledUrlPatternsFromSitePolicies(sitePolicies),
+    sitePolicies: normalizeSitePolicies(
+      nestedSiteSettings.sitePolicies ?? DEFAULT_SITE_SETTINGS.sitePolicies,
+    ),
   };
 
   return {
@@ -511,41 +416,24 @@ function mergeSettings(
   baseSettings: ExtensionSettings,
   settingsUpdate: SettingsUpdate,
 ): ExtensionSettings {
-  const legacyAdvancedSettings = pickAdvancedSettings(settingsUpdate);
-  const updatedSiteSettings =
-    settingsUpdate.siteSettings?.disabledUrlPatterns && !settingsUpdate.siteSettings.sitePolicies
-      ? {
-          ...settingsUpdate.siteSettings,
-          sitePolicies: sitePoliciesFromDisabledUrlPatterns(
-            settingsUpdate.siteSettings.disabledUrlPatterns,
-          ),
-        }
-      : settingsUpdate.siteSettings;
-
   return normalizeSettings({
-    ...baseSettings,
-    ...settingsUpdate,
     quickSettings: {
       ...baseSettings.quickSettings,
       ...settingsUpdate.quickSettings,
       hotkeysEnabled:
-        settingsUpdate.quickSettings?.hotkeysEnabled ??
-        settingsUpdate.hotkeysEnabled ??
-        baseSettings.quickSettings.hotkeysEnabled,
-      actionKeyBindings: mergeActionKeyBindings(
-        settingsUpdate.quickSettings?.actionKeyBindings,
-        settingsUpdate.actions,
-      ),
+        settingsUpdate.quickSettings?.hotkeysEnabled ?? baseSettings.quickSettings.hotkeysEnabled,
+      actionKeyBindings: {
+        ...baseSettings.quickSettings.actionKeyBindings,
+        ...settingsUpdate.quickSettings?.actionKeyBindings,
+      },
     },
     advancedSettings: {
       ...baseSettings.advancedSettings,
-      ...legacyAdvancedSettings,
-      ...settingsUpdate.globalSettings,
       ...settingsUpdate.advancedSettings,
     },
     siteSettings: {
       ...baseSettings.siteSettings,
-      ...updatedSiteSettings,
+      ...settingsUpdate.siteSettings,
     },
   });
 }
@@ -632,7 +520,7 @@ export function resolveActionOverlaySettings(
 
 export async function getSettings(): Promise<ExtensionSettings> {
   const result = await browser.storage.sync.get(null);
-  return normalizeSettings(result as Partial<ExtensionSettings> & SettingsUpdate);
+  return normalizeSettings(result as SettingsUpdate);
 }
 
 export async function saveSettings(settingsUpdate: SettingsUpdate): Promise<void> {
