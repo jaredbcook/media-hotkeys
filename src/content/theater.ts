@@ -130,6 +130,21 @@ function restoreElement(session: TheaterSession): void {
   }
 }
 
+// Theater mode and picture-in-picture are exclusive. Once the theater video
+// plays in the PiP window, its backdrop would only block the page in front of
+// an empty popover, however PiP was started (hotkey, browser button, page
+// controls).
+function handleTheaterPictureInPicture(): void {
+  exitTheater();
+}
+
+function exitPictureInPicture(): void {
+  if (document.pictureInPictureElement && typeof document.exitPictureInPicture === "function") {
+    // Only rejects when PiP already closed; nothing to report.
+    void document.exitPictureInPicture().catch(() => undefined);
+  }
+}
+
 function handleTheaterToggle(event: Event): void {
   if ((event as ToggleEvent).newState === "closed") {
     exitTheater();
@@ -221,6 +236,8 @@ function promote(element: TheaterElement, childWindow: Window | null): boolean {
   element.addEventListener("toggle", handleTheaterToggle);
   if (element instanceof HTMLIFrameElement) {
     element.addEventListener("load", handleTheaterFrameLoad);
+  } else {
+    element.addEventListener("enterpictureinpicture", handleTheaterPictureInPicture);
   }
   session.observer.observe(document, { childList: true, subtree: true });
   const root = element.getRootNode();
@@ -232,7 +249,12 @@ function promote(element: TheaterElement, childWindow: Window | null): boolean {
 }
 
 export function enterTheater(media: HTMLVideoElement): boolean {
-  return promote(media, null);
+  const entered = promote(media, null);
+  if (entered) {
+    // The video can only be in one place: bring it back from the PiP window.
+    exitPictureInPicture();
+  }
+  return entered;
 }
 
 /**
@@ -278,6 +300,7 @@ export function exitTheater({ restoreScroll = true }: { restoreScroll?: boolean 
   session.observer.disconnect();
   session.element.removeEventListener("toggle", handleTheaterToggle);
   session.element.removeEventListener("load", handleTheaterFrameLoad);
+  session.element.removeEventListener("enterpictureinpicture", handleTheaterPictureInPicture);
   restoreElement(session);
 
   // While promoted, the element leaves normal flow; if the page got shorter

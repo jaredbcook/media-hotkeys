@@ -37,6 +37,38 @@ export async function createMedia(
   await waitForMediaLoaded(page, id);
 }
 
+/**
+ * Gives a video element a live video track, which picture-in-picture needs
+ * (the fixture media has none). The element shows a canvas stream with native controls.
+ */
+export async function attachVideoTrack(target: Page | Frame, id: string): Promise<void> {
+  await target.evaluate(async (mediaId) => {
+    const video = document.getElementById(mediaId) as HTMLVideoElement;
+    const canvas = document.createElement("canvas");
+    canvas.width = 320;
+    canvas.height = 180;
+    const context = canvas.getContext("2d")!;
+    const paint = (): void => {
+      context.fillStyle = `hsl(${Date.now() % 360}, 60%, 40%)`;
+      context.fillRect(0, 0, canvas.width, canvas.height);
+    };
+    paint();
+    setInterval(paint, 50);
+    video.removeAttribute("src");
+    video.srcObject = canvas.captureStream(20);
+    // Native controls keep the extension from treating the stream as an ambient
+    // loop, which a muted video without controls would be.
+    video.controls = true;
+    await new Promise<void>((resolve) => {
+      if (video.readyState >= 1) {
+        resolve();
+      } else {
+        video.addEventListener("loadedmetadata", () => resolve(), { once: true });
+      }
+    });
+  }, id);
+}
+
 export async function createEditable(
   page: Page,
   kind: "input" | "textarea" | "select" | "contenteditable",

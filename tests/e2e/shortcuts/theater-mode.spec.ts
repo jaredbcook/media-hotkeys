@@ -1,5 +1,5 @@
 import { expect, test } from "../setup.js";
-import { createMedia } from "../fixtures.js";
+import { attachVideoTrack, createMedia } from "../fixtures.js";
 
 test.beforeEach(async ({ page, server }) => {
   await page.goto(server.getUrl("/"));
@@ -278,4 +278,88 @@ test("pressing t with focus inside a nested embed enlarges every level", async (
   await expect.poll(() => readPromotion(page, "#outer-frame")).toEqual(fullViewport);
   await expect.poll(() => readPromotion(middle, "#video-frame")).toEqual(fullViewport);
   await expect.poll(() => readPromotion(leaf, "#frame-video")).toEqual(fullViewport);
+});
+
+async function readPictureInPictureId(
+  target: import("@playwright/test").Page | import("@playwright/test").Frame,
+): Promise<string | null> {
+  return target.evaluate(() => document.pictureInPictureElement?.id ?? null);
+}
+
+test("entering picture-in-picture with the hotkey exits theater mode", async ({ page }) => {
+  await createMedia(page, "theater-video", {}, "video");
+  await attachVideoTrack(page, "theater-video");
+  await page.locator("#theater-video").focus();
+  await page.keyboard.press("t");
+  expect((await readTheaterSnapshot(page)).open).toBe(true);
+
+  await page.keyboard.press("i");
+
+  await expect.poll(() => readPictureInPictureId(page)).toBe("theater-video");
+  const snapshot = await readTheaterSnapshot(page);
+  expect(snapshot.open).toBe(false);
+  expect(snapshot.rect.width).toBe(320);
+  expect(snapshot.topLeftHitId).not.toBe("theater-video");
+  expect(
+    await page.evaluate(() => document.getElementById("theater-video")!.hasAttribute("popover")),
+  ).toBe(false);
+});
+
+test("picture-in-picture started by the page exits theater mode", async ({ page }) => {
+  await createMedia(page, "theater-video", {}, "video");
+  await attachVideoTrack(page, "theater-video");
+  await page.locator("#theater-video").focus();
+  await page.keyboard.press("t");
+  expect((await readTheaterSnapshot(page)).open).toBe(true);
+
+  // The key press is the user activation the request needs, as a click on the
+  // page's own control would be. The browser's button fires the same event.
+  await page.evaluate(() =>
+    (document.getElementById("theater-video") as HTMLVideoElement).requestPictureInPicture(),
+  );
+
+  await expect.poll(async () => (await readTheaterSnapshot(page)).open).toBe(false);
+  expect(await readPictureInPictureId(page)).toBe("theater-video");
+});
+
+test("a rejected picture-in-picture request keeps theater mode open", async ({ page }) => {
+  // The fixture media has no video track, so the browser refuses PiP.
+  await createMedia(page, "theater-video", {}, "video");
+  await page.locator("#theater-video").focus();
+  await page.keyboard.press("t");
+
+  await page.keyboard.press("i");
+  await page.waitForTimeout(300);
+
+  expect((await readTheaterSnapshot(page)).open).toBe(true);
+  expect(await readPictureInPictureId(page)).toBeNull();
+});
+
+test("entering theater mode brings the video back from picture-in-picture", async ({ page }) => {
+  await createMedia(page, "theater-video", {}, "video");
+  await attachVideoTrack(page, "theater-video");
+  await page.locator("#theater-video").focus();
+  await page.keyboard.press("i");
+  await expect.poll(() => readPictureInPictureId(page)).toBe("theater-video");
+
+  await page.keyboard.press("t");
+
+  await expect.poll(() => readPictureInPictureId(page)).toBeNull();
+  expect((await readTheaterSnapshot(page)).open).toBe(true);
+});
+
+test("picture-in-picture exits iframe theater mode in both frames", async ({ page, server }) => {
+  await page.goto(server.getUrl("/page-with-video-iframe"));
+  const frame = await waitForFrame(page, "/iframe-video");
+  await attachVideoTrack(frame, "frame-video");
+  await page.keyboard.press("t");
+  await expect.poll(async () => (await readPromotion(page, "#video-frame")).promoted).toBe(true);
+  await expect.poll(async () => (await readPromotion(frame, "#frame-video")).promoted).toBe(true);
+
+  await page.keyboard.press("i");
+
+  await expect.poll(() => readPictureInPictureId(frame)).toBe("frame-video");
+  await expect.poll(async () => (await readPromotion(page, "#video-frame")).promoted).toBe(false);
+  await expect.poll(async () => (await readPromotion(frame, "#frame-video")).promoted).toBe(false);
+  expect(await readPromotion(page, "#video-frame")).toMatchObject({ width: 480, height: 270 });
 });
