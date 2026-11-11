@@ -477,7 +477,6 @@ export function settingsEqual(left: ExtensionSettings, right: ExtensionSettings)
 
 export function resolveActionOverlaySettings(
   action: MediaAction,
-  _actionConfig: ActionConfig,
   advancedSettings: AdvancedSettings,
 ): { overlayVisible: boolean; overlayPosition: OverlayPosition } {
   if (!actionSupportsOverlay(action)) {

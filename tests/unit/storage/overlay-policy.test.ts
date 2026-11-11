@@ -25,48 +25,38 @@ describe("overlay policy helpers", () => {
   });
 
   it("turns overlays off when showOverlays is false", () => {
-    const resolved = resolveActionOverlaySettings(
-      "togglePlayPause",
-      { keys: ["k"] },
-      { ...DEFAULT_ADVANCED_SETTINGS, showOverlays: false },
-    );
+    const resolved = resolveActionOverlaySettings("togglePlayPause", {
+      ...DEFAULT_ADVANCED_SETTINGS,
+      showOverlays: false,
+    });
 
     expect(resolved.overlayVisible).toBe(false);
     expect(resolved.overlayPosition).toBe(DEFAULT_ADVANCED_SETTINGS.overlayPosition);
   });
 
   it("uses left and right positions for skip actions when configured", () => {
-    const resolved = resolveActionOverlaySettings(
-      "seekForwardSmall",
-      { keys: ["ArrowRight"] },
-      { ...DEFAULT_ADVANCED_SETTINGS, skipOverlayPosition: "left / right" },
-    );
+    const resolved = resolveActionOverlaySettings("seekForwardSmall", {
+      ...DEFAULT_ADVANCED_SETTINGS,
+      skipOverlayPosition: "left / right",
+    });
 
     expect(resolved.overlayVisible).toBe(true);
     expect(resolved.overlayPosition).toBe("center-right");
   });
 
   it("uses the advanced overlay position for skip actions when inheriting", () => {
-    const resolved = resolveActionOverlaySettings(
-      "seekBackwardSmall",
-      { keys: ["ArrowLeft"] },
-      {
-        ...DEFAULT_ADVANCED_SETTINGS,
-        overlayPosition: "bottom",
-        skipOverlayPosition: "same as others",
-      },
-    );
+    const resolved = resolveActionOverlaySettings("seekBackwardSmall", {
+      ...DEFAULT_ADVANCED_SETTINGS,
+      overlayPosition: "bottom",
+      skipOverlayPosition: "same as others",
+    });
 
     expect(resolved.overlayVisible).toBe(true);
     expect(resolved.overlayPosition).toBe("bottom");
   });
 
   it("forces overlay visibility off for actions without overlays", () => {
-    const resolved = resolveActionOverlaySettings(
-      "toggleFullscreen",
-      { keys: ["f"] },
-      DEFAULT_ADVANCED_SETTINGS,
-    );
+    const resolved = resolveActionOverlaySettings("toggleFullscreen", DEFAULT_ADVANCED_SETTINGS);
 
     expect(resolved.overlayVisible).toBe(false);
     expect(resolved.overlayPosition).toBe(DEFAULT_ADVANCED_SETTINGS.overlayPosition);
