@@ -10,6 +10,7 @@ export const MEDIA_ACTIONS = [
   "toggleFullscreen",
   "togglePip",
   "toggleTheater",
+  "toggleCaptions",
   "speedUp",
   "slowDown",
   "volumeUp",

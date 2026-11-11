@@ -5,6 +5,7 @@ import {
   mockRect,
   rect,
   resetContentTestState,
+  setTextTracks,
   storageSetMock,
 } from "./helpers.js";
 import { setSettingsForTests } from "../../../src/content.js";
@@ -176,6 +177,75 @@ describe("frame message handling", () => {
     // The stranger's result doesn't settle the request, so it times out and
     // the action falls back to the local video.
     await vi.waitFor(() => expect(playSpy).toHaveBeenCalledOnce());
+  });
+
+  describe("the captions action in another frame", () => {
+    function withTracks(video: HTMLVideoElement, tracks: object[]): HTMLVideoElement {
+      setTextTracks(video, tracks);
+      return video;
+    }
+
+    function makeTrack(): { kind: string; mode: string; language: string; label: string } {
+      return { kind: "captions", mode: "disabled", language: "en", label: "" };
+    }
+
+    async function requestFromParent(): Promise<{ handled: boolean }> {
+      const parentSource = { postMessage: vi.fn() } as unknown as Window;
+      setWindowParentForTest(parentSource);
+      sendActionRequest(parentSource, "toggleCaptions", "captions-request");
+      await vi.waitFor(() => expect(parentSource.postMessage).toHaveBeenCalled());
+      return (parentSource.postMessage as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    }
+
+    it("is handled by a frame whose target has a caption track", async () => {
+      const track = makeTrack();
+      withTracks(makeVideo({ paused: false, readyState: 4 } as Partial<HTMLVideoElement>), [track]);
+
+      expect(await requestFromParent()).toMatchObject({ handled: true });
+      expect(track.mode).toBe("showing");
+    });
+
+    it("is reported as not handled by a frame whose target has none", async () => {
+      withTracks(makeVideo({ paused: false, readyState: 4 } as Partial<HTMLVideoElement>), []);
+
+      expect(await requestFromParent()).toMatchObject({ handled: false });
+    });
+
+    it("falls back to local captions when the winning child frame has no track", async () => {
+      // A quiet local video with captions loses to a louder child frame.
+      const track = makeTrack();
+      const localVideo = withTracks(makeVideo({ paused: true } as Partial<HTMLVideoElement>), [
+        track,
+      ]);
+      mockRect(localVideo, rect(0, 0, 512, 384));
+      const iframe = document.createElement("iframe");
+      document.body.appendChild(iframe);
+      mockRect(iframe, rect(0, 0, 1024, 768));
+      const frameWindow = iframe.contentWindow!;
+      const reply = (type: string, requestId: string, extra: object): void => {
+        window.dispatchEvent(
+          new MessageEvent("message", {
+            source: frameWindow,
+            data: { source: "media-hotkeys-extension", type, requestId, ...extra },
+          }),
+        );
+      };
+      vi.spyOn(frameWindow, "postMessage").mockImplementation((message: unknown) => {
+        const request = message as { type: string; requestId: string };
+        if (request.type === "MEDIA_HOTKEYS_SCORE_REQUEST") {
+          reply("MEDIA_HOTKEYS_SCORE_RESPONSE", request.requestId, {
+            bestScore: 500,
+            areaScore: 200,
+          });
+        } else if (request.type === "MEDIA_HOTKEYS_HANDLE_ACTION") {
+          reply("MEDIA_HOTKEYS_ACTION_RESULT", request.requestId, { handled: false });
+        }
+      });
+
+      await dispatchMappedKey("c");
+
+      await vi.waitFor(() => expect(track.mode).toBe("showing"));
+    });
   });
 
   it("ignores site policy messages in the top frame", async () => {

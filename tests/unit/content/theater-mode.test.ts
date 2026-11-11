@@ -1,5 +1,12 @@
 import { type MockInstance, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { dispatchMappedKey, makeVideo, mockRect, rect, resetContentTestState } from "./helpers.js";
+import {
+  dispatchMappedKey,
+  makeVideo,
+  mockRect,
+  rect,
+  resetContentTestState,
+  setTextTracks,
+} from "./helpers.js";
 import { getTargetMedia, handleAction } from "../../../src/content.js";
 import { exitTheater, getTheaterMedia } from "../../../src/content/theater.js";
 
@@ -451,5 +458,32 @@ describe("theater mode across frames", () => {
     } finally {
       Object.defineProperty(window, "parent", { configurable: true, value: window });
     }
+  });
+});
+
+describe("the captions key in theater mode", () => {
+  function pressCaptionsKey(): KeyboardEvent {
+    const event = new KeyboardEvent("keydown", { key: "c", bubbles: true, cancelable: true });
+    document.body.dispatchEvent(event);
+    return event;
+  }
+
+  it("takes the key when the theater video has a caption track", async () => {
+    const video = makeVideo();
+    const track = { kind: "captions", mode: "disabled", language: "en", label: "" };
+    setTextTracks(video, [track]);
+    handleAction("toggleTheater", video);
+
+    expect(pressCaptionsKey().defaultPrevented).toBe(true);
+    await vi.waitFor(() => expect(track.mode).toBe("showing"));
+  });
+
+  it("leaves the key to the page when the theater video has none", () => {
+    const video = makeVideo();
+    setTextTracks(video, []);
+    handleAction("toggleTheater", video);
+    expect(getTheaterMedia()).toBe(video);
+
+    expect(pressCaptionsKey().defaultPrevented).toBe(false);
   });
 });
