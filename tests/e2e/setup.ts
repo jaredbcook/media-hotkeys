@@ -150,6 +150,18 @@ function createFixturePage(title: string, body: string): string {
           media.muted = true;
           await media.play();
         },
+        // Records where each seek landed, read when the seeked event fires. A
+        // rejected seek fires it too, back at the start, and playback never does.
+        trackSeeks(id) {
+          const media = findMediaById(id);
+          if (!media) {
+            throw new Error("Unknown media: " + id);
+          }
+          media.__seekLandings = [];
+          media.addEventListener("seeked", () => {
+            media.__seekLandings.push(media.currentTime);
+          });
+        },
         markInteraction(id) {
           const media = findMediaById(id);
           if (!media) {
@@ -169,6 +181,7 @@ function createFixturePage(title: string, body: string): string {
             muted: media.muted,
             volume: media.volume,
             currentTime: media.currentTime,
+            seekLandings: media.__seekLandings ?? [],
             playbackRate: media.playbackRate,
             duration: media.duration,
           };
@@ -204,6 +217,36 @@ function createSilentWavBuffer(durationSeconds: number, sampleRate = 8000): Buff
   return buffer;
 }
 
+/**
+ * Reads a single `bytes=start-end`, `bytes=start-`, or `bytes=-suffix` range
+ * against a body of `size` bytes. Returns "ignore" for a header the server
+ * doesn't handle (another unit, several ranges, bad syntax), which RFC 9110
+ * lets it answer with the whole body, and "unsatisfiable" for a well-formed
+ * range that lies outside the body.
+ */
+function parseByteRange(
+  header: string,
+  size: number,
+): { start: number; end: number } | "ignore" | "unsatisfiable" {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!match || (match[1] === "" && match[2] === "")) {
+    return "ignore";
+  }
+
+  let start: number;
+  let end: number;
+  if (match[1] === "") {
+    // A suffix range: the last N bytes.
+    start = Math.max(0, size - Number(match[2]));
+    end = size - 1;
+  } else {
+    start = Number(match[1]);
+    end = match[2] === "" ? size - 1 : Math.min(Number(match[2]), size - 1);
+  }
+
+  return start <= end && start < size ? { start, end } : "unsatisfiable";
+}
+
 function createServer(
   routes: Record<string, ServerRoute>,
 ): Promise<http.Server & { baseUrl: string }> {
@@ -217,11 +260,36 @@ function createServer(
       return;
     }
 
-    response.writeHead(200, {
+    const body = typeof route.body === "string" ? Buffer.from(route.body) : route.body;
+    const headers = {
       "Content-Type": route.contentType ?? "text/html; charset=utf-8",
       "Cache-Control": "no-store",
+      // Chrome only treats media as seekable when the server honors byte
+      // ranges. Without them, setting currentTime on a loaded file is ignored.
+      "Accept-Ranges": "bytes",
+    };
+
+    // Only GET is ranged; a HEAD request gets the headers of the whole body.
+    const rangeHeader = request.method === "GET" ? request.headers.range : undefined;
+    const range = rangeHeader === undefined ? "ignore" : parseByteRange(rangeHeader, body.length);
+    if (range === "ignore") {
+      response.writeHead(200, { ...headers, "Content-Length": body.length });
+      response.end(body);
+      return;
+    }
+
+    if (range === "unsatisfiable") {
+      response.writeHead(416, { ...headers, "Content-Range": `bytes */${body.length}` });
+      response.end();
+      return;
+    }
+
+    response.writeHead(206, {
+      ...headers,
+      "Content-Length": range.end - range.start + 1,
+      "Content-Range": `bytes ${range.start}-${range.end}/${body.length}`,
     });
-    response.end(route.body);
+    response.end(body.subarray(range.start, range.end + 1));
   });
 
   return new Promise((resolve, reject) => {
