@@ -289,7 +289,6 @@ describe("frame message handling", () => {
     settings.siteSettings.sitePolicies = [
       { pattern: "localhost", policy: "disabled", embedsPolicy: "inherit" },
     ];
-    settings.siteSettings.disabledUrlPatterns = ["localhost"];
     setSettingsForTests(settings);
 
     expect(postMessageSpy).toHaveBeenCalledWith(
@@ -337,7 +336,6 @@ describe("frame message handling", () => {
     settings.siteSettings.sitePolicies = [
       { pattern: "localhost", policy: "disabled", embedsPolicy: "ignore" },
     ];
-    settings.siteSettings.disabledUrlPatterns = ["localhost"];
     setSettingsForTests(settings);
 
     expect(postMessageSpy).toHaveBeenCalledWith(
@@ -463,7 +461,6 @@ describe("frame message handling", () => {
       settings.siteSettings.sitePolicies = [
         { pattern: "localhost", policy: "disabled", embedsPolicy: "inherit" },
       ];
-      settings.siteSettings.disabledUrlPatterns = ["localhost"];
       setSettingsForTests(settings);
 
       const video = makeVideo({ paused: true } as Partial<HTMLVideoElement>);

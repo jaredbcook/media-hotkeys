@@ -357,9 +357,6 @@ function addOrReplaceSitePolicy(policy: SitePolicy): SitePolicy[] {
 async function persistSitePolicies(sitePolicies: SitePolicy[]): Promise<void> {
   const nextSettings = structuredClone(currentSettings);
   nextSettings.siteSettings.sitePolicies = normalizeSitePolicies(sitePolicies);
-  nextSettings.siteSettings.disabledUrlPatterns = nextSettings.siteSettings.sitePolicies
-    .filter((policy) => policy.policy === "disabled")
-    .map((policy) => policy.pattern);
   const saved = persistSettings(nextSettings);
   renderSiteControls();
   await saved;

@@ -39,7 +39,6 @@
     "debugLogging": false
   },
   "siteSettings": {
-    "sitePolicies": [],
-    "disabledUrlPatterns": []
+    "sitePolicies": []
   }
 }
