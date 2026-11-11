@@ -5,10 +5,12 @@ import type { ExtensionSettings } from "../../../src/storage.js";
 const hoistedMocks = vi.hoisted(() => ({
   getSettingsMock: vi.fn<() => Promise<ExtensionSettings>>(),
   saveSettingsMock: vi.fn(),
+  storageChangeListeners: [] as ((changes: unknown, areaName: string) => void)[],
 }));
 
 export const getSettingsMock = hoistedMocks.getSettingsMock;
 export const saveSettingsMock = hoistedMocks.saveSettingsMock;
+const storageChangeListeners = hoistedMocks.storageChangeListeners;
 const DEFAULT_SETTINGS = defaults as ExtensionSettings;
 
 vi.mock("webextension-polyfill", () => ({
@@ -17,6 +19,11 @@ vi.mock("webextension-polyfill", () => ({
       getManifest: () => ({ version: "1.2.3" }),
     },
     storage: {
+      onChanged: {
+        addListener: (listener: (changes: unknown, areaName: string) => void) => {
+          hoistedMocks.storageChangeListeners.push(listener);
+        },
+      },
       sync: {
         get: vi.fn(),
         set: vi.fn(),
@@ -78,6 +85,7 @@ export function renderAdvancedSettingsDom(): void {
 export function resetAdvancedSettingsTestState(): void {
   getSettingsMock.mockReset();
   saveSettingsMock.mockReset();
+  storageChangeListeners.length = 0;
   document.body.innerHTML = "";
 }
 
@@ -92,4 +100,12 @@ export async function loadAdvancedSettingsModule(
   saveSettingsMock.mockResolvedValue(undefined);
   await import("../../../src/advanced-settings-page.js");
   await Promise.resolve();
+}
+
+/** Announces a storage change, as the browser does after another surface saved, and lets the page react. */
+export async function emitStorageChange(areaName = "sync"): Promise<void> {
+  for (const listener of storageChangeListeners) {
+    listener({}, areaName);
+  }
+  await new Promise((resolve) => setTimeout(resolve, 0));
 }

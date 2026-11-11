@@ -184,16 +184,14 @@ async function waitForSavedPolicies(page: Page, patterns: string[]): Promise<voi
             chrome: {
               storage: {
                 sync: {
-                  get(
-                    keys: null,
-                  ): Promise<{ siteSettings?: { sitePolicies?: { pattern: string }[] } }>;
+                  get(keys: null): Promise<{ sitePolicies?: { pattern: string }[] }>;
                 };
               };
             };
           }
         ).chrome;
         const stored = await extensionApi.storage.sync.get(null);
-        return (stored.siteSettings?.sitePolicies ?? []).map((policy) => policy.pattern);
+        return (stored.sitePolicies ?? []).map((policy) => policy.pattern);
       }),
     )
     .toEqual(patterns);

@@ -30,8 +30,9 @@ test("hides overlays after the overlay hotkey toggles them off", async ({ page }
 type ContentScriptWorld = { id: number; name: string; auxData?: { type?: string } };
 
 /**
- * Wraps `chrome.storage.sync.set` in the content script of every frame of the
- * page, so the test can count the writes each frame makes. Content scripts run
+ * Wraps `chrome.storage.sync.set` and `remove` in the content script of every frame
+ * of the page, so the test can count the writes each frame makes (turning overlays
+ * off sets a key, and turning them back on removes it). Content scripts run
  * in isolated worlds that only the DevTools protocol can reach.
  */
 async function countSyncWrites(
@@ -62,12 +63,14 @@ async function countSyncWrites(
     await evaluate(
       world,
       `(() => {
-        const set = chrome.storage.sync.set;
         globalThis.__syncWriteCount = 0;
-        chrome.storage.sync.set = function (...args) {
-          globalThis.__syncWriteCount += 1;
-          return set.apply(this, args);
-        };
+        for (const method of ["set", "remove"]) {
+          const original = chrome.storage.sync[method];
+          chrome.storage.sync[method] = function (...args) {
+            globalThis.__syncWriteCount += 1;
+            return original.apply(this, args);
+          };
+        }
       })()`,
     );
   }
@@ -82,7 +85,8 @@ async function countSyncWrites(
     readShowOverlays: () =>
       evaluate(
         contentScriptWorlds()[0],
-        "chrome.storage.sync.get(null).then((stored) => stored.advancedSettings.showOverlays)",
+        // Overlays are on by default, so the setting is stored only while they are off.
+        `chrome.storage.sync.get(null).then((stored) => stored["advanced.showOverlays"] ?? true)`,
       ) as Promise<boolean>,
   };
 }

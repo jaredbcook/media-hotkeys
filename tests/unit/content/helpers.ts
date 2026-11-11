@@ -9,6 +9,7 @@ const {
   storageChangeListeners,
   storageGetMock,
   storageOnChangedAddListenerMock,
+  storageRemoveMock,
   storageSetMock,
 } = vi.hoisted(() => {
   const storageChangeListeners: StorageChangeListener[] = [];
@@ -20,6 +21,7 @@ const {
     storageOnChangedAddListenerMock: vi.fn((listener: StorageChangeListener) => {
       storageChangeListeners.push(listener);
     }),
+    storageRemoveMock: vi.fn(async () => undefined),
     storageSetMock: vi.fn(async () => undefined),
   };
 });
@@ -33,6 +35,7 @@ vi.mock("webextension-polyfill", () => {
         },
         sync: {
           get: storageGetMock,
+          remove: storageRemoveMock,
           set: storageSetMock,
         },
       },
@@ -197,6 +200,7 @@ export function resetContentTestState(): void {
   vi.restoreAllMocks();
   storageGetMock.mockImplementation(async () => ({}));
   storageSetMock.mockReset();
+  storageRemoveMock.mockReset();
   showActionOverlayMock.mockReset();
   setSettingsForTests(structuredClone(DEFAULT_SETTINGS));
 }
@@ -214,4 +218,4 @@ export async function emitStorageChange(areaName = "sync"): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-export { showActionOverlayMock, storageGetMock, storageSetMock };
+export { showActionOverlayMock, storageGetMock, storageRemoveMock, storageSetMock };
