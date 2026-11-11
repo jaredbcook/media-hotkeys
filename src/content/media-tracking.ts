@@ -4,6 +4,7 @@ import {
   OVERLAY_ATTR,
   OVERLAY_ID,
   SHADOW_ROOT_ATTACHED_EVENT,
+  THEATER_STYLE_ATTR,
 } from "./constants.js";
 import { type Box, debugLog, getVisibleBox, isEmptyBox } from "./dom-utils.js";
 import {
@@ -175,6 +176,7 @@ function isExtensionManagedNode(node: Node): boolean {
       [
         `#${OVERLAY_ID}[${OVERLAY_ATTR}]`,
         `style[${FULLSCREEN_STYLE_ATTR}="true"]`,
+        `style[${THEATER_STYLE_ATTR}="true"]`,
         `[${FULLSCREEN_WRAPPER_ATTR}]`,
       ].join(", "),
     ),
