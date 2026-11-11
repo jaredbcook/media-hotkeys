@@ -150,3 +150,55 @@ test("an embed added after the page loaded inherits a disabled site rule", async
     .toBe(1);
   expect((await readFrameMediaState(frame!, "frame-video")).paused).toBe(true);
 });
+
+test("a domain rule covers its subdomains but not other sites on a shared host", async ({
+  page,
+  server,
+}) => {
+  const extensionId = await getExtensionId(page);
+  await page.goto(`chrome-extension://${extensionId}/advanced-settings-page.html`);
+  const entries = [
+    ["https://video.example.co.uk/watch", "example.co.uk/watch"],
+    ["https://www.alice.github.io/", "alice.github.io"],
+  ];
+  for (const [entry, savedPattern] of entries) {
+    await page.locator("#add-site-policy").click();
+    const patternInput = page.locator(".site-policy-pattern").last();
+    await patternInput.fill(entry);
+    // Saving rewrites the entry as the saved rule.
+    await expect(patternInput).toHaveValue(savedPattern);
+  }
+  await page.reload();
+  await expect
+    .poll(() =>
+      page
+        .locator(".site-policy-pattern")
+        .evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).value)),
+    )
+    .toEqual(["alice.github.io", "example.co.uk/watch"]);
+
+  const port = new URL(server.url).port;
+  const cases = [
+    { url: `http://www.example.co.uk:${port}/watch`, disabled: true },
+    { url: `http://example.co.uk:${port}/shorts`, disabled: false },
+    { url: `http://alice.github.io:${port}/`, disabled: true },
+    { url: `http://www.alice.github.io:${port}/`, disabled: true },
+    { url: `http://bob.github.io:${port}/`, disabled: false },
+  ];
+  for (const [index, { url, disabled }] of cases.entries()) {
+    const mediaId = `media-${index}`;
+    await page.goto(url);
+    await addNativeKeyCounter(page);
+    await createMedia(page, mediaId);
+    await page.locator(`#${mediaId}`).focus();
+    await page.keyboard.press("k");
+
+    if (disabled) {
+      await expect.poll(() => readNativeKeyCount(page), { message: url }).toBe(1);
+      expect((await readMediaState(page, mediaId)).paused, url).toBe(true);
+    } else {
+      await waitForMediaState(page, mediaId, (state) => !state.paused);
+      expect(await readNativeKeyCount(page), url).toBe(0);
+    }
+  }
+});
