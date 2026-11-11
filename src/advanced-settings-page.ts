@@ -399,9 +399,6 @@ async function persistSitePolicies(): Promise<void> {
     siteSettings: {
       ...currentSettings.siteSettings,
       sitePolicies,
-      disabledUrlPatterns: sitePolicies
-        .filter((policy) => policy.policy === "disabled")
-        .map((policy) => policy.pattern),
     },
   };
 
