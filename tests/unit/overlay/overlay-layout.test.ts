@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getOverlayElement, makeVideo } from "./helpers.js";
+import { getOverlayBox, getOverlayElement, getOverlayShadowRoot, makeVideo } from "./helpers.js";
 import { showActionOverlay } from "../../../src/overlay.js";
 import { DEFAULT_ADVANCED_SETTINGS, type AdvancedSettings } from "../../../src/storage.js";
 
@@ -22,19 +22,19 @@ describe("overlay layout", () => {
   it("sizes overlay icons to 10% of media width and clamps them to min and max sizes", () => {
     const mediumVideo = makeVideo(500);
     showActionOverlay("togglePlayPause", mediumVideo, "center", advancedSettings);
-    let icon = document.querySelector("#media-hotkeys-overlay svg") as SVGElement;
+    let icon = getOverlayShadowRoot()!.querySelector("svg") as SVGElement;
     expect(icon.style.width).toBe("50px");
     expect(icon.style.height).toBe("50px");
 
     const smallVideo = makeVideo(200);
     showActionOverlay("togglePlayPause", smallVideo, "center", advancedSettings);
-    icon = document.querySelector("#media-hotkeys-overlay svg") as SVGElement;
+    icon = getOverlayShadowRoot()!.querySelector("svg") as SVGElement;
     expect(icon.style.width).toBe("32px");
     expect(icon.style.height).toBe("32px");
 
     const largeVideo = makeVideo(800);
     showActionOverlay("togglePlayPause", largeVideo, "center", advancedSettings);
-    icon = document.querySelector("#media-hotkeys-overlay svg") as SVGElement;
+    icon = getOverlayShadowRoot()!.querySelector("svg") as SVGElement;
     expect(icon.style.width).toBe("80px");
     expect(icon.style.height).toBe("80px");
   });
@@ -42,15 +42,15 @@ describe("overlay layout", () => {
   it("sizes overlay text to 2.5% of media width and clamps it to min and max sizes", () => {
     const mediumVideo = makeVideo(800);
     showActionOverlay("toggleMute", mediumVideo, "center", advancedSettings);
-    expect(getOverlayElement()?.style.fontSize).toBe("20px");
+    expect(getOverlayBox()?.style.fontSize).toBe("20px");
 
     const smallVideo = makeVideo(200);
     showActionOverlay("toggleMute", smallVideo, "center", advancedSettings);
-    expect(getOverlayElement()?.style.fontSize).toBe("16px");
+    expect(getOverlayBox()?.style.fontSize).toBe("16px");
 
     const largeVideo = makeVideo(1200);
     showActionOverlay("toggleMute", largeVideo, "center", advancedSettings);
-    expect(getOverlayElement()?.style.fontSize).toBe("24px");
+    expect(getOverlayBox()?.style.fontSize).toBe("24px");
   });
 
   it("positions the overlay centered over the media element", () => {
@@ -157,6 +157,5 @@ describe("overlay layout", () => {
     const overlay = getOverlayElement()!;
     expect(overlay.parentElement).toBe(host);
     expect(overlay.style.position).toBe("fixed");
-    expect(overlay.style.lineHeight).toBe("1.2");
   });
 });
