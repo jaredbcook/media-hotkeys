@@ -8,6 +8,7 @@
       "toggleFullscreen": { "keys": ["f"] },
       "togglePip": { "keys": ["i"] },
       "toggleTheater": { "keys": ["t"] },
+      "toggleCaptions": { "keys": ["c"] },
       "speedUp": { "keys": [">"] },
       "slowDown": { "keys": ["<"] },
       "volumeUp": { "keys": ["ArrowUp", "+", "="] },

@@ -26,6 +26,7 @@ const ACTION_LABELS: Record<ConfigurableMediaAction, string> = {
   toggleFullscreen: "Fullscreen",
   togglePip: "Picture-in-Picture",
   toggleTheater: "Theater Mode",
+  toggleCaptions: "Captions",
   speedUp: "Speed Up",
   slowDown: "Slow Down",
   volumeUp: "Volume Up",

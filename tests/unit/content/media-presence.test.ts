@@ -4,7 +4,9 @@ import {
   mockRect,
   rect,
   resetContentTestState,
+  setTextTracks,
   settleLeftoverTimers,
+  showActionOverlayMock,
 } from "./helpers.js";
 import { setSettingsForTests } from "../../../src/content.js";
 import { DEFAULT_SETTINGS } from "../../../src/storage.js";
@@ -470,5 +472,76 @@ describe("reporting media presence to the parent frame", () => {
 
     await settleLeftoverTimers();
     expect(chainedTimeoutRan).toBe(true);
+  });
+});
+
+describe("the captions key", () => {
+  function makePlayingVideo(...tracks: object[]): HTMLVideoElement {
+    const video = makeVideo({ paused: false, readyState: 4 } as Partial<HTMLVideoElement>);
+    setTextTracks(video, tracks);
+    return video;
+  }
+
+  it("takes the key when the target has a caption track", async () => {
+    const track = { kind: "captions", mode: "disabled", language: "en", label: "" };
+    makePlayingVideo(track);
+
+    const { event, reachedPage } = pressKey("c");
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(reachedPage).toBe(false);
+    await vi.waitFor(() => expect(track.mode).toBe("showing"));
+  });
+
+  it("takes the key for a subtitle track too", () => {
+    makePlayingVideo({ kind: "subtitles", mode: "disabled", language: "en", label: "" });
+
+    expect(pressKey("c").event.defaultPrevented).toBe(true);
+  });
+
+  it.each([
+    ["no text tracks", []],
+    ["only chapters and metadata", [{ kind: "chapters" }, { kind: "metadata" }]],
+    ["only a track the page reads cues from", [{ kind: "captions", mode: "hidden" }]],
+    [
+      "a track the page reads cues from beside another",
+      [
+        { kind: "captions", mode: "hidden", language: "en" },
+        { kind: "captions", mode: "disabled", language: "fr" },
+      ],
+    ],
+  ])("leaves the key to the page when the target has %s", (_name, tracks) => {
+    makePlayingVideo(...tracks);
+
+    const { event, reachedPage } = pressKey("c");
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(reachedPage).toBe(true);
+    expect(showActionOverlayMock).not.toHaveBeenCalled();
+  });
+
+  it("looks at the media the key would act on, not at every media", () => {
+    makePlayingVideo();
+    const idle = makeVideo();
+    setTextTracks(idle, [{ kind: "captions", mode: "disabled", language: "en", label: "" }]);
+
+    expect(pressKey("c").event.defaultPrevented).toBe(false);
+  });
+
+  it("leaves the key to the page when only a child frame has media", () => {
+    const child = addChildFrame();
+    reportFromChild(child.childWindow, true);
+
+    const { event, reachedPage } = pressKey("c");
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(reachedPage).toBe(true);
+    expect(child.posted.map((message) => message.type)).not.toContain(
+      "MEDIA_HOTKEYS_SCORE_REQUEST",
+    );
+  });
+
+  it("leaves the key to the page when there is no media", () => {
+    expect(pressKey("c").reachedPage).toBe(true);
   });
 });

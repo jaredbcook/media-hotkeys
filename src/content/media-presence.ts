@@ -13,9 +13,10 @@ import {
   isTopWindow,
   sendSitePolicyToFrame,
 } from "./frame-messaging.js";
+import { hasCaptionTracks } from "./captions.js";
 import { canScrollVerticallyFrom, isPictureInPictureSupported } from "./dom-utils.js";
 import { findIframes, findMedia, isTargetableMediaElement } from "./media-discovery.js";
-import { getBestLocalCandidate, hasMediaInUse } from "./media-scoring.js";
+import { getBestLocalCandidate, getTargetMedia, hasMediaInUse } from "./media-scoring.js";
 import { hasPlayablePlaceholder, isPlaceholderSized } from "./placeholder.js";
 import { actionedMedia } from "./state.js";
 import { isTheaterActive } from "./theater.js";
@@ -169,6 +170,7 @@ export function handleMediaPresenceMessage(
  * The play key also counts a click-to-play placeholder here, or an iframe that
  * looks like a video embed large enough to hold one, since placeholders aren't
  * reported across frames.
+ * The captions key needs a text track on this frame's target media.
  * Vertical scroll keys stay with a page that can scroll unless media in this
  * frame is in use, so reading past an idle video still scrolls.
  */
@@ -179,6 +181,14 @@ export function hasPotentialTarget(
 ): boolean {
   if (action === "togglePip" && !isPictureInPictureSupported()) {
     return false;
+  }
+
+  // Sites that draw their own captions (YouTube, Vimeo, Twitch) have no text
+  // track on the video and handle this key themselves. Presence reports don't
+  // say which frame has tracks, so only this frame's target can claim the key,
+  // theater mode included.
+  if (action === "toggleCaptions") {
+    return hasCaptionTracks(getTargetMedia());
   }
 
   if (isTheaterActive()) {

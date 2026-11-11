@@ -286,6 +286,10 @@ export const test = base.extend<Fixtures>({
         contentType: "audio/wav",
         body: createSilentWavBuffer(12),
       },
+      "/captions.vtt": {
+        contentType: "text/vtt; charset=utf-8",
+        body: "WEBVTT\n\n00:00:00.000 --> 00:00:10.000\nHello\n",
+      },
       "/iframe-media": {
         body: createFixturePage(
           "Iframe Media",

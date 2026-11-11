@@ -32,5 +32,5 @@ References: Chrome [`content_scripts.world`](https://developer.chrome.com/docs/e
 
 ## Not yet supported
 
-- **Closed captions.** Native `<track>` captions could be toggled through the `TextTrack` API, but sites like YouTube draw their own caption UI, so a useful CC action would need per-site handling.
+- **Closed captions on custom players.** The captions hotkey (`c`) switches native `<track>` captions and subtitles through the `TextTrack` API. Sites like YouTube, Vimeo, and Twitch draw their own caption UI and have no text track on the `<video>`, so `c` stays with the page there and the site's own shortcut handles it. Reaching those players' caption state is researched in [#69](https://github.com/jaredbcook/media-hotkeys/issues/69). Players that keep a caption track in `hidden` mode so they can read its cues and draw them (Plyr and Video.js do) are treated the same way; one that leaves its tracks `disabled` while captions are off looks like a native player and loses the key.
 - **Site controls and captions in theater mode.** Theater mode promotes only the `<video>`, so a custom player's own controls and captions stay behind. See [theater-controls.md](theater-controls.md) for how each player behaves and the planned changes.

@@ -176,6 +176,51 @@ describe("overlay content", () => {
     expect(getOverlayBox()?.textContent).toBe("0.75x");
   });
 
+  it("renders captions on with the track label, and captions off without one", () => {
+    const video = makeVideo();
+
+    showActionOverlay("toggleCaptions", video, "center", advancedSettings, {
+      captions: { enabled: true, label: "English" },
+    });
+    expect(getOverlayBox()?.textContent).toBe("Captions onEnglish");
+    expect(getOverlayBox()?.innerHTML).toContain("M200-160q-33 0-56.5-23.5");
+
+    showActionOverlay("toggleCaptions", video, "center", advancedSettings, {
+      captions: { enabled: true },
+    });
+    expect(getOverlayBox()?.textContent).toBe("Captions on");
+
+    showActionOverlay("toggleCaptions", video, "center", advancedSettings, {
+      captions: { enabled: false },
+    });
+    expect(getOverlayBox()?.textContent).toBe("Captions off");
+    expect(getOverlayBox()?.innerHTML).toContain("M791-57 687-160");
+  });
+
+  it("shows a track label as text, shortened when it is long", () => {
+    const video = makeVideo();
+
+    showActionOverlay("toggleCaptions", video, "center", advancedSettings, {
+      captions: { enabled: true, label: '<img src=x onerror="alert(1)">&amp;' },
+    });
+    expect(getOverlayBox()?.querySelector("img")).toBeNull();
+    expect(getOverlayBox()?.textContent).toBe('Captions on<img src=x onerror="alert(1)">&amp;');
+
+    showActionOverlay("toggleCaptions", video, "center", advancedSettings, {
+      captions: { enabled: true, label: "x".repeat(100) },
+    });
+    expect(getOverlayBox()?.textContent).toBe(`Captions on${"x".repeat(39)}…`);
+  });
+
+  it("renders nothing for captions when the media had no track to toggle", () => {
+    const video = makeVideo();
+
+    showActionOverlay("toggleCaptions", video, "center", advancedSettings, { captions: null });
+    showActionOverlay("toggleCaptions", video, "center", advancedSettings);
+
+    expect(getOverlayBox()).toBeNull();
+  });
+
   it("does not render overlays for fullscreen or picture-in-picture toggles", () => {
     const video = makeVideo();
 
