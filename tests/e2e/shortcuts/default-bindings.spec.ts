@@ -4,6 +4,7 @@ import {
   markPlaying,
   pressShiftedKey,
   readMediaState,
+  trackSeeks,
   waitForMediaState,
 } from "../fixtures.js";
 import { openOverlayReader } from "../overlay.js";
@@ -336,11 +337,12 @@ test("uses custom element host APIs for shadow-root media actions", async ({ pag
   await markPlaying(page, "custom-api-media");
   await waitForMediaState(page, "custom-api-media", (state) => !state.paused);
   const seekBaseline = (await readMediaState(page, "custom-api-media")).currentTime;
+  await trackSeeks(page, "custom-api-media");
   await page.keyboard.press("ArrowRight");
-  await waitForMediaState(
-    page,
-    "custom-api-media",
-    (state) => state.currentTime >= seekBaseline + 4,
+  // The media is playing, so its time would also reach the target after four
+  // seconds. Only a seek lands there at once.
+  await waitForMediaState(page, "custom-api-media", (state) =>
+    state.seekLandings.some((time) => time >= seekBaseline + 4),
   );
 
   await pressShiftedKey(page, ".");
@@ -557,8 +559,12 @@ test("toggles mute and adjusts seek, volume, and speed with default bindings", a
   await markPlaying(page, "primary");
   await waitForMediaState(page, "primary", (state) => !state.paused);
   const seekBaseline = (await readMediaState(page, "primary")).currentTime;
+  await trackSeeks(page, "primary");
   await page.keyboard.press("ArrowRight");
-  await waitForMediaState(page, "primary", (state) => state.currentTime >= seekBaseline + 4);
+  // Playing media would also reach the target after four seconds; only a seek lands there at once.
+  await waitForMediaState(page, "primary", (state) =>
+    state.seekLandings.some((time) => time >= seekBaseline + 4),
+  );
 
   await page.keyboard.press("ArrowUp");
   await waitForMediaState(
