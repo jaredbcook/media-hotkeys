@@ -108,6 +108,37 @@ describe("overlay content", () => {
     expect(getOverlayBox()?.innerHTML).toContain("M480-120q-138 0-240.5-91.5");
   });
 
+  it("includes hours in restart and percent-seek timestamps by the custom-element host's duration", () => {
+    const host = document.createElement("custom-player");
+    const video = document.createElement("video");
+    host.attachShadow({ mode: "open" }).appendChild(video);
+    document.body.appendChild(host);
+    // The inner element has no duration, so only the host says the item is long.
+    let hostDuration = 7200;
+    Object.defineProperty(host, "duration", { configurable: true, get: () => hostDuration });
+
+    showActionOverlay("restart", video, "center", advancedSettings);
+    expect(getOverlayBox()?.textContent).toBe("0:00:00");
+
+    showActionOverlay("seekToPercent50", video, "center", advancedSettings, {
+      timestampSeconds: 3600,
+      jumpDirection: "forward",
+    });
+    expect(getOverlayBox()?.textContent).toBe("1:00:00");
+
+    // And the other way round: a short host over a long inner element.
+    hostDuration = 120;
+    Object.defineProperty(video, "duration", { configurable: true, value: 7200 });
+    showActionOverlay("restart", video, "center", advancedSettings);
+    expect(getOverlayBox()?.textContent).toBe("0:00");
+
+    showActionOverlay("seekToPercent50", video, "center", advancedSettings, {
+      timestampSeconds: 60,
+      jumpDirection: "forward",
+    });
+    expect(getOverlayBox()?.textContent).toBe("1:00");
+  });
+
   it("reads paused, muted, volume, and playbackRate from a custom-element player host", () => {
     const host = document.createElement("custom-player");
     const shadowRoot = host.attachShadow({ mode: "open" });
