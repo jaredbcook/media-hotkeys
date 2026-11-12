@@ -13,6 +13,16 @@ npm run build      # unpacked extensions in dist/chrome, dist/edge, dist/firefox
 
 Load `dist/<browser>` in your browser as described in [README.md](README.md#install-from-source). After rebuilding, reload the extension from the browser's extensions page and refresh the pages you're testing.
 
+Set your Git identity before committing, so Git doesn't guess one from your hostname and publish it:
+
+```sh
+git config --global user.name "Your Name"
+git config --global user.email "you@example.com"
+git config --global user.useConfigOnly true   # refuse to commit without an identity
+```
+
+If a commit fails with "Author identity unknown", fix your configuration rather than working around it. AI coding agents should tell the developer.
+
 ## Commands
 
 | Command                                      | What it does                                                         |
