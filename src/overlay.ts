@@ -76,9 +76,17 @@ export interface OverlayDisplayOptions {
   animateSkipDirection?: SkipAnimationDirection;
   timestampSeconds?: number;
   jumpDirection?: SkipAnimationDirection;
+  // How far behind the live edge a restart landed, for live media that can rewind.
+  behindLiveSeconds?: number;
   overlayEnabled?: boolean;
   // What toggling captions did, when the media had a track to switch.
   captions?: CaptionsToggle | null;
+}
+
+// A live stream's own clock means nothing to a viewer, so show how far behind
+// live a jump landed, as players do: -4:30.
+function formatBehindLive(seconds: number): string {
+  return `-${formatTimestamp(seconds, seconds >= 3600)}`;
 }
 
 function formatTimestamp(seconds: number, includeHours: boolean): string {
@@ -450,7 +458,11 @@ function buildContent(
       return `${icons.SEEK_BACK_LARGE}<span>-${options.seekSeconds ?? advancedSettings.seekStepMedium}s</span>`;
 
     case "restart":
-      return `${icons.TIME_BACKWARD}<span>${formatTimestamp(0, hasHours(media))}</span>`;
+      return `${icons.TIME_BACKWARD}<span>${
+        typeof options.behindLiveSeconds === "number"
+          ? formatBehindLive(options.behindLiveSeconds)
+          : formatTimestamp(0, hasHours(media))
+      }</span>`;
 
     default: {
       const percentMatch = action.match(/^seekToPercent\d+$/);

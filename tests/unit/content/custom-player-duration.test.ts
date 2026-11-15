@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import "../../../src/player-bridge.js";
-import { makeCustomPlayerVideo, resetContentTestState, showActionOverlayMock } from "./helpers.js";
+import {
+  makeCustomPlayerVideo,
+  resetContentTestState,
+  setSeekable,
+  showActionOverlayMock,
+} from "./helpers.js";
 import { handleAction } from "../../../src/content.js";
 import { readPlayerDuration } from "../../../src/content/player-control.js";
 
@@ -82,6 +87,8 @@ describe("a custom player host's duration", () => {
   it("leaves the end of a skip streak unbounded when the host reports Infinity", () => {
     vi.useFakeTimers();
     const { host, video } = makePlayer(Infinity, 100);
+    // The inner element's own span is finite, but the host says the stream has no end.
+    setSeekable(video, [0, 200]);
     Object.defineProperty(host, "currentTime", {
       configurable: true,
       get: () => 98,

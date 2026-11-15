@@ -161,6 +161,28 @@ Provider iframes (YouTube, Vimeo, and similar) are handled by the content script
 
 The per-player research behind these choices is in [docs/player-compatibility.md](docs/player-compatibility.md).
 
+## Live and unbounded media
+
+`readMediaTimeline` in `player-control.ts` sorts media by its duration (a host's own when it has one, see [Custom players](#custom-players)), and actions ask it instead of testing `Number.isFinite` themselves:
+
+| Kind      | Duration                   | Range                                                                        |
+| --------- | -------------------------- | ---------------------------------------------------------------------------- |
+| `vod`     | finite and greater than 0  | The whole media, from 0 to the duration                                      |
+| `live`    | `Infinity`                 | The media's `seekable` window (DVR), when it holds a finite, non-empty range |
+| `unknown` | `NaN`, 0, or anything else | None. Usually metadata that hasn't loaded, or a media element that was reset |
+
+`Infinity` is how the platform reports a stream with no end, and `NaN` means no duration is known. They aren't interchangeable, so `NaN` is never read as live. The duration can change under a stream (a live one that ends reports a finite length), so nothing caches the kind: every action reads it again. A player that reports a huge finite number for a live stream is indistinguishable from a long video and is treated as a `vod`.
+
+The range is what a seek can land in. On a `live` stream it ends at the live edge and starts where the rewindable window does, so its length is `end - start` whatever the stream's own clock says. `seekable` is read from the media element even inside a custom player, because a host has no counterpart for it. Only a finite window counts: an infinite `seekable` end, or an empty range, leaves a live stream without one. When `seekable` holds several ranges the window is the last one, because it ends at the live edge and the gaps between ranges aren't seekable.
+
+Actions follow the range:
+
+- **Number keys** seek to a fraction of a `vod`'s duration. They do nothing, and show no overlay, on `live` and `unknown` media: a percentage of a live stream is ambiguous (of its rewindable window, or of everything since it started, which may be days), so it is left out until someone needs it.
+- **Restart** goes to the start of the range, or to 0 while the duration is unknown. A live stream without a window has no start to return to.
+- **Skips** move from the current time. On a `live` stream they are held to the window, because a host player may not clamp the way a media element does, and without a window they do nothing. The skip streak that sums repeated skips ends at the range's edges, or at 0 when there is no range.
+
+An action that had nothing to act on (including a skip toward an edge the playhead is already at) shows no overlay, so it never reports a move that didn't happen, and it doesn't credit the media as acted on, which would change which media later keys target. `handleAction` reports it as not handled, so when arbitration routed the key to another frame's media, the frame that sent it falls back to its own, as it does for captions. The overlay for restart on a `live` stream shows how far behind live it landed (`-4:30`), not the stream's own clock, which is meaningless to a viewer.
+
 ## Theater mode
 
 Theater mode promotes the target `<video>` into the browser's top layer as a manual popover instead of moving it into a dialog. The element never changes DOM position, so player scripts, framework reconcilers, and wrapper CSS keep working, and the top layer escapes ancestor transforms, `overflow` clipping, and stacking contexts. Sizing rules are `!important` inside a cascade layer so they beat both unlayered `!important` site styles and inline sizes that players rewrite on resize. The stylesheet goes in the document's `<head>`, or in the shadow root that owns the video. When `document.head` is missing (SVG documents, and XML documents without a `<head>`), it goes on the root element instead. It is created in the HTML namespace either way, because outside HTML documents `createElement` makes a namespaceless element, which is not a style sheet. Site-drawn controls and captions stay behind in the page, so native `controls` are enabled while active and the overlay is promoted into the top layer too. `Esc` or the hotkey exits and restores scroll position. `Esc` works even if hotkeys are disabled or focus moved into an input.

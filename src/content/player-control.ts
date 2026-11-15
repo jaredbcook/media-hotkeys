@@ -412,6 +412,54 @@ export function readPlayerDuration(media: HTMLMediaElement): number {
   return hostDuration ?? media.duration;
 }
 
+/** The span of media time a seek can land in, in the player's own time. */
+export type SeekRange = { start: number; end: number };
+
+/**
+ * What kind of media this is, judged from its duration:
+ * - `vod`: a finite, positive duration. Its range is the whole media.
+ * - `live`: an infinite duration, a stream with no end. It has a range only when
+ *   the media's `seekable` holds a finite window to rewind through (DVR), and
+ *   the end of that window is the live edge.
+ * - `unknown`: anything else, mostly NaN before metadata has loaded.
+ */
+export type MediaTimeline =
+  | { kind: "vod"; range: SeekRange }
+  | { kind: "live"; range: SeekRange | null }
+  | { kind: "unknown"; range: null };
+
+// `seekable` is read from the media element even inside a custom player: a host
+// has no counterpart for it, and the element holds the real buffered window.
+// Only the last range counts: it ends at the live edge, and the span between
+// separate ranges isn't seekable, so one window can't cover them.
+function readSeekableWindow(media: HTMLMediaElement): SeekRange | null {
+  try {
+    const ranges = media.seekable as TimeRanges | undefined;
+    if (!ranges || ranges.length === 0) {
+      return null;
+    }
+
+    const start = ranges.start(ranges.length - 1);
+    const end = ranges.end(ranges.length - 1);
+    return Number.isFinite(start) && Number.isFinite(end) && end > start ? { start, end } : null;
+  } catch {
+    return null;
+  }
+}
+
+export function readMediaTimeline(media: HTMLMediaElement): MediaTimeline {
+  const duration = readPlayerDuration(media);
+  if (Number.isFinite(duration) && duration > 0) {
+    return { kind: "vod", range: { start: 0, end: duration } };
+  }
+
+  if (duration === Infinity) {
+    return { kind: "live", range: readSeekableWindow(media) };
+  }
+
+  return { kind: "unknown", range: null };
+}
+
 export function readPlayerPlaybackRate(media: HTMLMediaElement): number {
   return readCustomPlayerNumber(media, "playbackRate", "readPlaybackRate") ?? media.playbackRate;
 }

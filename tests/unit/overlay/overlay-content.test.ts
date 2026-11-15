@@ -260,4 +260,23 @@ describe("overlay content", () => {
 
     expect(getOverlayBox()).toBeNull();
   });
+
+  it("shows how far behind live a restart on a live stream landed", () => {
+    const video = makeVideo();
+    Object.defineProperty(video, "duration", { configurable: true, value: Infinity });
+
+    showActionOverlay("restart", video, "center", advancedSettings, {
+      timestampSeconds: 0,
+      jumpDirection: "backward",
+      behindLiveSeconds: 270,
+    });
+    expect(getOverlayBox()?.textContent).toBe("-4:30");
+
+    showActionOverlay("restart", video, "center", advancedSettings, {
+      timestampSeconds: 0,
+      jumpDirection: "backward",
+      behindLiveSeconds: 5400,
+    });
+    expect(getOverlayBox()?.textContent).toBe("-1:30:00");
+  });
 });
