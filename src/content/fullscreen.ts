@@ -1,10 +1,11 @@
-import { FULLSCREEN_WRAPPER_ATTR } from "./constants.js";
+import { FULLSCREEN_WRAPPER_ATTR, HTML_NAMESPACE } from "./constants.js";
 
 let activeFullscreenWrapper: HTMLDivElement | null = null;
 let activeFullscreenMedia: HTMLVideoElement | null = null;
 
 function createFullscreenWrapperStyle(): HTMLStyleElement {
-  const style = document.createElement("style");
+  // In the HTML namespace, so it is a real style sheet and has `dataset` in SVG and XML documents.
+  const style = document.createElementNS(HTML_NAMESPACE, "style") as HTMLStyleElement;
   style.dataset.mediaHotkeysFullscreen = "true";
   style.textContent = `
     [${FULLSCREEN_WRAPPER_ATTR}="true"]:fullscreen {
@@ -86,7 +87,7 @@ function wrapMediaForFullscreen(media: HTMLVideoElement): HTMLDivElement | null 
 
   ensureFullscreenWrapperStyles();
 
-  const wrapper = document.createElement("div");
+  const wrapper = document.createElementNS(HTML_NAMESPACE, "div") as HTMLDivElement;
   wrapper.dataset.mediaHotkeysFullscreenWrapper = "true";
   wrapper.style.lineHeight = "0";
   wrapper.style.position = "relative";

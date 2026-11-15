@@ -722,9 +722,14 @@ describe("media action handling", () => {
     try {
       expect(document.head).toBeNull();
       expect(() => handleAction("toggleFullscreen", video)).not.toThrow();
-      expect(
-        document.documentElement.querySelectorAll('style[data-media-hotkeys-fullscreen="true"]'),
-      ).toHaveLength(1);
+      const styles = document.documentElement.querySelectorAll(
+        'style[data-media-hotkeys-fullscreen="true"]',
+      );
+      expect(styles).toHaveLength(1);
+      // Outside HTML documents createElement makes a namespaceless element, so both must be
+      // created in the HTML namespace.
+      expect(styles[0]?.namespaceURI).toBe("http://www.w3.org/1999/xhtml");
+      expect(video.parentElement?.namespaceURI).toBe("http://www.w3.org/1999/xhtml");
     } finally {
       document.documentElement.prepend(head);
     }
