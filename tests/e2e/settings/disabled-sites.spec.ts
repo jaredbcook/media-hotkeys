@@ -51,11 +51,33 @@ async function readNativeKeyCount(page: Page): Promise<number> {
   });
 }
 
+async function addSitePolicy(
+  page: Page,
+  entry: string,
+  savedPattern: string,
+  mode: "disabled" | "enabled" = "disabled",
+): Promise<void> {
+  // A click before the options page has attached its listeners adds nothing, so click again.
+  const rows = page.locator(".site-policy-row");
+  const rowCount = await rows.count();
+  await expect(async () => {
+    if ((await rows.count()) === rowCount) {
+      await page.locator("#add-site-policy").click();
+    }
+    await expect(rows).toHaveCount(rowCount + 1, { timeout: 1000 });
+  }).toPass();
+  const row = rows.last();
+  await row.locator(".site-policy-mode").selectOption(mode);
+  const patternInput = row.locator(".site-policy-pattern");
+  await patternInput.fill(entry);
+  // Saving rewrites the entry as the saved rule.
+  await expect(patternInput).toHaveValue(savedPattern);
+}
+
 test("site policies let page shortcuts win only on matching paths", async ({ page, server }) => {
   const extensionId = await getExtensionId(page);
   await page.goto(`chrome-extension://${extensionId}/advanced-settings-page.html`);
-  await page.locator("#add-site-policy").click();
-  await page.locator(".site-policy-pattern").fill("127.0.0.1/shorts");
+  await addSitePolicy(page, "127.0.0.1/shorts", "127.0.0.1/shorts");
   await expect(page.locator("#announcements .announcement").last()).toContainText(
     "Settings saved.",
   );
@@ -82,8 +104,7 @@ test("site policies let page shortcuts win only on matching paths", async ({ pag
 test("site policies follow in-page navigation", async ({ page, server }) => {
   const extensionId = await getExtensionId(page);
   await page.goto(`chrome-extension://${extensionId}/advanced-settings-page.html`);
-  await page.locator("#add-site-policy").click();
-  await page.locator(".site-policy-pattern").fill("127.0.0.1/shorts");
+  await addSitePolicy(page, "127.0.0.1/shorts", "127.0.0.1/shorts");
   await expect(page.locator("#announcements .announcement").last()).toContainText(
     "Settings saved.",
   );
@@ -112,8 +133,7 @@ test("an embed added after the page loaded inherits a disabled site rule", async
 }) => {
   const extensionId = await getExtensionId(page);
   await page.goto(`chrome-extension://${extensionId}/advanced-settings-page.html`);
-  await page.locator("#add-site-policy").click();
-  await page.locator(".site-policy-pattern").fill("127.0.0.1");
+  await addSitePolicy(page, "127.0.0.1", "127.0.0.1");
   await expect(page.locator("#announcements .announcement").last()).toContainText(
     "Settings saved.",
   );
@@ -150,29 +170,6 @@ test("an embed added after the page loaded inherits a disabled site rule", async
     .toBe(1);
   expect((await readFrameMediaState(frame!, "frame-video")).paused).toBe(true);
 });
-
-async function addSitePolicy(
-  page: Page,
-  entry: string,
-  savedPattern: string,
-  mode: "disabled" | "enabled" = "disabled",
-): Promise<void> {
-  // A click before the options page has attached its listeners adds nothing, so click again.
-  const rows = page.locator(".site-policy-row");
-  const rowCount = await rows.count();
-  await expect(async () => {
-    if ((await rows.count()) === rowCount) {
-      await page.locator("#add-site-policy").click();
-    }
-    await expect(rows).toHaveCount(rowCount + 1, { timeout: 1000 });
-  }).toPass();
-  const row = rows.last();
-  await row.locator(".site-policy-mode").selectOption(mode);
-  const patternInput = row.locator(".site-policy-pattern");
-  await patternInput.fill(entry);
-  // Saving rewrites the entry as the saved rule.
-  await expect(patternInput).toHaveValue(savedPattern);
-}
 
 /** Rules autosave after a pause, and an entry already in its saved form shows no sign of it. */
 async function waitForSavedPolicies(page: Page, patterns: string[]): Promise<void> {
