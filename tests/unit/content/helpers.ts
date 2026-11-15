@@ -177,6 +177,15 @@ export function makeCustomPlayerVideo(): {
   return { host, shadowRoot, video };
 }
 
+// jsdom has no seekable ranges, so give the video one window of its own, or
+// none. A live stream that can rewind reports its rewindable span this way.
+export function setSeekable(video: HTMLVideoElement, window: [number, number] | null): void {
+  const ranges = window
+    ? { length: 1, start: () => window[0], end: () => window[1] }
+    : { length: 0, start: () => 0, end: () => 0 };
+  Object.defineProperty(video, "seekable", { configurable: true, value: ranges });
+}
+
 // jsdom has no text tracks, so give the video a list of its own. Like the real
 // one it is array-like and fires `change` when a track's mode changes.
 export function setTextTracks(video: HTMLVideoElement, tracks: object[]): EventTarget {

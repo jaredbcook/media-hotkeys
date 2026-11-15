@@ -14,7 +14,7 @@ import {
   pauseMedia,
   playMedia,
   readPlayerCurrentTime,
-  readPlayerDuration,
+  readMediaTimeline,
   readPlayerMuted,
   readPlayerPaused,
   readPlayerPlaybackRate,
@@ -79,6 +79,79 @@ function roundPlaybackRate(playbackRate: number): number {
   return Math.round(playbackRate * 100) / 100;
 }
 
+/**
+ * Seconds the playhead is behind the live edge, for media that is live and can
+ * rewind, and `null` for everything else.
+ */
+function readBehindLiveSeconds(media: HTMLMediaElement): number | null {
+  const { kind, range } = readMediaTimeline(media);
+  if (kind !== "live" || !range) {
+    return null;
+  }
+
+  return Math.max(0, range.end - readPlayerCurrentTime(media));
+}
+
+/**
+ * Moves the playhead by `seconds`. A live stream with nothing to rewind through
+ * can't seek, and a rewindable one is held to its window, because a host player
+ * may not clamp the way a media element does. Returns whether it seeked.
+ */
+function seekBy(media: HTMLMediaElement, seconds: number): boolean {
+  const { kind, range } = readMediaTimeline(media);
+  if (kind === "live" && !range) {
+    return false;
+  }
+
+  const currentTime = readPlayerCurrentTime(media);
+  const target = currentTime + seconds;
+  if (kind !== "live" || !range) {
+    setPlayerCurrentTime(media, target);
+    return true;
+  }
+
+  // Already at the edge being skipped toward: nothing moves.
+  const clampedTarget = Math.min(range.end, Math.max(range.start, target));
+  if (clampedTarget === currentTime) {
+    return false;
+  }
+
+  setPlayerCurrentTime(media, clampedTarget);
+  return true;
+}
+
+/**
+ * Seeks to a fraction of the media's length. A live stream has no length a
+ * percentage means anything for (it may have been running for days), so only a
+ * `vod` takes it.
+ */
+function seekToFraction(media: HTMLMediaElement, fraction: number): boolean {
+  const { kind, range } = readMediaTimeline(media);
+  if (kind !== "vod") {
+    return false;
+  }
+
+  setPlayerCurrentTime(media, range.start + (range.end - range.start) * fraction);
+  return true;
+}
+
+function restartMedia(media: HTMLMediaElement): boolean {
+  const { kind, range } = readMediaTimeline(media);
+  if (range) {
+    setPlayerCurrentTime(media, range.start);
+    return true;
+  }
+
+  // Before metadata the player may still take a start position. A live stream
+  // with nothing to rewind through has no start to go back to.
+  if (kind === "unknown") {
+    setPlayerCurrentTime(media, 0);
+    return true;
+  }
+
+  return false;
+}
+
 function isSeekToPercent(action: MediaAction): boolean {
   return /^seekToPercent\d+$/.test(action);
 }
@@ -113,10 +186,11 @@ function getSeekOverlayDisplay(
   }
 
   const currentTime = readPlayerCurrentTime(media);
-  const duration = readPlayerDuration(media);
+  const { range } = readMediaTimeline(media);
   const projectedTime = direction === "forward" ? currentTime + step : currentTime - step;
+  // Media with no range still can't go before zero, and has no end to pass.
   const wouldExceedBounds =
-    projectedTime < 0 || (Number.isFinite(duration) && duration > 0 && projectedTime > duration);
+    projectedTime < (range?.start ?? 0) || projectedTime > (range?.end ?? Infinity);
   const shouldResetStreak = !isContinuingStreak || wouldExceedBounds;
   const totalSeconds = advancedSettings.sumQuickSkips
     ? (shouldResetStreak ? 0 : (seekOverlayState?.totalSeconds ?? 0)) + step
@@ -156,6 +230,7 @@ function getOverlayDisplayOptions(
   animateSkipDirection?: SeekDirection;
   timestampSeconds?: number;
   jumpDirection?: SeekDirection;
+  behindLiveSeconds?: number;
   overlayEnabled?: boolean;
 } {
   if (action === "toggleOverlays") {
@@ -167,9 +242,11 @@ function getOverlayDisplayOptions(
 
   if (action === "restart") {
     clearSeekOverlayState();
+    const behindLiveSeconds = readBehindLiveSeconds(media);
     return {
       timestampSeconds: 0,
       jumpDirection: "backward",
+      ...(behindLiveSeconds !== null && { behindLiveSeconds }),
     };
   }
 
@@ -196,21 +273,21 @@ export function handleAction(
   action: MediaAction,
   media: HTMLMediaElement,
   overlaysEnabled = state.settings.advancedSettings.showOverlays,
-): void {
+): boolean {
   const advancedSettings = state.settings.advancedSettings;
   // The key reaches this media only when it was thought to have captions, but
   // arbitration can pick another one. Leave an unrelated media's standing alone.
   if (action === "toggleCaptions" && !hasCaptionTracks(media)) {
     debugLog("No caption tracks to toggle", media, { action });
-    return;
+    return false;
   }
 
   // Only the percent seeks compare against it, so other actions skip the read.
   const previousTime = isSeekToPercent(action) ? readPlayerCurrentTime(media) : null;
   let captions: CaptionsToggle | null = null;
-  actionedMedia.add(media);
-  state.lastActionedMedia = media;
-  trackInteraction(media, `action:${action}`);
+  // False when the media had nothing to act on, such as a skip in a live stream
+  // that can't rewind, so the overlay doesn't report a move that never happened.
+  let performed = true;
 
   switch (action) {
     case "togglePlayPause":
@@ -297,31 +374,31 @@ export function handleAction(
       break;
 
     case "seekForwardSmall":
-      setPlayerCurrentTime(media, readPlayerCurrentTime(media) + advancedSettings.seekStepSmall);
+      performed = seekBy(media, advancedSettings.seekStepSmall);
       break;
 
     case "seekBackwardSmall":
-      setPlayerCurrentTime(media, readPlayerCurrentTime(media) - advancedSettings.seekStepSmall);
+      performed = seekBy(media, -advancedSettings.seekStepSmall);
       break;
 
     case "seekForwardMedium":
-      setPlayerCurrentTime(media, readPlayerCurrentTime(media) + advancedSettings.seekStepMedium);
+      performed = seekBy(media, advancedSettings.seekStepMedium);
       break;
 
     case "seekBackwardMedium":
-      setPlayerCurrentTime(media, readPlayerCurrentTime(media) - advancedSettings.seekStepMedium);
+      performed = seekBy(media, -advancedSettings.seekStepMedium);
       break;
 
     case "seekForwardLarge":
-      setPlayerCurrentTime(media, readPlayerCurrentTime(media) + advancedSettings.seekStepLarge);
+      performed = seekBy(media, advancedSettings.seekStepLarge);
       break;
 
     case "seekBackwardLarge":
-      setPlayerCurrentTime(media, readPlayerCurrentTime(media) - advancedSettings.seekStepLarge);
+      performed = seekBy(media, -advancedSettings.seekStepLarge);
       break;
 
     case "restart":
-      setPlayerCurrentTime(media, 0);
+      performed = restartMedia(media);
       break;
 
     case "speedUp":
@@ -346,14 +423,22 @@ export function handleAction(
 
     default: {
       const percentMatch = action.match(/^seekToPercent(\d+)$/);
-      const duration = readPlayerDuration(media);
-      // Live streams report an infinite duration and have no percentages.
-      if (percentMatch && Number.isFinite(duration) && duration > 0) {
-        const percent = parseInt(percentMatch[1], 10) / 100;
-        setPlayerCurrentTime(media, duration * percent);
+      if (percentMatch) {
+        performed = seekToFraction(media, parseInt(percentMatch[1], 10) / 100);
       }
     }
   }
+
+  if (!performed) {
+    clearSeekOverlayState();
+    debugLog("Nothing to act on for action", media, { action });
+    return false;
+  }
+
+  // An action that did nothing must not change which media later keys target.
+  actionedMedia.add(media);
+  state.lastActionedMedia = media;
+  trackInteraction(media, `action:${action}`);
 
   const overlaySettings = resolveActionOverlaySettings(action, advancedSettings);
   if (overlaySettings.overlayVisible) {
@@ -368,6 +453,7 @@ export function handleAction(
   }
 
   debugLog("Handled media action", media, { action });
+  return true;
 }
 
 export function handleLocalTargetMediaAction(
@@ -382,8 +468,9 @@ export function handleLocalTargetMediaAction(
   }
 
   if (media) {
-    handleAction(action, media, overlaysEnabled);
-    return true;
+    // An action the media couldn't act on counts as not handled, so the frame
+    // that routed it here can fall back to its own media.
+    return handleAction(action, media, overlaysEnabled);
   }
 
   return false;
