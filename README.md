@@ -9,7 +9,7 @@ Works in Chrome and Edge 114 or newer and Firefox 128 or newer. Safari is possib
 - **Hotkeys for common media actions:** play/pause, mute, speed, volume, three skip sizes, restart, jump to a percentage, catch up to a live stream, fullscreen, picture-in-picture, theater mode, closed captions, and overlay toggle. Every key binding can be changed.
 - **Picks the right media.** On pages with several videos, the extension targets the one you're using: fullscreen or focused first, then audible playback, then what you last clicked, then what's most visible. Muted looping videos without controls (hero backgrounds, hover previews) and videos hidden in collapsed menus or closed dialogs are ignored unless you interact with them, so the page keeps its keys.
 - **Works through iframes and custom players.** Embedded players, shadow-DOM web components, and click-to-load thumbnails (pressing play activates them) are all supported.
-- **Theater mode** fills the browser window with the video without going fullscreen. Starting picture-in-picture on any video, in any frame, ends it, and entering theater mode brings a picture-in-picture video back to the page (neither applies in Firefox).
+- **Theater mode** fills the browser window with the video without going fullscreen. Starting picture-in-picture on any video, in any frame, ends it, and entering theater mode brings a picture-in-picture video back to the page (in Firefox 153 or newer this covers picture-in-picture that a page or the `i` hotkey starts, but not Firefox's own picture-in-picture button, which leaves theater mode open: close it with `Esc` or `t`).
 - **On-screen feedback:** a brief overlay shows each action. It is optional and you can position it.
 - **Per-site rules** let a site's own shortcuts win where you prefer them.
 - **Settings sync** across devices through your browser's extension sync.
@@ -29,7 +29,7 @@ Letter hotkeys follow the character a key types, so on Latin layouts such as AZE
 | Play/Pause             | `k`                 | Activates a click-to-play thumbnail if no media is loaded     |
 | Mute/Unmute            | `m`                 |                                                               |
 | Fullscreen             | `f`                 | `Esc` exits                                                   |
-| Picture-in-Picture     | `i`                 | Not in Firefox, which has no picture-in-picture API for pages |
+| Picture-in-Picture     | `i`                 | Firefox 153 or newer; before that, no picture-in-picture API. |
 | Theater Mode           | `t`                 | Fills the window without fullscreen; `Esc` exits              |
 | Captions               | `c`                 | Videos with caption or subtitle tracks only; see below        |
 | Speed Up               | `>`                 |                                                               |
