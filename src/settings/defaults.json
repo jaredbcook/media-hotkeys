@@ -19,7 +19,8 @@
       "seekBackwardMedium": { "keys": ["j"] },
       "seekForwardLarge": { "keys": ["]"] },
       "seekBackwardLarge": { "keys": ["["] },
-      "restart": { "keys": ["r"] }
+      "restart": { "keys": ["r", "Home"] },
+      "seekToLive": { "keys": ["End"] }
     }
   },
   "advancedSettings": {

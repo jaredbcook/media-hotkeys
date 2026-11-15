@@ -464,6 +464,9 @@ function buildContent(
           : formatTimestamp(0, hasHours(media))
       }</span>`;
 
+    case "seekToLive":
+      return `${icons.LIVE}<span>LIVE</span>`;
+
     default: {
       const percentMatch = action.match(/^seekToPercent\d+$/);
       if (percentMatch && typeof options.timestampSeconds === "number") {

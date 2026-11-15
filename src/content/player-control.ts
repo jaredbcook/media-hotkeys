@@ -447,6 +447,16 @@ function readSeekableWindow(media: HTMLMediaElement): SeekRange | null {
   }
 }
 
+/** Whether the media is a live stream with a rewindable window to skip to the end of. */
+export function canSeekToLive(media: HTMLMediaElement | null): boolean {
+  if (!media) {
+    return false;
+  }
+
+  const { kind, range } = readMediaTimeline(media);
+  return kind === "live" && range !== null;
+}
+
 export function readMediaTimeline(media: HTMLMediaElement): MediaTimeline {
   const duration = readPlayerDuration(media);
   if (Number.isFinite(duration) && duration > 0) {

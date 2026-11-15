@@ -458,11 +458,17 @@ export function sendExecuteToFrame(
 
 /**
  * Last-resort fallback when no frame in the subtree has scorable media: offer
- * placeholder activation to every child frame. Broadcast (rather than routed)
+ * placeholder activation (the play key) to every child frame. Broadcast (rather than routed)
  * because placeholders are not part of the scoring phase; resolves true on the
  * first frame that reports success.
  */
 export function broadcastPlaceholderExecute(action: MediaAction): Promise<boolean> {
+  // Only the play key activates a placeholder. Any other action would run on
+  // the media of every frame the broadcast reaches, not in exactly one.
+  if (action !== "togglePlayPause") {
+    return Promise.resolve(false);
+  }
+
   const childFrames = getChildFrameWindows();
   if (childFrames.length === 0) {
     return Promise.resolve(false);

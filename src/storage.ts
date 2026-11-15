@@ -22,6 +22,7 @@ export const MEDIA_ACTIONS = [
   "seekForwardLarge",
   "seekBackwardLarge",
   "restart",
+  "seekToLive",
   "seekToPercent0",
   "seekToPercent10",
   "seekToPercent20",

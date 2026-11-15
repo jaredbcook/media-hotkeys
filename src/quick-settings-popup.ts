@@ -40,6 +40,7 @@ const ACTION_LABELS: Record<ConfigurableMediaAction, string> = {
   seekForwardLarge: "Skip Forward (Large)",
   seekBackwardLarge: "Skip Backward (Large)",
   restart: "Restart",
+  seekToLive: "Jump to Live",
   toggleOverlays: "Toggle Overlays",
 };
 
