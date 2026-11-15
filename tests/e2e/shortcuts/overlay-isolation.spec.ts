@@ -71,3 +71,33 @@ test("keeps its look and place when the page styles div, span, svg, and path", a
   expect(hostile.host).toEqual(clean.host);
   expect(hostile.iconPath).toContain("M640-200q-33 0");
 });
+
+test("builds the overlay on the root element, without throwing, in a document with no body", async ({
+  page,
+  server,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto(server.getUrl("/svg-document"));
+  await page.waitForFunction(() => {
+    const video = document.getElementById("svg-video") as HTMLVideoElement | null;
+    return Boolean(video && video.readyState >= 1);
+  });
+  expect(await page.evaluate(() => document.body)).toBeNull();
+  const overlay = await openOverlayReader(page);
+  await page.locator("#svg-video").focus();
+
+  await page.keyboard.press("m");
+
+  // An SVG root draws no HTML child of its own, so the overlay is built but not seen here.
+  await expect.poll(async () => (await overlay.read())?.text).toMatch(/%/);
+  const snapshot = (await overlay.read())!;
+  expect(snapshot.text).toMatch(/%/);
+  expect(snapshot.pageSees).toEqual({ shadowRoot: false, text: "", descendants: 0 });
+  expect(
+    await page.evaluate(() =>
+      document.documentElement.contains(document.getElementById("media-hotkeys-overlay")),
+    ),
+  ).toBe(true);
+  expect(errors).toEqual([]);
+});

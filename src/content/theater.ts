@@ -1,7 +1,11 @@
-import { MESSAGE_SOURCE, THEATER_ATTR, THEATER_STYLE_ATTR, THEATER_TYPE } from "./constants.js";
+import {
+  HTML_NAMESPACE,
+  MESSAGE_SOURCE,
+  THEATER_ATTR,
+  THEATER_STYLE_ATTR,
+  THEATER_TYPE,
+} from "./constants.js";
 import { debugLog } from "./dom-utils.js";
-
-const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 
 type TheaterElement = HTMLVideoElement | HTMLIFrameElement;
 

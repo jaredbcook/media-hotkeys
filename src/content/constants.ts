@@ -26,6 +26,11 @@ export const THEATER_STYLE_ATTR = "data-media-hotkeys-theater-style";
 export const OVERLAY_ATTR = "data-media-hotkeys-overlay";
 export const OVERLAY_ID = "media-hotkeys-overlay";
 
+// Outside HTML documents (SVG, XML), `createElement` makes a namespaceless element, which has no
+// `style` and can't host a shadow root or act as a style sheet. Extension-created elements name
+// this namespace instead.
+export const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
+
 // Dispatched by src/player-bridge.ts (main world) on a host that just attached
 // a shadow root. Keep the value in sync with the bridge, which can't import it.
 export const SHADOW_ROOT_ATTACHED_EVENT = "media-hotkeys-shadow-root-attached";
