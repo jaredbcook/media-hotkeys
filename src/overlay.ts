@@ -8,7 +8,7 @@ import {
   readPlayerVolume,
 } from "./content/player-control.js";
 import type { CaptionsToggle } from "./content/captions.js";
-import { OVERLAY_ATTR, OVERLAY_ID } from "./content/constants.js";
+import { HTML_NAMESPACE, OVERLAY_ATTR, OVERLAY_ID } from "./content/constants.js";
 import { isTheaterMedia } from "./content/theater.js";
 
 const INSET_PX = 16;
@@ -45,6 +45,17 @@ interface OverlayAnchor {
   position: "absolute" | "fixed";
   rect: DOMRect;
   topLayer?: boolean;
+}
+
+// SVG and XML documents have no <body>, so fall back to the root element.
+function getDefaultOverlayHost(): HTMLElement {
+  return document.body ?? document.documentElement;
+}
+
+function createHtmlElement<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+): HTMLElementTagNameMap[K] {
+  return document.createElementNS(HTML_NAMESPACE, tag) as HTMLElementTagNameMap[K];
 }
 
 function getFullscreenOverlayHost(media: HTMLMediaElement | null): HTMLElement | null {
@@ -117,7 +128,7 @@ function createOverlay(): Overlay {
   // page's own and stays.
   document.querySelector(`#${OVERLAY_ID}[${OVERLAY_ATTR}]`)?.remove();
 
-  const host = document.createElement("div");
+  const host = createHtmlElement("div");
   host.id = OVERLAY_ID;
   host.setAttribute(OVERLAY_ATTR, "true");
   // `all: initial` first, so nothing the page sets on `div` is inherited into
@@ -131,9 +142,9 @@ function createOverlay(): Overlay {
   setHostStyle(host, "display", "none");
 
   const root = host.attachShadow({ mode: "closed" });
-  const style = document.createElement("style");
+  const style = createHtmlElement("style");
   style.textContent = OVERLAY_STYLES;
-  const box = document.createElement("div");
+  const box = createHtmlElement("div");
   Object.assign(box.style, {
     display: "flex",
     flexDirection: "column",
@@ -154,7 +165,7 @@ function createOverlay(): Overlay {
 }
 
 function getOrCreateOverlay(media?: HTMLMediaElement): Overlay {
-  const parent = getFullscreenOverlayHost(media ?? null) ?? document.body;
+  const parent = getFullscreenOverlayHost(media ?? null) ?? getDefaultOverlayHost();
   if (!overlay?.host.isConnected) {
     overlay = createOverlay();
   }
@@ -206,7 +217,7 @@ function resolveOverlayAnchor(media: HTMLMediaElement): OverlayAnchor {
   if (isTheaterMedia(media)) {
     return {
       kind: "media",
-      host: document.body,
+      host: getDefaultOverlayHost(),
       position: "fixed",
       rect: media.getBoundingClientRect(),
       topLayer: true,
@@ -227,7 +238,7 @@ function resolveOverlayAnchor(media: HTMLMediaElement): OverlayAnchor {
   if (isMediaVisiblyAnchorable(media, mediaRect)) {
     return {
       kind: "media",
-      host: document.body,
+      host: getDefaultOverlayHost(),
       position: "absolute",
       rect: mediaRect,
     };
@@ -235,7 +246,7 @@ function resolveOverlayAnchor(media: HTMLMediaElement): OverlayAnchor {
 
   return {
     kind: "viewport",
-    host: document.body,
+    host: getDefaultOverlayHost(),
     position: "fixed",
     rect: getViewportAnchorRect(),
   };

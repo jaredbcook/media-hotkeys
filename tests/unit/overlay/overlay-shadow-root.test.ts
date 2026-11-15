@@ -6,8 +6,13 @@ import { DEFAULT_ADVANCED_SETTINGS } from "../../../src/storage.js";
 const OVERLAY_ID = "media-hotkeys-overlay";
 
 let removedHead: HTMLHeadElement | null = null;
+let removedBody: HTMLElement | null = null;
 
 afterEach(() => {
+  if (removedBody) {
+    document.documentElement.append(removedBody);
+    removedBody = null;
+  }
   if (removedHead) {
     document.documentElement.prepend(removedHead);
     removedHead = null;
@@ -98,6 +103,24 @@ describe("overlay shadow root", () => {
     expect(() => show(makeVideo())).not.toThrow();
 
     expect(getOverlayBox()?.querySelector("svg")).not.toBeNull();
+  });
+
+  it("shows the overlay on the root element in a document without a body", () => {
+    const video = makeVideo();
+    document.documentElement.append(video);
+    removedBody = document.body;
+    removedBody.remove();
+    expect(document.body).toBeNull();
+
+    expect(() => show(video)).not.toThrow();
+    // A second show moves nothing and adds nothing.
+    expect(() => show(video, "toggleMute")).not.toThrow();
+
+    const host = getOverlayElement()!;
+    expect(host.parentElement).toBe(document.documentElement);
+    expect(document.querySelectorAll(`#${OVERLAY_ID}`)).toHaveLength(1);
+    expect(getOverlayBox()?.querySelector("svg")).not.toBeNull();
+    expect(host.namespaceURI).toBe("http://www.w3.org/1999/xhtml");
   });
 
   it("reuses the host and its shadow root across calls", () => {
