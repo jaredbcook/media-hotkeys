@@ -26,6 +26,8 @@ type PlayerBridgeResponse = {
   id: string;
   handled: boolean;
   value?: boolean | number;
+  // JSON turns NaN and Infinity into null, so name them instead.
+  nonFinite?: "NaN" | "Infinity" | "-Infinity";
 };
 
 const PLAYER_BRIDGE_EVENT = "media-hotkeys-player-bridge-command";
@@ -61,6 +63,28 @@ function readNumberProperty(host: HTMLElement, property: string): PlayerBridgeRe
   return typeof value === "number" && Number.isFinite(value)
     ? { id: "", handled: true, value }
     : { id: "", handled: false };
+}
+
+// A duration is Infinity for a stream with no end and NaN while it is unknown.
+function readDurationProperty(host: HTMLElement): PlayerBridgeResponse {
+  if (!("duration" in host)) {
+    return { id: "", handled: false };
+  }
+
+  const value = (host as unknown as Record<string, unknown>).duration;
+  if (typeof value !== "number") {
+    return { id: "", handled: false };
+  }
+
+  if (Number.isFinite(value)) {
+    return { id: "", handled: true, value };
+  }
+
+  return {
+    id: "",
+    handled: true,
+    nonFinite: Number.isNaN(value) ? "NaN" : value > 0 ? "Infinity" : "-Infinity",
+  };
 }
 
 function setProperty(host: HTMLElement, property: string, value: boolean | number): boolean {
@@ -150,7 +174,7 @@ function handleBridgeCommand(
         return { ...readNumberProperty(host, "currentTime"), id: command.id };
 
       case "readDuration":
-        return { ...readNumberProperty(host, "duration"), id: command.id };
+        return { ...readDurationProperty(host), id: command.id };
 
       case "setPlaybackRate":
         return {
