@@ -647,3 +647,50 @@ test("shows overlays while a video is fullscreen", async ({ page }) => {
       parentIsFullscreenHost: true,
     });
 });
+
+test("goes fullscreen, without throwing, for a video in an SVG document", async ({
+  page,
+  server,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto(server.getUrl("/svg-document"));
+  await page.waitForFunction(() => {
+    const video = document.getElementById("svg-video") as HTMLVideoElement | null;
+    return Boolean(video && video.readyState >= 1);
+  });
+  await page.locator("#svg-video").focus();
+
+  await page.keyboard.press("f");
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const video = document.getElementById("svg-video");
+        const host = document.fullscreenElement;
+        return {
+          fullscreenContainsVideo: Boolean(video && host?.contains(video)),
+          hostNamespace: host?.namespaceURI,
+          styles: document.querySelectorAll("style[data-media-hotkeys-fullscreen]").length,
+        };
+      }),
+    )
+    .toEqual({
+      fullscreenContainsVideo: true,
+      hostNamespace: "http://www.w3.org/1999/xhtml",
+      styles: 1,
+    });
+
+  await page.keyboard.press("f");
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({
+        fullscreen: document.fullscreenElement === null,
+        parent: document.getElementById("svg-video")?.parentElement?.localName,
+        wrappers: document.querySelectorAll("[data-media-hotkeys-fullscreen-wrapper]").length,
+      })),
+    )
+    .toEqual({ fullscreen: true, parent: "foreignObject", wrappers: 0 });
+  expect(errors).toEqual([]);
+});
