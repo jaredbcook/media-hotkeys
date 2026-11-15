@@ -203,7 +203,8 @@ export function isFrameActionMessage(data: unknown): data is FrameMessage {
     const theaterMessage = message as Partial<FrameTheaterMessage>;
     return (
       typeof theaterMessage.active === "boolean" &&
-      (theaterMessage.requestId === undefined || typeof theaterMessage.requestId === "string")
+      (theaterMessage.requestId === undefined || typeof theaterMessage.requestId === "string") &&
+      (theaterMessage.pictureInPicture === undefined || theaterMessage.pictureInPicture === true)
     );
   }
 

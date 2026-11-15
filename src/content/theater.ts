@@ -28,6 +28,10 @@ export type FrameTheaterMessage = {
   // Present on promotion requests: the execute requestId the parent routed
   // toggleTheater under, which the parent checks before enlarging the iframe.
   requestId?: string;
+  // Present on an exit notice sent up after a video in the sender's frame
+  // entered picture-in-picture. Unlike other exit notices it is not about the
+  // sender's own theater state: each frame it reaches leaves theater mode.
+  pictureInPicture?: true;
 };
 
 let activeSession: TheaterSession | null = null;
@@ -90,12 +94,18 @@ function isPopoverOpen(element: Element): boolean {
   }
 }
 
-function postTheaterMessage(target: Window, active: boolean, requestId?: string): void {
+function postTheaterMessage(
+  target: Window,
+  active: boolean,
+  requestId?: string,
+  pictureInPicture = false,
+): void {
   const message: FrameTheaterMessage = {
     source: MESSAGE_SOURCE,
     type: THEATER_TYPE,
     active,
     ...(requestId ? { requestId } : {}),
+    ...(pictureInPicture ? { pictureInPicture: true } : {}),
   };
 
   try {
@@ -141,12 +151,21 @@ function restoreElement(session: TheaterSession): void {
   }
 }
 
-// Theater mode and picture-in-picture are exclusive. Once the theater video
-// plays in the PiP window, its backdrop would only block the page in front of
-// an empty popover, however PiP was started (hotkey, browser button, page
-// controls).
-function handleTheaterPictureInPicture(): void {
+/**
+ * Theater mode and picture-in-picture are exclusive, so any video entering PiP
+ * ends theater mode, however PiP was started (hotkey, browser button, page
+ * controls). For the theater video itself the backdrop would only block the
+ * page in front of an empty popover; for another video, two videos would play
+ * at once. The event doesn't cross frames, so the frame also tells its parent,
+ * which tells its own parent, until the top frame is reached. Every frame on
+ * the way up leaves theater mode if it is in it, and a frame that does
+ * unwinds its promoted child through the usual exit notices.
+ */
+export function handlePictureInPictureEntered(): void {
   exitTheater();
+  if (window.parent !== window) {
+    postTheaterMessage(window.parent, false, undefined, true);
+  }
 }
 
 function exitPictureInPicture(): void {
@@ -247,8 +266,6 @@ function promote(element: TheaterElement, childWindow: Window | null): boolean {
   element.addEventListener("toggle", handleTheaterToggle);
   if (element instanceof HTMLIFrameElement) {
     element.addEventListener("load", handleTheaterFrameLoad);
-  } else {
-    element.addEventListener("enterpictureinpicture", handleTheaterPictureInPicture);
   }
   session.observer.observe(document, { childList: true, subtree: true });
   const root = element.getRootNode();
@@ -311,7 +328,6 @@ export function exitTheater({ restoreScroll = true }: { restoreScroll?: boolean 
   session.observer.disconnect();
   session.element.removeEventListener("toggle", handleTheaterToggle);
   session.element.removeEventListener("load", handleTheaterFrameLoad);
-  session.element.removeEventListener("enterpictureinpicture", handleTheaterPictureInPicture);
   restoreElement(session);
 
   // While promoted, the element leaves normal flow; if the page got shorter
