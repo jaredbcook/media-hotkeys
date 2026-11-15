@@ -9,6 +9,7 @@ import {
   getSettings,
   saveSettings,
   type ExtensionSettings,
+  type NumericAdvancedSetting,
   type SitePolicy,
   type SitePolicyEmbedsPolicy,
   type SitePolicyMode,
@@ -43,8 +44,13 @@ function persistSettings(nextSettings?: ExtensionSettings): Promise<void> {
 
   const settingsToPersist = nextSettings ?? {
     ...currentSettings,
-    advancedSettings: collectAdvancedSettings(),
+    advancedSettings: collectAdvancedSettingsKeeping(),
   };
+  if (!nextSettings) {
+    // The snapshot now holds what the fields show. A save built from the snapshot (site rules)
+    // leaves pending number edits out of it, so they stay edits for the next save to send.
+    rememberSnapshotInputValues();
+  }
 
   const update = diffSettings(currentSettings, settingsToPersist);
   if (!update) {
@@ -122,6 +128,7 @@ async function refreshFromStorage(): Promise<void> {
     populateAdvancedSettings(latestSettings.advancedSettings);
     fields.forEach((input, index) => {
       rememberValidInputValue(input);
+      rememberSnapshotInputValue(input);
       if (typedValues[index] !== savedValues[index]) {
         input.value = typedValues[index];
       }
@@ -196,12 +203,52 @@ function getClampedNumberInputValue(input: HTMLInputElement): string | undefined
   return String(clampedValue);
 }
 
+/**
+ * Remembers that the snapshot (`currentSettings`) holds what the field shows. This differs from
+ * `lastValidValue`, which only says the text is acceptable: normalizing a field before a save that
+ * doesn't send it (site rules, or one that stops at an empty field) must not hide the edit.
+ */
+function rememberSnapshotInputValue(input: HTMLInputElement): void {
+  input.dataset.snapshotValue = input.value;
+}
+
+function rememberSnapshotInputValues(): void {
+  for (const input of getEditableInputs()) {
+    rememberSnapshotInputValue(input);
+  }
+}
+
+/**
+ * Whether the field still shows what the snapshot holds. A field the user hasn't edited is left
+ * exactly as it is: a stored value that isn't whole (hand-edited, or from another version) would
+ * otherwise be rounded by the next save of any other setting.
+ */
+function isUntouched(input: HTMLInputElement): boolean {
+  return input.dataset.snapshotValue === input.value;
+}
+
+/**
+ * The advanced settings to save: what the form says for what the user changed, and the settings as
+ * this page last knew them for each number field they didn't touch. Reading those from the form
+ * would round them (the form shows the volume step as a percentage and reads it back whole).
+ */
+function collectAdvancedSettingsKeeping(): ExtensionSettings["advancedSettings"] {
+  const collected = collectAdvancedSettings();
+  for (const input of getEditableInputs()) {
+    if (input.type === "number" && isUntouched(input)) {
+      const name = input.id as NumericAdvancedSetting;
+      collected[name] = currentSettings.advancedSettings[name];
+    }
+  }
+  return collected;
+}
+
 function normalizeEditableInput(input: HTMLInputElement): boolean {
   if (input.value.trim() === "") {
     return false;
   }
 
-  if (input.type === "number") {
+  if (input.type === "number" && !isUntouched(input)) {
     const clampedValue = getClampedNumberInputValue(input);
     if (clampedValue === undefined) {
       return false;
@@ -540,6 +587,7 @@ async function handleReset(): Promise<void> {
   populateAdvancedSettings(nextSettings.advancedSettings);
   for (const input of getEditableInputs()) {
     rememberValidInputValue(input);
+    rememberSnapshotInputValue(input);
   }
   await persistSettings(nextSettings);
 }
@@ -588,6 +636,7 @@ async function init(): Promise<void> {
   renderSitePoliciesList();
   for (const input of getEditableInputs()) {
     rememberValidInputValue(input);
+    rememberSnapshotInputValue(input);
   }
   if (changedBeforeLoad) {
     void refreshFromStorage().catch(() => undefined);
