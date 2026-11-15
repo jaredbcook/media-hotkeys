@@ -93,6 +93,10 @@ let attachShadowSpy: MockInstance<Element["attachShadow"]> | null = null;
 
 beforeEach(() => {
   document.body.innerHTML = "";
+  // An overlay shown while <body> was missing sits on <html>, so clearing the body leaves it.
+  document.documentElement.querySelectorAll("[data-media-hotkeys-overlay]").forEach((overlay) => {
+    overlay.remove();
+  });
   vi.useFakeTimers();
   const attachShadow = Element.prototype.attachShadow;
   attachShadowSpy = vi.spyOn(Element.prototype, "attachShadow").mockImplementation(function (
