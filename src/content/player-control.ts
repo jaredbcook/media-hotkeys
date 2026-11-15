@@ -74,8 +74,15 @@ function requestPlayerBridge(
   }
 }
 
+// A getter on a page's custom element can throw, for example before its media
+// has loaded. That is no host value, the same as a missing member, so the caller
+// moves on to the bridge and then to the media element.
 function getHostMember(host: HTMLElement, memberName: string): unknown {
-  return (host as unknown as Record<string, unknown>)[memberName];
+  try {
+    return (host as unknown as Record<string, unknown>)[memberName];
+  } catch {
+    return undefined;
+  }
 }
 
 // Host methods such as play() and requestFullscreen() may return a promise that
@@ -124,10 +131,6 @@ function tryBridgeMethod(host: HTMLElement, command: PlayerBridgeCommandName): b
 }
 
 function readDirectHostBoolean(host: HTMLElement, propertyName: string): boolean | null {
-  if (!(propertyName in host)) {
-    return null;
-  }
-
   const value = getHostMember(host, propertyName);
   return typeof value === "boolean" ? value : null;
 }
@@ -137,10 +140,6 @@ function readDirectHostNumber(
   propertyName: string,
   allowNonFinite = false,
 ): number | null {
-  if (!(propertyName in host)) {
-    return null;
-  }
-
   const value = getHostMember(host, propertyName);
   return typeof value === "number" && (allowNonFinite || Number.isFinite(value)) ? value : null;
 }
@@ -192,11 +191,11 @@ function setDirectHostProperty(
   propertyName: string,
   value: boolean | number,
 ): boolean {
-  if (!(propertyName in host)) {
-    return false;
-  }
-
   try {
+    if (!(propertyName in host)) {
+      return false;
+    }
+
     (host as unknown as Record<string, boolean | number>)[propertyName] = value;
     return true;
   } catch {
