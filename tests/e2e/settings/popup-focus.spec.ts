@@ -108,14 +108,14 @@ test("focus survives a change made in another popup", async ({ context, page }) 
   await openPopup(page);
   const other = await context.newPage();
   await other.goto(page.url());
-  await expect(keysOf(other, "Restart")).toHaveText(["r"]);
+  await expect(keysOf(other, "Jump to Live")).toHaveText(["End"]);
 
   const add = addButton(page, "Mute/Unmute");
   await add.focus();
-  await removeButton(other, "r", "Restart").click();
+  await removeButton(other, "End", "Jump to Live").click();
 
   // The first popup rebuilds its table for the change, and focus is still on the same button.
-  await expect(keysOf(page, "Restart")).toHaveText([]);
+  await expect(keysOf(page, "Jump to Live")).toHaveText([]);
   await expect(add).toBeFocused();
 });
 

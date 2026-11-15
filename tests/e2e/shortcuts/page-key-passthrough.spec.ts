@@ -187,3 +187,17 @@ test("takes the play key once a player upgraded late in an iframe attaches its m
     .poll(async () => (await readFrameMediaState(frame, "late-media")).paused)
     .toBe(false);
 });
+
+test("leaves End to the page next to media that isn't a live stream", async ({ page, server }) => {
+  await page.goto(server.getUrl("/"));
+  await createMedia(page, "primary", { currentTime: 25, duration: 100 });
+  await markPlaying(page, "primary");
+  await makePageScrollable(page);
+  await recordPageKeys(page);
+  await page.locator("#primary").focus();
+
+  await page.keyboard.press("End");
+
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  expect(await readPageKeys(page)).toEqual(["End"]);
+});

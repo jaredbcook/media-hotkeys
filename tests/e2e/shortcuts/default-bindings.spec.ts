@@ -608,6 +608,17 @@ test("restarts media with the default binding", async ({ page }) => {
   await waitForMediaState(page, "primary", (state) => state.currentTime === 0);
 });
 
+test("restarts media with Home", async ({ page }) => {
+  await createMedia(page, "primary", {
+    currentTime: 25,
+    duration: 100,
+  });
+  await page.locator("#primary").focus();
+
+  await page.keyboard.press("Home");
+  await waitForMediaState(page, "primary", (state) => state.currentTime === 0);
+});
+
 test("shows overlays while a video is fullscreen", async ({ page }) => {
   await page.evaluate(() => {
     (

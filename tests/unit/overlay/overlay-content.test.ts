@@ -279,4 +279,13 @@ describe("overlay content", () => {
     });
     expect(getOverlayBox()?.textContent).toBe("-1:30:00");
   });
+
+  it("labels a jump to the live edge", () => {
+    const video = makeVideo();
+
+    showActionOverlay("seekToLive", video, "center", advancedSettings);
+
+    expect(getOverlayBox()?.textContent).toBe("LIVE");
+    expect(getOverlayBox()?.innerHTML).toContain("<svg");
+  });
 });

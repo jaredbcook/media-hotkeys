@@ -18,6 +18,7 @@ import { canScrollVerticallyFrom, isPictureInPictureSupported } from "./dom-util
 import { findIframes, findMedia, isTargetableMediaElement } from "./media-discovery.js";
 import { getBestLocalCandidate, getTargetMedia, hasMediaInUse } from "./media-scoring.js";
 import { hasPlayablePlaceholder, isPlaceholderSized } from "./placeholder.js";
+import { canSeekToLive } from "./player-control.js";
 import { actionedMedia } from "./state.js";
 import { isTheaterActive } from "./theater.js";
 
@@ -180,7 +181,8 @@ export function handleMediaPresenceMessage(
  * The play key also counts a click-to-play placeholder here, or an iframe that
  * looks like a video embed large enough to hold one, since placeholders aren't
  * reported across frames.
- * The captions key needs a text track on this frame's target media.
+ * The captions key needs a text track on this frame's target media, and the
+ * jump-to-live key a live stream that can rewind, unless a child frame has media.
  * Vertical scroll keys stay with a page that can scroll unless media in this
  * frame is in use, so reading past an idle video still scrolls.
  */
@@ -199,6 +201,13 @@ export function hasPotentialTarget(
   // theater mode included.
   if (action === "toggleCaptions") {
     return hasCaptionTracks(getTargetMedia());
+  }
+
+  // Only a live stream that can rewind has somewhere to skip to. Elsewhere in
+  // this frame the key stays with the page, such as End scrolling to the bottom,
+  // unless a child frame has media that might be one. Presence reports don't say.
+  if (action === "seekToLive" && !canSeekToLive(getTargetMedia()) && !childFramesHaveMedia()) {
+    return false;
   }
 
   if (isTheaterActive()) {

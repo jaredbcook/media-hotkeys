@@ -6,7 +6,7 @@ Works in Chrome and Edge 114 or newer and Firefox 128 or newer. Safari is possib
 
 ## Features
 
-- **Hotkeys for common media actions:** play/pause, mute, speed, volume, three skip sizes, restart, jump to a percentage, fullscreen, picture-in-picture, theater mode, closed captions, and overlay toggle. Every key binding can be changed.
+- **Hotkeys for common media actions:** play/pause, mute, speed, volume, three skip sizes, restart, jump to a percentage, catch up to a live stream, fullscreen, picture-in-picture, theater mode, closed captions, and overlay toggle. Every key binding can be changed.
 - **Picks the right media.** On pages with several videos, the extension targets the one you're using: fullscreen or focused first, then audible playback, then what you last clicked, then what's most visible. Muted looping videos without controls (hero backgrounds, hover previews) and videos hidden in collapsed menus or closed dialogs are ignored unless you interact with them, so the page keeps its keys.
 - **Works through iframes and custom players.** Embedded players, shadow-DOM web components, and click-to-load thumbnails (pressing play activates them) are all supported.
 - **Theater mode** fills the browser window with the video without going fullscreen. Starting picture-in-picture ends it, and entering theater mode brings a picture-in-picture video back to the page (neither applies in Firefox).
@@ -42,7 +42,8 @@ Letter hotkeys follow the character a key types, so on Latin layouts such as AZE
 | Skip Backward (Medium) | `j`                 |                                                               |
 | Skip Forward (Large)   | `]`                 |                                                               |
 | Skip Backward (Large)  | `[`                 |                                                               |
-| Restart                | `r`                 | Jump to the beginning                                         |
+| Restart                | `r`, `Home`         | Jump to the beginning                                         |
+| Jump to Live           | `End`               | Catches up to a live stream after you rewind it               |
 | Toggle Overlays        | `o`                 | Turns the on-screen feedback on or off                        |
 | Jump to Location       | `0`–`9`             | `0` jumps to 0%, `1` to 10%, and so on                        |
 

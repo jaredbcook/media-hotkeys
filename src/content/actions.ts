@@ -93,31 +93,53 @@ function readBehindLiveSeconds(media: HTMLMediaElement): number | null {
 }
 
 /**
+ * What a seek helper did: `moved` the playhead, left it where it was because it
+ * already sat at the edge being sought (`unmoved`), or couldn't act on this
+ * media at all (`unsupported`).
+ */
+type SeekOutcome = "moved" | "unmoved" | "unsupported";
+
+/**
  * Moves the playhead by `seconds`. A live stream with nothing to rewind through
  * can't seek, and a rewindable one is held to its window, because a host player
- * may not clamp the way a media element does. Returns whether it seeked.
+ * may not clamp the way a media element does. Says whether it moved.
  */
-function seekBy(media: HTMLMediaElement, seconds: number): boolean {
+function seekBy(media: HTMLMediaElement, seconds: number): SeekOutcome {
   const { kind, range } = readMediaTimeline(media);
   if (kind === "live" && !range) {
-    return false;
+    return "unsupported";
   }
 
   const currentTime = readPlayerCurrentTime(media);
   const target = currentTime + seconds;
   if (kind !== "live" || !range) {
     setPlayerCurrentTime(media, target);
-    return true;
+    return "moved";
   }
 
   // Already at the edge being skipped toward: nothing moves.
   const clampedTarget = Math.min(range.end, Math.max(range.start, target));
   if (clampedTarget === currentTime) {
-    return false;
+    return "unmoved";
   }
 
   setPlayerCurrentTime(media, clampedTarget);
-  return true;
+  return "moved";
+}
+
+// A live stream already sitting where a jump would land isn't moved, so the jump
+// shows nothing. A vod seeks to the same time again like it always has.
+function jumpTo(
+  media: HTMLMediaElement,
+  kind: "vod" | "live" | "unknown",
+  time: number,
+): SeekOutcome {
+  if (kind === "live" && readPlayerCurrentTime(media) === time) {
+    return "unmoved";
+  }
+
+  setPlayerCurrentTime(media, time);
+  return "moved";
 }
 
 /**
@@ -125,31 +147,40 @@ function seekBy(media: HTMLMediaElement, seconds: number): boolean {
  * percentage means anything for (it may have been running for days), so only a
  * `vod` takes it.
  */
-function seekToFraction(media: HTMLMediaElement, fraction: number): boolean {
+function seekToFraction(media: HTMLMediaElement, fraction: number): SeekOutcome {
   const { kind, range } = readMediaTimeline(media);
   if (kind !== "vod") {
-    return false;
+    return "unsupported";
   }
 
-  setPlayerCurrentTime(media, range.start + (range.end - range.start) * fraction);
-  return true;
+  return jumpTo(media, kind, range.start + (range.end - range.start) * fraction);
 }
 
-function restartMedia(media: HTMLMediaElement): boolean {
+function restartMedia(media: HTMLMediaElement): SeekOutcome {
   const { kind, range } = readMediaTimeline(media);
   if (range) {
-    setPlayerCurrentTime(media, range.start);
-    return true;
+    return jumpTo(media, kind, range.start);
   }
 
   // Before metadata the player may still take a start position. A live stream
   // with nothing to rewind through has no start to go back to.
   if (kind === "unknown") {
     setPlayerCurrentTime(media, 0);
-    return true;
+    return "moved";
   }
 
-  return false;
+  return "unsupported";
+}
+
+// The live edge is the end of the rewindable window. Anything else is either
+// already live, with nothing to rewind from, or has no live edge to go to.
+function seekToLive(media: HTMLMediaElement): SeekOutcome {
+  const { kind, range } = readMediaTimeline(media);
+  if (kind !== "live" || !range) {
+    return "unsupported";
+  }
+
+  return jumpTo(media, kind, range.end);
 }
 
 function isSeekToPercent(action: MediaAction): boolean {
@@ -285,9 +316,9 @@ export function handleAction(
   // Only the percent seeks compare against it, so other actions skip the read.
   const previousTime = isSeekToPercent(action) ? readPlayerCurrentTime(media) : null;
   let captions: CaptionsToggle | null = null;
-  // False when the media had nothing to act on, such as a skip in a live stream
-  // that can't rewind, so the overlay doesn't report a move that never happened.
-  let performed = true;
+  // Anything but `moved` leaves out the overlay, so it never reports a move that
+  // didn't happen.
+  let outcome: SeekOutcome = "moved";
 
   switch (action) {
     case "togglePlayPause":
@@ -374,31 +405,35 @@ export function handleAction(
       break;
 
     case "seekForwardSmall":
-      performed = seekBy(media, advancedSettings.seekStepSmall);
+      outcome = seekBy(media, advancedSettings.seekStepSmall);
       break;
 
     case "seekBackwardSmall":
-      performed = seekBy(media, -advancedSettings.seekStepSmall);
+      outcome = seekBy(media, -advancedSettings.seekStepSmall);
       break;
 
     case "seekForwardMedium":
-      performed = seekBy(media, advancedSettings.seekStepMedium);
+      outcome = seekBy(media, advancedSettings.seekStepMedium);
       break;
 
     case "seekBackwardMedium":
-      performed = seekBy(media, -advancedSettings.seekStepMedium);
+      outcome = seekBy(media, -advancedSettings.seekStepMedium);
       break;
 
     case "seekForwardLarge":
-      performed = seekBy(media, advancedSettings.seekStepLarge);
+      outcome = seekBy(media, advancedSettings.seekStepLarge);
       break;
 
     case "seekBackwardLarge":
-      performed = seekBy(media, -advancedSettings.seekStepLarge);
+      outcome = seekBy(media, -advancedSettings.seekStepLarge);
       break;
 
     case "restart":
-      performed = restartMedia(media);
+      outcome = restartMedia(media);
+      break;
+
+    case "seekToLive":
+      outcome = seekToLive(media);
       break;
 
     case "speedUp":
@@ -424,15 +459,17 @@ export function handleAction(
     default: {
       const percentMatch = action.match(/^seekToPercent(\d+)$/);
       if (percentMatch) {
-        performed = seekToFraction(media, parseInt(percentMatch[1], 10) / 100);
+        outcome = seekToFraction(media, parseInt(percentMatch[1], 10) / 100);
       }
     }
   }
 
-  if (!performed) {
+  if (outcome !== "moved") {
     clearSeekOverlayState();
-    debugLog("Nothing to act on for action", media, { action });
-    return false;
+    debugLog("Nothing to move for action", media, { action, outcome });
+    // Media already at the edge handled the key. Only media that can't act on
+    // it at all lets the frame that routed it here fall back to its own.
+    return outcome === "unmoved";
   }
 
   // An action that did nothing must not change which media later keys target.

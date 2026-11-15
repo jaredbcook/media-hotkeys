@@ -5,10 +5,12 @@ import {
   mockRect,
   rect,
   resetContentTestState,
+  setSeekable,
   setTextTracks,
   storageSetMock,
 } from "./helpers.js";
 import { setSettingsForTests } from "../../../src/content.js";
+import { dispatchMediaAction } from "../../../src/content/dispatch.js";
 import { DEFAULT_SETTINGS } from "../../../src/storage.js";
 
 beforeEach(() => {
@@ -572,7 +574,7 @@ describe("cross-frame area scaling", () => {
   function makeScoringChildFrame(
     frameRect: DOMRect,
     // A paused video filling the iframe: base 10 + full area 200.
-    { bestScore = 210, areaScore = 200 } = {},
+    { bestScore = 210, areaScore = 200, handlesActions = true } = {},
   ): { childWindow: Window; executeRequests: unknown[] } {
     const iframe = document.createElement("iframe");
     document.body.appendChild(iframe);
@@ -597,6 +599,19 @@ describe("cross-frame area scaling", () => {
         );
       } else if (request.type === "MEDIA_HOTKEYS_HANDLE_ACTION") {
         executeRequests.push(request);
+        if (!handlesActions) {
+          window.dispatchEvent(
+            new MessageEvent("message", {
+              source: childWindow,
+              data: {
+                source: "media-hotkeys-extension",
+                type: "MEDIA_HOTKEYS_ACTION_RESULT",
+                requestId: request.requestId,
+                handled: false,
+              },
+            }),
+          );
+        }
       }
     });
 
@@ -623,6 +638,31 @@ describe("cross-frame area scaling", () => {
 
     expect(playSpy).toHaveBeenCalledOnce();
     expect(child.executeRequests).toHaveLength(0);
+  });
+
+  it("falls back to the local live stream when the child frame it routes the jump to can't act on it", async () => {
+    // A small live stream here, and a dominant frame whose media can't jump to live.
+    const live = makeVideo({ duration: Infinity, currentTime: 800 } as Partial<HTMLVideoElement>);
+    setSeekable(live, [400, 1000]);
+    mockRect(live, rect(0, 0, 256, 192));
+    const child = makeScoringChildFrame(rect(0, 0, 1024, 768), { handlesActions: false });
+
+    await dispatchMappedKey("End");
+    await flushArbitration();
+
+    expect(child.executeRequests).toHaveLength(1);
+    expect(live.currentTime).toBe(1000);
+  });
+
+  it("doesn't offer an action the routed frame couldn't handle to every frame", async () => {
+    // Placeholders are activated by the play key alone, so a refused jump to live
+    // must not be broadcast, which would run it in each frame that has live media.
+    const child = makeScoringChildFrame(rect(0, 0, 1024, 768), { handlesActions: false });
+
+    await dispatchMediaAction("seekToLive");
+    await flushArbitration();
+
+    expect(child.executeRequests).toHaveLength(1);
   });
 
   it("routes to a child frame whose iframe dominates the viewport", async () => {
