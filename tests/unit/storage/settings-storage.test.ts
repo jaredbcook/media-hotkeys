@@ -11,7 +11,9 @@ import {
   getSettings,
   isUrlDisabledBySiteSettings,
   saveSettings,
+  MODIFIER_KEYS,
   UNUSABLE_HOTKEYS,
+  isModifierKey,
   isUnusableHotkey,
   type ExtensionSettings,
   type NumericAdvancedSetting,
@@ -481,7 +483,7 @@ describe("settings storage", () => {
     });
 
     it("keeps usable keys that resemble an unusable one", async () => {
-      const keys = ["tab", "Escape", " ", "PageDown", "\u043b", "F2", "Shift"];
+      const keys = ["tab", "Escape", " ", "PageDown", "\u043b", "F2", "shift"];
       Object.assign(store, { "keys.toggleMute": keys });
 
       const settings = await getSettings();
@@ -509,6 +511,36 @@ describe("settings storage", () => {
       await saveSettings(diffSettings(base, next)!);
 
       expect(store["keys.toggleMute"]).toEqual(["u", "m"]);
+    });
+
+    it.each(MODIFIER_KEYS)(
+      "drops %s, a modifier pressed on its own, from a saved binding",
+      async (key) => {
+        Object.assign(store, { "keys.toggleMute": ["u", key, "m"] });
+
+        const settings = await getSettings();
+        expect(settings.quickSettings.actionKeyBindings.toggleMute.keys).toEqual(["u", "m"]);
+      },
+    );
+
+    it("leaves an action with no key when every saved key was a modifier", async () => {
+      Object.assign(store, { "keys.togglePlayPause": ["Shift", "AltGraph"] });
+
+      const settings = await getSettings();
+      expect(settings.quickSettings.actionKeyBindings.togglePlayPause.keys).toEqual([]);
+    });
+
+    it("recognizes exactly the listed modifier keys", () => {
+      expect(MODIFIER_KEYS.every(isModifierKey)).toBe(true);
+      expect(isModifierKey("k")).toBe(false);
+      expect(isModifierKey("shift")).toBe(false);
+    });
+
+    it("keeps every default key off the modifier list", () => {
+      const defaultKeys = Object.values(DEFAULT_QUICK_SETTINGS.actionKeyBindings).flatMap(
+        (config) => config.keys,
+      );
+      expect(defaultKeys.filter(isModifierKey)).toEqual([]);
     });
 
     it("recognizes exactly the listed keys", () => {

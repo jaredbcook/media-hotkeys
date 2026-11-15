@@ -10,7 +10,7 @@ import {
   saveSettingsMock,
   setCheckbox,
 } from "./helpers.js";
-import { UNUSABLE_HOTKEYS } from "../../../src/storage.js";
+import { MODIFIER_KEYS, UNUSABLE_HOTKEYS } from "../../../src/storage.js";
 
 beforeEach(() => {
   resetQuickSettingsTestState();
@@ -158,17 +158,27 @@ describe("quick settings popup: key binding editing", () => {
     expect(addButton.classList.contains("listening")).toBe(true);
   });
 
-  it("waits for the main key when only a modifier is pressed", async () => {
-    await loadQuickSettingsModule();
+  it.each(MODIFIER_KEYS)(
+    "waits for the main key when only %s is pressed, as settings loading drops it",
+    async (key) => {
+      await loadQuickSettingsModule();
 
-    const addButton = startCapture("Mute/Unmute");
-    pressKey({ key: "AltGraph", modifierAltGraph: true });
-    pressKey({ key: "Shift", shiftKey: true });
-    await flushDomWork();
+      const addButton = startCapture("Mute/Unmute");
+      pressKey({
+        key,
+        shiftKey: key === "Shift",
+        ctrlKey: key === "Control",
+        altKey: key === "Alt",
+        metaKey: key === "Meta",
+        modifierAltGraph: key === "AltGraph",
+      });
+      await flushDomWork();
 
-    expect(saveSettingsMock).not.toHaveBeenCalled();
-    expect(addButton.classList.contains("listening")).toBe(true);
-  });
+      expect(getChipKeys("Mute/Unmute")).not.toContain(key);
+      expect(saveSettingsMock).not.toHaveBeenCalled();
+      expect(addButton.classList.contains("listening")).toBe(true);
+    },
+  );
 
   it.each([
     [
