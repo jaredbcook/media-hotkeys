@@ -40,19 +40,32 @@ async function countSyncWrites(
   frameCount: number,
 ): Promise<{ readWriteCounts: () => Promise<number[]>; readShowOverlays: () => Promise<boolean> }> {
   const session = await page.context().newCDPSession(page);
-  const worlds: ContentScriptWorld[] = [];
+  let worlds: ContentScriptWorld[] = [];
   session.on("Runtime.executionContextCreated", ({ context }) => {
     worlds.push(context as ContentScriptWorld);
+  });
+  // A frame that navigates or reloads replaces its worlds, and a read from the old one is no answer.
+  session.on("Runtime.executionContextDestroyed", ({ executionContextId }) => {
+    worlds = worlds.filter((world) => world.id !== executionContextId);
+  });
+  session.on("Runtime.executionContextsCleared", () => {
+    worlds = [];
   });
   await session.send("Runtime.enable");
 
   const evaluate = async (world: ContentScriptWorld, expression: string): Promise<unknown> => {
-    const { result } = await session.send("Runtime.evaluate", {
+    const { result, exceptionDetails } = await session.send("Runtime.evaluate", {
       contextId: world.id,
       expression,
       awaitPromise: true,
       returnByValue: true,
     });
+    if (exceptionDetails) {
+      // Without this, a failed read comes back as `undefined` and the poll only times out.
+      throw new Error(
+        `Evaluating in the content script failed: ${exceptionDetails.exception?.description ?? exceptionDetails.text}`,
+      );
+    }
     return result.value;
   };
   const contentScriptWorlds = (): ContentScriptWorld[] =>

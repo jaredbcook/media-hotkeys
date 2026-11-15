@@ -135,8 +135,14 @@ test("popup Restore Defaults is out of reach while hotkeys are disabled on all p
 
   // The confirmation only mentions key bindings, so the button must never be usable while a restore
   // would also turn the disabled extension back on.
-  await page.getByLabel("Disable on all pages").check();
-  await expect(page.locator("#reset")).toBeHidden();
+  // The popup attaches its listeners after it reads settings, so a click before then checks the box
+  // and changes nothing. Uncheck and check again until the popup reacts.
+  const disableEverywhere = page.getByLabel("Disable on all pages");
+  await expect(async () => {
+    await disableEverywhere.uncheck();
+    await disableEverywhere.check();
+    await expect(page.locator("#reset")).toBeHidden({ timeout: 1000 });
+  }).toPass();
   await expect(page.getByRole("button", { name: "Restore Defaults" })).toHaveCount(0);
 });
 
