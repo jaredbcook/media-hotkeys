@@ -19,6 +19,8 @@ type PlayerBridgeResponse = {
   id: string;
   handled: boolean;
   value?: unknown;
+  // JSON turns NaN and Infinity into null, so the bridge names them instead.
+  nonFinite?: unknown;
 };
 
 const PLAYER_BRIDGE_EVENT = "media-hotkeys-player-bridge-command";
@@ -130,13 +132,17 @@ function readDirectHostBoolean(host: HTMLElement, propertyName: string): boolean
   return typeof value === "boolean" ? value : null;
 }
 
-function readDirectHostNumber(host: HTMLElement, propertyName: string): number | null {
+function readDirectHostNumber(
+  host: HTMLElement,
+  propertyName: string,
+  allowNonFinite = false,
+): number | null {
   if (!(propertyName in host)) {
     return null;
   }
 
   const value = getHostMember(host, propertyName);
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
+  return typeof value === "number" && (allowNonFinite || Number.isFinite(value)) ? value : null;
 }
 
 function readBridgeBoolean(host: HTMLElement, command: PlayerBridgeCommandName): boolean | null {
@@ -151,6 +157,34 @@ function readBridgeNumber(host: HTMLElement, command: PlayerBridgeCommandName): 
     Number.isFinite(response.value)
     ? response.value
     : null;
+}
+
+function parseNonFiniteNumber(name: unknown): number | null {
+  switch (name) {
+    case "NaN":
+      return NaN;
+    case "Infinity":
+      return Infinity;
+    case "-Infinity":
+      return -Infinity;
+    default:
+      return null;
+  }
+}
+
+// Unlike the other numbers, a duration may legitimately be non-finite: Infinity
+// for a stream with no end and NaN for one that isn't known yet.
+function readBridgeDuration(host: HTMLElement): number | null {
+  const response = requestPlayerBridge(host, "readDuration");
+  if (response?.handled !== true) {
+    return null;
+  }
+
+  if (typeof response.value === "number" && Number.isFinite(response.value)) {
+    return response.value;
+  }
+
+  return parseNonFiniteNumber(response.nonFinite);
 }
 
 function setDirectHostProperty(
@@ -365,8 +399,17 @@ export function setPlayerCurrentTime(media: HTMLMediaElement, currentTime: numbe
   media.currentTime = currentTime;
 }
 
+/**
+ * The player's duration: a custom-element host's own when it reports a number,
+ * even one that isn't finite (Infinity for a live stream, NaN while unknown),
+ * and the media element's otherwise.
+ */
 export function readPlayerDuration(media: HTMLMediaElement): number {
-  return readCustomPlayerNumber(media, "duration", "readDuration") ?? media.duration;
+  const host = getCustomMediaHost(media);
+  const hostDuration = host
+    ? (readDirectHostNumber(host, "duration", true) ?? readBridgeDuration(host))
+    : null;
+  return hostDuration ?? media.duration;
 }
 
 export function readPlayerPlaybackRate(media: HTMLMediaElement): number {

@@ -78,3 +78,42 @@ describe("player bridge host methods", () => {
     expect(sendBridgeCommand(host, "pause")).toEqual({ id: "test-id", handled: false });
   });
 });
+
+describe("player bridge duration reads", () => {
+  it("reports a finite duration as a value", () => {
+    const host = makeHost({ duration: 90 });
+
+    expect(sendBridgeCommand(host, "readDuration")).toEqual({
+      id: "test-id",
+      handled: true,
+      value: 90,
+    });
+  });
+
+  it.each([
+    ["Infinity", Infinity],
+    ["NaN", NaN],
+    ["-Infinity", -Infinity],
+  ])("names a duration of %s, which JSON would turn into null", (name, duration) => {
+    const host = makeHost({ duration });
+
+    expect(sendBridgeCommand(host, "readDuration")).toEqual({
+      id: "test-id",
+      handled: true,
+      nonFinite: name,
+    });
+  });
+
+  it("doesn't handle a duration that isn't a number", () => {
+    const host = makeHost({ duration: "unknown" });
+
+    expect(sendBridgeCommand(host, "readDuration")).toEqual({ id: "test-id", handled: false });
+  });
+
+  it("still ignores a non-finite value for the other numbers", () => {
+    const host = makeHost({ volume: NaN, currentTime: Infinity });
+
+    expect(sendBridgeCommand(host, "readVolume")).toEqual({ id: "test-id", handled: false });
+    expect(sendBridgeCommand(host, "readCurrentTime")).toEqual({ id: "test-id", handled: false });
+  });
+});
