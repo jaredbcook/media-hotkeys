@@ -658,11 +658,13 @@ describe("advanced settings page: load and save", () => {
           }),
       );
       getSettingsMock.mockResolvedValue(latest);
-      void import("../../../src/advanced-settings-page.js");
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      const loaded = import("../../../src/advanced-settings-page.js");
+      // Importing the page takes a while the first time, so wait for its first read to start.
+      await vi.waitFor(() => expect(getSettingsMock).toHaveBeenCalledOnce());
 
       await emitStorageChange();
       finishFirstRead();
+      await loaded;
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       expect((document.getElementById("speedStep") as HTMLInputElement).value).toBe("0.5");
@@ -906,6 +908,10 @@ describe("advanced settings page: load and save", () => {
       expect(document.querySelector<HTMLSelectElement>(".site-policy-mode")!.value).toBe(
         "disabled",
       );
+
+      // Leave the field, so its debounce doesn't fire during a later test.
+      speedStep.dispatchEvent(new Event("blur"));
+      await new Promise((resolve) => setTimeout(resolve, 10));
     });
 
     it("shows a rule change from elsewhere once focus leaves the rule list", async () => {
