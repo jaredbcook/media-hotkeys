@@ -39,6 +39,7 @@ import { state } from "./state.js";
 import {
   enterFrameTheater,
   exitTheater,
+  handlePictureInPictureEntered,
   isTheaterActive,
   isTheaterChildFrame,
   requestParentTheater,
@@ -203,13 +204,25 @@ async function handleIncomingFrameAction(
  * reports that child's state: exits shrink the iframe if it is the promoted
  * one, and entries enlarge it only against a grant this frame issued when it
  * routed toggleTheater there, or when that iframe holds focus here. The
- * request is then passed up the same way.
+ * request is then passed up the same way. A picture-in-picture notice from a
+ * child is not about that child's state: a video somewhere below entered PiP,
+ * so this frame leaves theater mode whichever frame it was for, and passes the
+ * notice up. It can only end theater mode, never start it, so it needs no
+ * grant.
  */
 function handleTheaterMessage(
   active: boolean,
   requestId: string | undefined,
+  pictureInPicture: boolean,
   source: Window,
 ): void {
+  if (pictureInPicture) {
+    if (!active && isFromChildFrame(source)) {
+      handlePictureInPictureEntered();
+    }
+    return;
+  }
+
   if (!isTopWindow() && source === window.parent) {
     if (!active) {
       exitTheater();
@@ -260,7 +273,12 @@ export function handleFrameMessage(event: MessageEvent): void {
 
     case THEATER_TYPE:
       if (source !== window) {
-        handleTheaterMessage(data.active, data.requestId, source as Window);
+        handleTheaterMessage(
+          data.active,
+          data.requestId,
+          data.pictureInPicture === true,
+          source as Window,
+        );
       }
       return;
 

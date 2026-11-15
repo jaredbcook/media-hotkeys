@@ -16,6 +16,7 @@ import {
 import { refreshTopLevelSitePolicyOnNavigation } from "./frame-messaging.js";
 import { scheduleMediaPresenceReport } from "./media-presence.js";
 import { state } from "./state.js";
+import { handlePictureInPictureEntered } from "./theater.js";
 
 const trackedMedia = new WeakSet<HTMLMediaElement>();
 const observedRoots = new WeakSet<Document | ShadowRoot>();
@@ -230,6 +231,12 @@ function observeRoot(root: Document | ShadowRoot): void {
   for (const eventName of PRESENCE_MEDIA_EVENTS) {
     root.addEventListener(eventName, scheduleMediaPresenceReport, { capture: true, passive: true });
   }
+  // Any video entering picture-in-picture ends theater mode. The event doesn't
+  // always leave a shadow root, so each root listens for the videos inside it.
+  root.addEventListener("enterpictureinpicture", handlePictureInPictureEntered, {
+    capture: true,
+    passive: true,
+  });
   rootObserver ??= new MutationObserver(handleRootMutations);
   rootObserver.observe(root, {
     childList: true,

@@ -406,3 +406,97 @@ test("picture-in-picture exits iframe theater mode in both frames", async ({ pag
   await expect.poll(async () => (await readPromotion(frame, "#frame-video")).promoted).toBe(false);
   expect(await readPromotion(page, "#video-frame")).toMatchObject({ width: 480, height: 270 });
 });
+
+test("a different video entering picture-in-picture exits theater mode", async ({ page }) => {
+  await createMedia(page, "theater-video", {}, "video");
+  await createMedia(page, "other-video", {}, "video");
+  await attachVideoTrack(page, "other-video");
+  await page.locator("#theater-video").focus();
+  await page.keyboard.press("t");
+  expect((await readTheaterSnapshot(page)).open).toBe(true);
+
+  // The key press is the user activation the request needs, as a click on the
+  // page's own control would be.
+  await page.evaluate(() =>
+    (document.getElementById("other-video") as HTMLVideoElement).requestPictureInPicture(),
+  );
+
+  await expect.poll(() => readPictureInPictureId(page)).toBe("other-video");
+  await expect.poll(async () => (await readTheaterSnapshot(page)).open).toBe(false);
+});
+
+test("a video in another frame entering picture-in-picture exits theater mode", async ({
+  page,
+  server,
+}) => {
+  await page.goto(server.getUrl("/page-with-video-iframe"));
+  const frame = await waitForFrame(page, "/iframe-video");
+  await attachVideoTrack(frame, "frame-video");
+  await createMedia(page, "theater-video", {}, "video");
+  await page.locator("#theater-video").focus();
+  await page.keyboard.press("t");
+  expect((await readTheaterSnapshot(page)).open).toBe(true);
+
+  await frame.evaluate(() =>
+    (document.getElementById("frame-video") as HTMLVideoElement).requestPictureInPicture(),
+  );
+
+  await expect.poll(() => readPictureInPictureId(frame)).toBe("frame-video");
+  await expect.poll(async () => (await readTheaterSnapshot(page)).open).toBe(false);
+});
+
+test("a video in the top page entering picture-in-picture exits iframe theater mode", async ({
+  page,
+  server,
+}) => {
+  await page.goto(server.getUrl("/page-with-video-iframe"));
+  const frame = await waitForFrame(page, "/iframe-video");
+  await createMedia(page, "other-video", {}, "video");
+  await attachVideoTrack(page, "other-video");
+  await frame.locator("#frame-video").focus();
+  await page.keyboard.press("t");
+  await expect.poll(async () => (await readPromotion(page, "#video-frame")).promoted).toBe(true);
+  await expect.poll(async () => (await readPromotion(frame, "#frame-video")).promoted).toBe(true);
+
+  await page.evaluate(() =>
+    (document.getElementById("other-video") as HTMLVideoElement).requestPictureInPicture(),
+  );
+
+  await expect.poll(() => readPictureInPictureId(page)).toBe("other-video");
+  await expect.poll(async () => (await readPromotion(page, "#video-frame")).promoted).toBe(false);
+  await expect.poll(async () => (await readPromotion(frame, "#frame-video")).promoted).toBe(false);
+  expect(await readPromotion(page, "#video-frame")).toMatchObject({ width: 480, height: 270 });
+});
+
+test("picture-in-picture in a sibling frame exits iframe theater mode", async ({
+  page,
+  server,
+}) => {
+  await page.goto(server.getUrl("/page-with-frame-tree"));
+  // The top page holds one video frame directly and another inside "outer-frame".
+  await expect
+    .poll(() => page.frames().filter((frame) => frame.url().endsWith("/iframe-video")).length)
+    .toBe(2);
+  const videoFrames = page.frames().filter((frame) => frame.url().endsWith("/iframe-video"));
+  const direct = videoFrames.find((frame) => frame.parentFrame() === page.mainFrame())!;
+  const nested = videoFrames.find((frame) => frame !== direct)!;
+  for (const frame of videoFrames) {
+    await frame.waitForFunction(() => {
+      const video = document.getElementById("frame-video") as HTMLVideoElement | null;
+      return Boolean(video && video.readyState >= 1);
+    });
+  }
+  await attachVideoTrack(nested, "frame-video");
+  await direct.locator("#frame-video").focus();
+  await page.keyboard.press("t");
+  await expect.poll(async () => (await readPromotion(page, "#video-frame")).promoted).toBe(true);
+  await expect.poll(async () => (await readPromotion(direct, "#frame-video")).promoted).toBe(true);
+
+  await nested.evaluate(() =>
+    (document.getElementById("frame-video") as HTMLVideoElement).requestPictureInPicture(),
+  );
+
+  await expect.poll(() => readPictureInPictureId(nested)).toBe("frame-video");
+  await expect.poll(async () => (await readPromotion(page, "#video-frame")).promoted).toBe(false);
+  await expect.poll(async () => (await readPromotion(direct, "#frame-video")).promoted).toBe(false);
+});

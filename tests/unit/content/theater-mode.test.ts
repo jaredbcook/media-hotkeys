@@ -290,26 +290,57 @@ describe("theater mode and picture-in-picture", () => {
     expect(getTheaterMedia()).toBe(video);
   });
 
-  it("ignores picture-in-picture on other videos", () => {
+  it("exits theater mode when a different video enters picture-in-picture", () => {
     const theaterVideo = makeVideo();
     const otherVideo = makeVideo();
     handleAction("toggleTheater", theaterVideo);
 
     otherVideo.dispatchEvent(new Event("enterpictureinpicture", { bubbles: true }));
 
-    expect(getTheaterMedia()).toBe(theaterVideo);
+    expect(getTheaterMedia()).toBeNull();
+    expect(theaterVideo.hasAttribute("popover")).toBe(false);
+    expect(theaterVideo.hasAttribute("data-media-hotkeys-theater")).toBe(false);
   });
 
-  it("stops listening once theater mode ends", () => {
+  it("exits theater mode when a video in a shadow root enters picture-in-picture", async () => {
+    const theaterVideo = makeVideo();
+    const host = document.createElement("div");
+    const root = host.attachShadow({ mode: "open" });
+    const shadowVideo = document.createElement("video");
+    root.appendChild(shadowVideo);
+    document.body.appendChild(host);
+    // The content script finds the new shadow root through its mutation observer.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    handleAction("toggleTheater", theaterVideo);
+
+    // Events from inside a shadow root can stop at its boundary, so the root
+    // itself has to be watched.
+    shadowVideo.dispatchEvent(new Event("enterpictureinpicture"));
+
+    expect(getTheaterMedia()).toBeNull();
+  });
+
+  it("leaves a later theater session alone until a video enters picture-in-picture again", () => {
     const first = makeVideo();
     const second = makeVideo();
     handleAction("toggleTheater", first);
     exitTheater();
     handleAction("toggleTheater", second);
 
+    expect(getTheaterMedia()).toBe(second);
+
     first.dispatchEvent(new Event("enterpictureinpicture", { bubbles: true }));
 
-    expect(getTheaterMedia()).toBe(second);
+    expect(getTheaterMedia()).toBeNull();
+  });
+
+  it("does nothing when picture-in-picture starts outside theater mode", () => {
+    const video = makeVideo();
+
+    expect(() =>
+      video.dispatchEvent(new Event("enterpictureinpicture", { bubbles: true })),
+    ).not.toThrow();
+    expect(getTheaterMedia()).toBeNull();
   });
 
   it("brings the video back from picture-in-picture when entering theater mode", () => {
@@ -353,6 +384,29 @@ describe("theater mode and picture-in-picture", () => {
     handleAction("toggleTheater", makeVideo());
 
     expect(exitPictureInPicture).not.toHaveBeenCalled();
+  });
+
+  it("tells the parent frame when a video in a frame outside theater mode enters picture-in-picture", () => {
+    const parentWindow = { postMessage: vi.fn() } as unknown as Window;
+    Object.defineProperty(window, "parent", { configurable: true, value: parentWindow });
+    try {
+      const video = makeVideo();
+
+      video.dispatchEvent(new Event("enterpictureinpicture", { bubbles: true }));
+
+      expect(parentWindow.postMessage).toHaveBeenCalledTimes(1);
+      expect(parentWindow.postMessage).toHaveBeenCalledWith(
+        {
+          source: "media-hotkeys-extension",
+          type: "MEDIA_HOTKEYS_THEATER",
+          active: false,
+          pictureInPicture: true,
+        },
+        "*",
+      );
+    } finally {
+      Object.defineProperty(window, "parent", { configurable: true, value: window });
+    }
   });
 
   it("tells the parent frame to shrink the iframe when a framed video enters picture-in-picture", () => {
@@ -550,6 +604,88 @@ describe("theater mode across frames", () => {
     expect(isPromoted(child.iframe)).toBe(true);
 
     postFromChild(child, { active: false });
+
+    expect(isPromoted(child.iframe)).toBe(false);
+  });
+
+  it("exits theater mode when a child frame reports picture-in-picture, and the promoted iframe with it", async () => {
+    const promoted = await makeChildFrame();
+    const other = await makeChildFrame({ entersTheater: false });
+    await dispatchMappedKey("t");
+    await flushArbitration();
+    expect(isPromoted(promoted.iframe)).toBe(true);
+
+    postFromChild(other, { active: false, pictureInPicture: true });
+
+    expect(isPromoted(promoted.iframe)).toBe(false);
+    expect(promoted.received).toContainEqual(
+      expect.objectContaining({ type: "MEDIA_HOTKEYS_THEATER", active: false }),
+    );
+  });
+
+  it("exits this frame's own theater video when a child frame reports picture-in-picture", async () => {
+    const child = await makeChildFrame({ entersTheater: false });
+    const video = makeVideo();
+    handleAction("toggleTheater", video);
+    expect(getTheaterMedia()).toBe(video);
+
+    postFromChild(child, { active: false, pictureInPicture: true });
+
+    expect(getTheaterMedia()).toBeNull();
+  });
+
+  it("passes a child's picture-in-picture notice up to the parent frame", async () => {
+    const parentWindow = { postMessage: vi.fn() } as unknown as Window;
+    Object.defineProperty(window, "parent", { configurable: true, value: parentWindow });
+    try {
+      const child = await makeChildFrame();
+
+      postFromChild(child, { active: false, pictureInPicture: true });
+
+      expect(parentWindow.postMessage).toHaveBeenCalledWith(
+        {
+          source: "media-hotkeys-extension",
+          type: "MEDIA_HOTKEYS_THEATER",
+          active: false,
+          pictureInPicture: true,
+        },
+        "*",
+      );
+    } finally {
+      Object.defineProperty(window, "parent", { configurable: true, value: window });
+    }
+  });
+
+  it("ignores picture-in-picture notices that do not come from a child frame", () => {
+    const parentWindow = { postMessage: vi.fn() } as unknown as Window;
+    Object.defineProperty(window, "parent", { configurable: true, value: parentWindow });
+    try {
+      const video = makeVideo();
+      handleAction("toggleTheater", video);
+      const notice = {
+        source: "media-hotkeys-extension",
+        type: "MEDIA_HOTKEYS_THEATER",
+        active: false,
+        pictureInPicture: true,
+      };
+
+      // From the parent, and from a window that is no iframe of this document.
+      window.dispatchEvent(new MessageEvent("message", { source: parentWindow, data: notice }));
+      window.dispatchEvent(
+        new MessageEvent("message", { source: { postMessage: vi.fn() } as never, data: notice }),
+      );
+
+      expect(getTheaterMedia()).toBe(video);
+    } finally {
+      Object.defineProperty(window, "parent", { configurable: true, value: window });
+    }
+  });
+
+  it("never starts theater mode from a picture-in-picture notice", async () => {
+    const child = await makeChildFrame();
+    child.iframe.focus();
+
+    postFromChild(child, { active: true, pictureInPicture: true });
 
     expect(isPromoted(child.iframe)).toBe(false);
   });
