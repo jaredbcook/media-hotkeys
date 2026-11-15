@@ -11,6 +11,7 @@ import {
   findMatchingSitePolicy,
   getSettings,
   hasReservedModifier,
+  isModifierKey,
   isUnusableHotkey,
   normalizeHotkeyKey,
   saveSettings,
@@ -62,9 +63,6 @@ const KEY_ACCESSIBLE_LABELS: Record<string, string> = {
   ArrowLeft: "Left Arrow",
   ArrowRight: "Right Arrow",
 };
-
-/** Modifier keys pressed on their own: capture waits for the key they're held with. */
-const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "AltGraph", "Meta"]);
 
 /** Why each key in `UNUSABLE_HOTKEYS` can't be bound. `tsc` requires one for every key on that list. */
 const UNUSABLE_KEY_REASONS: Record<UnusableHotkey, string> = {
@@ -671,7 +669,8 @@ function startKeyCapture(action: ConfigurableMediaAction, button: HTMLButtonElem
       return;
     }
 
-    if (MODIFIER_KEYS.has(e.key)) {
+    // A modifier pressed on its own is never bound: wait for the key it is held with.
+    if (isModifierKey(e.key)) {
       return;
     }
 

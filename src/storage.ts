@@ -194,6 +194,20 @@ export function isUnusableHotkey(key: string): key is UnusableHotkey {
   return UNUSABLE_HOTKEYS.includes(key as UnusableHotkey);
 }
 
+/**
+ * Modifier keys, as `KeyboardEvent.key` reports them when pressed on their own. Quick Settings never
+ * binds one (capture waits for the key it is held with), and loading settings drops them from saved
+ * bindings, so a saved `Shift` can't fire its action on every Shift press, including while typing
+ * capital letters outside text fields.
+ */
+export const MODIFIER_KEYS = ["Shift", "Control", "Alt", "AltGraph", "Meta"] as const;
+
+export type ModifierKey = (typeof MODIFIER_KEYS)[number];
+
+export function isModifierKey(key: string): key is ModifierKey {
+  return MODIFIER_KEYS.includes(key as ModifierKey);
+}
+
 function mergeActionKeyBindings(
   storedKeys: Partial<Record<ConfigurableMediaAction, string[]>>,
 ): Record<ConfigurableMediaAction, ActionConfig> {
@@ -567,7 +581,8 @@ function isValidKeyList(value: unknown): value is string[] {
 
 /**
  * Builds the settings from the stored keys, filling every setting that has no key from the defaults.
- * Keys that can't work as hotkeys (`isUnusableHotkey`) are left out of the key bindings.
+ * Keys that can't work as hotkeys (`isUnusableHotkey`) and modifier keys pressed on their own
+ * (`isModifierKey`) are left out of the key bindings.
  */
 function readStoredSettings(stored: Record<string, unknown>): ExtensionSettings {
   const hotkeysEnabled = stored[HOTKEYS_ENABLED_KEY];
@@ -586,7 +601,7 @@ function readStoredSettings(stored: Record<string, unknown>): ExtensionSettings 
     if (isValidKeyList(keys)) {
       // Dropped only from what is read: the stored list stays until the user edits that action.
       // An action left with no key is unbound, as it is when the user removes its last key.
-      storedKeys[action] = keys.filter((key) => !isUnusableHotkey(key));
+      storedKeys[action] = keys.filter((key) => !isUnusableHotkey(key) && !isModifierKey(key));
     }
   }
 
