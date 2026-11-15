@@ -191,7 +191,7 @@ export function getVisibleViewportArea(rect: Box): number {
   return (right - left) * (bottom - top);
 }
 
-/** Firefox has no picture-in-picture API, and pages can disable it. */
+/** Firefox before 153 has no picture-in-picture API for pages, and pages can disable it. */
 export function isPictureInPictureSupported(): boolean {
   return "pictureInPictureEnabled" in document && document.pictureInPictureEnabled;
 }
