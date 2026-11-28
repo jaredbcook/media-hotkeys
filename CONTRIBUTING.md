@@ -70,7 +70,7 @@ The pre-commit hook refuses commits on `main` and runs `npm run check`. CI (`.gi
 
 GitHub issues are the task list, for people and AI agents alike. Every change reaches `main` through a pull request; the pre-commit hook refuses commits on `main`.
 
-1. **Find work.** Pick an open issue labeled `ready` that isn't `in progress`. Issues labeled `needs triage` or `blocked`, or without `ready`, wait for the maintainer.
+1. **Find work.** Pick an open issue labeled `ready` that isn't `in progress` or `epic`. When choosing between multiple `ready` issues, start from the earliest open milestone, then the highest priority (`p0: critical` → `p3: low`). Issues labeled `needs triage`, `blocked`, or `epic`, or without `ready`, wait for the maintainer (epics are parent tracking issues whose work is broken into child sub-issues).
 2. **Claim it.** Add the `in progress` label. That label alone means the issue is taken. If an issue has been `in progress` for a day with no linked pull request, anyone may remove the label and claim it.
 3. **Branch.** Start from an up-to-date `main`, on a branch or a worktree named `<type>/<issue>-<slug>`, for example `fix/42-altgr-brackets`.
 4. **Open a draft pull request early** with `Closes #<issue>` in the description, so the issue shows its work is underway. Keep it to that one issue.
@@ -97,6 +97,7 @@ Each fact has one home. Update that file in the same change that alters the beha
 | Module responsibilities, design decisions, invariants, new `src/` files | `ARCHITECTURE.md`                         |
 | Commands, tooling, test layout, workflow                                | `CONTRIBUTING.md`                         |
 | Rules and recipes for AI agents                                         | `AGENTS.md` (`CLAUDE.md` only imports it) |
+| Product scope, goals, and explicit non-goals                            | `docs/scope.md`                           |
 | Third-party player research                                             | `docs/player-compatibility.md`            |
 | Theater mode controls and captions evaluation                           | `docs/theater-controls.md`                |
 
