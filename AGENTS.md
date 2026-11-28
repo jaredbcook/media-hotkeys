@@ -9,6 +9,7 @@ Read the relevant doc before you change code. Each fact lives in one file, so li
 - [ARCHITECTURE.md](ARCHITECTURE.md): code map, how target selection, cross-frame arbitration, placeholders, theater mode, and settings work, and the **invariants**
 - [CONTRIBUTING.md](CONTRIBUTING.md): issue and pull request workflow, commands, test layout, debugging, commit style, release
 - [README.md](README.md): user-facing behavior, default hotkeys and settings
+- [docs/scope.md](docs/scope.md): product boundaries, prioritized goals, and explicit non-goals
 - [docs/player-compatibility.md](docs/player-compatibility.md): third-party player research
 - [docs/theater-controls.md](docs/theater-controls.md): evaluation of theater mode's native versus site controls and captions
 
@@ -16,7 +17,7 @@ Read the relevant doc before you change code. Each fact lives in one file, so li
 
 Work comes from GitHub issues and lands through pull requests. Follow [CONTRIBUTING.md](CONTRIBUTING.md#issues-and-pull-requests). The parts agents most often get wrong:
 
-- Only start on an issue labeled `ready` and not `in progress`, and add `in progress` before you start. Never work on `main`; the pre-commit hook refuses it.
+- Only start on an issue labeled `ready` and not `in progress` or `epic`, and add `in progress` before you start. When picking the next issue yourself, choose from the earliest open milestone first, then the highest priority (`p0: critical` → `p3: low`). Never work on `main`; the pre-commit hook refuses it.
 - Pull requests land by rebase and fast-forward with no merge commit, so keep every commit on your branch a clean Conventional Commit.
 - One issue per branch and pull request, with `Closes #<issue>` in the description. Don't close issues yourself.
 - When you notice a bug, risk, or recommended change outside your issue, file it as a new `needs triage` issue (search for duplicates first) instead of fixing it in passing or only mentioning it in chat.
