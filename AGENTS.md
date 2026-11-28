@@ -81,6 +81,7 @@ These aren't caught by tests unless marked. ARCHITECTURE.md#invariants explains 
 - Media appears late (SPAs, lazy embeds, shadow roots attached after load). Detection must work with the mutation observer in `src/content/media-tracking.ts`. Shadow roots the page attaches to elements already in the document produce no mutation: `src/player-bridge.ts` patches `attachShadow` in the main world and announces them, because a patch made from the isolated world never sees the page's calls. Closed shadow roots stay unobservable.
 - Pages often have many media elements (ads, previews, background loops). Test target selection with multi-media pages, not a single video.
 - The overlay's contents are in a closed shadow root, so `page.locator`, `page.evaluate`, and `getElementById(...).shadowRoot` can't see them. Read them with `openOverlayReader` (`tests/e2e/overlay.ts`) in E2E tests and `getOverlayBox()` (`tests/unit/overlay/helpers.ts`) in unit tests.
+- `tsc` is TypeScript 7, installed as `@typescript/native`. The `typescript` package is an alias for `@typescript/typescript6`, because TypeScript 7 has no JS API and typescript-eslint imports it. Don't replace the alias with `typescript@7` until typescript-eslint supports it.
 - jsdom has no layout, playback, Popover API, or `<dialog>` methods. Unit tests stub them, so behavior that depends on them needs an E2E test.
 
 ## Keeping docs current
